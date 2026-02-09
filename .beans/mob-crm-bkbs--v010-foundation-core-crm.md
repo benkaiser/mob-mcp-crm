@@ -15,7 +15,7 @@ The first milestone: get the project scaffolded, database running, auth working,
 ## Goals
 - Project scaffolding (TypeScript, Node.js, Vitest, dev server with auto-reload)
 - SQLite database with migrations
-- MCP server running with SSE transport
+- MCP server running with Streamable HTTP transport
 - OAuth PKCE authentication flow
 - Core contact CRUD (create, read, update, delete, list, search)
 - Contact sub-entities (contact methods, addresses, food preferences, custom fields)

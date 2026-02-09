@@ -37,7 +37,7 @@ The AI assistant interprets your intent and calls the appropriate MCP tools behi
 
 | Setting | Value |
 |---------|-------|
-| **Transport** | SSE (Server-Sent Events) |
+| **Transport** | Streamable HTTP |
 | **Server URL** | `http://localhost:3000/mcp` |
 | **Auth** | OAuth 2.0 with PKCE |
 
@@ -47,7 +47,7 @@ We recommend **[Joey MCP Client](https://github.com/benkaiser/joey-mcp-client)**
 
 ### Connecting with other MCP clients
 
-Any MCP-compatible client that supports SSE transport and OAuth can connect. Configure your client with the server URL above and it will be guided through the OAuth flow.
+Any MCP-compatible client that supports Streamable HTTP transport and OAuth can connect. Configure your client with the server URL above and it will be guided through the OAuth flow.
 
 ## Operating Modes
 
@@ -114,7 +114,7 @@ mob-mcp-crm/
 ├── docs/
 │   └── FEATURES.md          # Full feature specification
 ├── src/
-│   ├── server/               # MCP server setup, SSE transport
+│   ├── server/               # MCP server setup, Streamable HTTP transport
 │   ├── auth/                 # OAuth PKCE flow, account management
 │   ├── db/                   # SQLite schema, migrations, queries
 │   ├── services/             # Business logic per entity

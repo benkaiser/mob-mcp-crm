@@ -1,6 +1,6 @@
 ---
 # mob-crm-aq0e
-title: MCP Server & SSE Transport
+title: MCP Server & Streamable HTTP Transport
 status: todo
 type: epic
 priority: high
@@ -11,12 +11,15 @@ blocking:
     - mob-crm-ek4t
 ---
 
-Set up the MCP server with SSE transport.
+Set up the MCP server with Streamable HTTP transport.
 
 ## Scope
 - Install @modelcontextprotocol/sdk
-- Configure MCP server with SSE transport
-- Set up HTTP server (Express or raw http) to serve SSE endpoint at /mcp
-- Implement session management
+- Configure MCP server with Streamable HTTP transport
+- Set up HTTP server (Express or raw http) to serve MCP endpoint at /mcp (POST and GET)
+- POST requests receive JSON-RPC messages, respond with JSON or SSE stream
+- GET requests open SSE stream for server-initiated messages
+- Implement session management (Mcp-Session-Id header)
+- Support MCP-Protocol-Version header
 - Server startup with configurable port
 - Graceful shutdown handling

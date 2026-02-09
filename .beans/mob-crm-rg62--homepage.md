@@ -15,7 +15,7 @@ Create a static homepage served at the root URL (/).
 - Static HTML/CSS page (no JS framework)
 - App name, tagline, and explanation ("Mob — An AI-first Personal CRM")
 - Explain the kangaroo naming origin
-- MCP connection details (SSE URL, OAuth)
+- MCP connection details (Streamable HTTP URL, OAuth)
 - Link to Joey MCP Client (https://github.com/benkaiser/joey-mcp-client)
 - Example natural language interactions
 - Mobile-responsive, clean design

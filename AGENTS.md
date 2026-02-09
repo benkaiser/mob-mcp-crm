@@ -17,7 +17,7 @@ The name "Mob" comes from the term for a group of kangaroos.
 
 - **Runtime:** Node.js 20+
 - **Language:** TypeScript (strict mode)
-- **Protocol:** MCP with SSE transport
+- **Protocol:** MCP with Streamable HTTP transport
 - **Database:** SQLite (via better-sqlite3)
 - **Auth:** OAuth 2.0 with PKCE flow
 - **Testing:** Vitest with in-memory SQLite
@@ -27,7 +27,7 @@ The name "Mob" comes from the term for a group of kangaroos.
 
 ```
 src/
-├── server/               # MCP server setup, SSE transport, session management
+├── server/               # MCP server setup, Streamable HTTP transport, session management
 ├── auth/                 # OAuth PKCE flow, account creation, token management
 ├── db/                   # SQLite schema, migrations, connection management
 │   └── migrations/       # Ordered SQL migration files

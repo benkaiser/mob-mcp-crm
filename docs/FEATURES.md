@@ -2,7 +2,7 @@
 
 > **App Name:** Mob (named after the term for a group of kangaroos 🦘)
 > **Version:** 0.1.0 (Draft)
-> **Interface:** MCP Server (SSE transport)
+> **Interface:** MCP Server (Streamable HTTP transport)
 > **Storage:** SQLite
 > **Runtime:** Node.js / TypeScript
 > **Architecture:** AI-first, MCP-native, designed for future web UI compatibility
@@ -805,7 +805,7 @@ The homepage includes:
 1. **App name and tagline:** "Mob — An AI-first Personal CRM" with a brief explanation that "Mob" is the name for a group of kangaroos 🦘.
 2. **What it is:** A short description explaining that Mob is a personal CRM you interact with entirely through natural language via an AI assistant. No forms, no dashboards — just talk about your relationships and Mob keeps track.
 3. **How to connect:** Clear instructions showing:
-   - The MCP server URL and transport type (SSE)
+   - The MCP server URL and transport type (Streamable HTTP)
    - OAuth connection details
    - Step-by-step guide for connecting an MCP client
 4. **Recommended client:** Link to [Joey MCP Client](https://github.com/benkaiser/joey-mcp-client) as the recommended MCP client for connecting to Mob.
