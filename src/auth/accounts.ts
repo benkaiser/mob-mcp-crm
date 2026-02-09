@@ -1,5 +1,6 @@
 import bcrypt from 'bcrypt';
 import Database from 'better-sqlite3';
+import { generateId } from '../utils.js';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -44,7 +45,7 @@ export class AccountService {
       throw new Error('An account with this email already exists');
     }
 
-    const id = crypto.randomUUID().replace(/-/g, '').substring(0, 32);
+    const id = generateId();
     const passwordHash = await bcrypt.hash(input.password, BCRYPT_ROUNDS);
     const now = new Date().toISOString();
 

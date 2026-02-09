@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { generateId } from '../utils.js';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -52,7 +53,7 @@ export class FoodPreferencesService {
         input.contact_id,
       );
     } else {
-      const id = crypto.randomUUID().replace(/-/g, '').substring(0, 32);
+      const id = generateId();
       this.db.prepare(`
         INSERT INTO food_preferences (id, contact_id, dietary_restrictions, allergies, favorite_foods, disliked_foods, notes)
         VALUES (?, ?, ?, ?, ?, ?, ?)

@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { generateId } from '../utils.js';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -46,7 +47,7 @@ export class NotificationService {
   constructor(private db: Database.Database) {}
 
   create(userId: string, input: CreateNotificationInput): Notification {
-    const id = crypto.randomUUID().replace(/-/g, '').substring(0, 32);
+    const id = generateId();
 
     this.db.prepare(`
       INSERT INTO notifications (id, user_id, type, title, body, contact_id, source_type, source_id)

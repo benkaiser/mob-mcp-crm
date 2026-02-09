@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { generateId } from '../utils.js';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -72,7 +73,7 @@ export class ActivityService {
   constructor(private db: Database.Database) {}
 
   create(userId: string, input: CreateActivityInput): Activity {
-    const id = crypto.randomUUID().replace(/-/g, '').substring(0, 32);
+    const id = generateId();
     const now = new Date().toISOString();
 
     const transaction = this.db.transaction(() => {
@@ -197,7 +198,7 @@ export class ActivityTypeService {
   constructor(private db: Database.Database) {}
 
   create(userId: string, name: string, category?: string, icon?: string): ActivityType {
-    const id = crypto.randomUUID().replace(/-/g, '').substring(0, 32);
+    const id = generateId();
     this.db.prepare(`
       INSERT INTO activity_types (id, user_id, name, category, icon)
       VALUES (?, ?, ?, ?, ?)

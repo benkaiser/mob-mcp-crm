@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { generateId } from '../utils.js';
 
 // ─── Relationship Type Map ──────────────────────────────────────
 
@@ -94,8 +95,8 @@ export class RelationshipService {
    * Returns the forward relationship.
    */
   add(input: CreateRelationshipInput): Relationship {
-    const forwardId = crypto.randomUUID().replace(/-/g, '').substring(0, 32);
-    const inverseId = crypto.randomUUID().replace(/-/g, '').substring(0, 32);
+    const forwardId = generateId();
+    const inverseId = generateId();
     const now = new Date().toISOString();
     const inverseType = getInverseType(input.relationship_type);
 

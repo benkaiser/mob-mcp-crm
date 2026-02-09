@@ -13,6 +13,7 @@ import { AccountService } from '../auth/accounts.js';
 import { OAuthService } from '../auth/oauth.js';
 import { McpTokenVerifier } from '../auth/mcp-token-verifier.js';
 import { importMonicaExport } from '../services/monica-import.js';
+import { generateId } from '../utils.js';
 
 export interface ServerConfig {
   port: number;
@@ -196,7 +197,7 @@ export function createServer(config: ServerConfig): {
 
     // In forgetful mode, auto-approve: create temp user, issue code, redirect
     if (config.forgetful) {
-      const tempId = crypto.randomUUID().replace(/-/g, '').substring(0, 32);
+      const tempId = generateId();
       db.prepare(`
         INSERT INTO users (id, name, email, password_hash)
         VALUES (?, ?, ?, ?)
@@ -236,7 +237,7 @@ export function createServer(config: ServerConfig): {
     // In forgetful mode, skip login and issue code for a temporary user
     if (config.forgetful) {
       // Create a temporary user for this session
-      const tempId = crypto.randomUUID().replace(/-/g, '').substring(0, 32);
+      const tempId = generateId();
       db.prepare(`
         INSERT INTO users (id, name, email, password_hash)
         VALUES (?, ?, ?, ?)
@@ -339,7 +340,7 @@ export function createServer(config: ServerConfig): {
   app.get('/web/login', (_req, res) => {
     if (config.forgetful) {
       // Auto-login in forgetful mode
-      const tempId = crypto.randomUUID().replace(/-/g, '').substring(0, 32);
+      const tempId = generateId();
       db.prepare(`INSERT INTO users (id, name, email, password_hash) VALUES (?, ?, ?, ?)`)
         .run(tempId, 'Forgetful User', `forgetful-${tempId}@mob.local`, 'none');
       const token = randomUUID();

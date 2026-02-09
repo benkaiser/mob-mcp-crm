@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { generateId } from '../utils.js';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -54,7 +55,7 @@ export class LifeEventService {
   constructor(private db: Database.Database) {}
 
   create(input: CreateLifeEventInput): LifeEvent {
-    const id = crypto.randomUUID().replace(/-/g, '').substring(0, 32);
+    const id = generateId();
     const now = new Date().toISOString();
 
     const transaction = this.db.transaction(() => {

@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { parseMonicaExport, type MonicaParsedData } from './monica-parser.js';
+import { generateId } from '../utils.js';
 
 // ─── Type Mapping ───────────────────────────────────────────────
 
@@ -131,9 +132,6 @@ export function importMonicaExport(db: Database.Database, userId: string, sqlCon
   return importParsedData(db, userId, parsed);
 }
 
-function generateId(): string {
-  return crypto.randomUUID().replace(/-/g, '').substring(0, 32);
-}
 
 function importParsedData(db: Database.Database, userId: string, data: MonicaParsedData): ImportResult {
   const result: ImportResult = {

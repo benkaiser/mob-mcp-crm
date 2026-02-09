@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import Database from 'better-sqlite3';
+import { generateId } from '../utils.js';
 import { AccountService } from './accounts.js';
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -187,7 +188,7 @@ export class OAuthService {
    * Log an OAuth authorization event.
    */
   private logAuthorization(userId: string, clientId: string, ipAddress?: string, userAgent?: string): void {
-    const id = crypto.randomUUID().replace(/-/g, '').substring(0, 32);
+    const id = generateId();
     this.db.prepare(`
       INSERT INTO authorization_log (id, user_id, client_id, ip_address, user_agent)
       VALUES (?, ?, ?, ?, ?)

@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { generateId } from '../utils.js';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -65,7 +66,7 @@ export class DebtService {
   constructor(private db: Database.Database) {}
 
   create(input: CreateDebtInput): Debt {
-    const id = crypto.randomUUID().replace(/-/g, '').substring(0, 32);
+    const id = generateId();
     const now = new Date().toISOString();
 
     this.db.prepare(`
