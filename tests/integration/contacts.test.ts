@@ -289,6 +289,13 @@ describe('ContactService', () => {
       expect(result.data[0].first_name).toBe('Alice');
     });
 
+    it('should search by full name across first and last name fields', () => {
+      const result = service.list(userId, { search: 'Alice Anderson' });
+      expect(result.total).toBe(1);
+      expect(result.data[0].first_name).toBe('Alice');
+      expect(result.data[0].last_name).toBe('Anderson');
+    });
+
     it('should search by company', () => {
       const result = service.list(userId, { search: 'Beta' });
       expect(result.total).toBe(1);

@@ -302,12 +302,13 @@ export class ContactService {
       conditions.push(`(
         first_name LIKE ? OR
         last_name LIKE ? OR
+        (first_name || ' ' || COALESCE(last_name, '')) LIKE ? OR
         nickname LIKE ? OR
         company LIKE ? OR
         job_title LIKE ?
       )`);
       const searchTerm = `%${options.search}%`;
-      params.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
+      params.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
     }
 
     if (options.tag_name) {
