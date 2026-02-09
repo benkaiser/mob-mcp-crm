@@ -1,11 +1,11 @@
 ---
 # mob-crm-erun
 title: Project Scaffolding
-status: todo
+status: in-progress
 type: epic
 priority: high
 created_at: 2026-02-09T00:05:33Z
-updated_at: 2026-02-09T00:06:43Z
+updated_at: 2026-02-09T00:11:09Z
 parent: mob-crm-bkbs
 blocking:
     - mob-crm-zbag

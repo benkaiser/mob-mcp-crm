@@ -1,11 +1,11 @@
 ---
 # mob-crm-zbag
 title: Database & Migrations
-status: todo
+status: completed
 type: epic
 priority: high
 created_at: 2026-02-09T00:05:35Z
-updated_at: 2026-02-09T00:06:43Z
+updated_at: 2026-02-09T00:14:17Z
 parent: mob-crm-bkbs
 blocking:
     - mob-crm-ek4t

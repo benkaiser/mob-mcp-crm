@@ -1,11 +1,11 @@
 ---
 # mob-crm-bkbs
 title: v0.1.0 — Foundation & Core CRM
-status: todo
+status: in-progress
 type: milestone
 priority: high
 created_at: 2026-02-09T00:05:08Z
-updated_at: 2026-02-09T00:06:36Z
+updated_at: 2026-02-09T00:11:09Z
 blocking:
     - mob-crm-8o31
 ---
