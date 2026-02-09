@@ -1,11 +1,11 @@
 ---
 # mob-crm-aq0e
 title: MCP Server & Streamable HTTP Transport
-status: todo
+status: completed
 type: epic
 priority: high
 created_at: 2026-02-09T00:05:36Z
-updated_at: 2026-02-09T00:06:43Z
+updated_at: 2026-02-09T00:32:00Z
 parent: mob-crm-bkbs
 blocking:
     - mob-crm-ek4t

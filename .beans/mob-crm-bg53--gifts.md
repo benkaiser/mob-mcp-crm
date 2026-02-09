@@ -1,11 +1,11 @@
 ---
 # mob-crm-bg53
 title: Gifts
-status: todo
+status: completed
 type: epic
 priority: normal
 created_at: 2026-02-09T00:06:12Z
-updated_at: 2026-02-09T00:06:12Z
+updated_at: 2026-02-09T00:49:09Z
 parent: mob-crm-d92t
 ---
 

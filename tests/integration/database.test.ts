@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import Database from 'better-sqlite3';
 import { createDatabase, closeDatabase } from '../../src/db/connection.js';
 import { runMigrations } from '../../src/db/migrator.js';
@@ -66,8 +66,6 @@ describe('Migrations', () => {
     expect(tableNames).toContain('notes');
     expect(tableNames).toContain('tags');
     expect(tableNames).toContain('contact_tags');
-    expect(tableNames).toContain('groups_table');
-    expect(tableNames).toContain('contact_groups');
     expect(tableNames).toContain('activities');
     expect(tableNames).toContain('activity_participants');
     expect(tableNames).toContain('activity_types');

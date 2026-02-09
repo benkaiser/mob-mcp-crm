@@ -1,11 +1,11 @@
 ---
 # mob-crm-q9mj
 title: E2E MCP Protocol Tests
-status: todo
+status: completed
 type: epic
 priority: normal
 created_at: 2026-02-09T00:06:32Z
-updated_at: 2026-02-09T00:06:32Z
+updated_at: 2026-02-09T00:52:41Z
 parent: mob-crm-05bd
 ---
 

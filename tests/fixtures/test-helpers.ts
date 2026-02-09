@@ -2,7 +2,7 @@
  * Shared test helpers for Mob CRM tests.
  */
 import Database from 'better-sqlite3';
-import { createDatabase, closeDatabase } from '../../src/db/connection.js';
+import { createDatabase } from '../../src/db/connection.js';
 import { runMigrations } from '../../src/db/migrator.js';
 
 /**

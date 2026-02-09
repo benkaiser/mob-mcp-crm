@@ -1,11 +1,11 @@
 ---
 # mob-crm-ybk6
 title: MCP Elicitation
-status: todo
+status: completed
 type: epic
 priority: normal
 created_at: 2026-02-09T00:06:26Z
-updated_at: 2026-02-09T00:06:26Z
+updated_at: 2026-02-09T00:52:41Z
 parent: mob-crm-05bd
 ---
 

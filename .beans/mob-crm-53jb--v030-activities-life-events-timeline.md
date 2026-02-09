@@ -1,11 +1,11 @@
 ---
 # mob-crm-53jb
 title: v0.3.0 — Activities, Life Events & Timeline
-status: todo
+status: completed
 type: milestone
 priority: normal
 created_at: 2026-02-09T00:05:17Z
-updated_at: 2026-02-09T00:06:36Z
+updated_at: 2026-02-09T00:46:40Z
 blocking:
     - mob-crm-d92t
 ---

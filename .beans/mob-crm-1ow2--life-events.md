@@ -1,11 +1,11 @@
 ---
 # mob-crm-1ow2
 title: Life Events
-status: todo
+status: completed
 type: epic
 priority: normal
 created_at: 2026-02-09T00:05:58Z
-updated_at: 2026-02-09T00:05:58Z
+updated_at: 2026-02-09T00:46:40Z
 parent: mob-crm-53jb
 ---
 

@@ -1,11 +1,11 @@
 ---
 # mob-crm-ll9g
 title: Activities & Interactions
-status: todo
+status: completed
 type: epic
 priority: normal
 created_at: 2026-02-09T00:05:57Z
-updated_at: 2026-02-09T00:05:57Z
+updated_at: 2026-02-09T00:46:39Z
 parent: mob-crm-53jb
 ---
 

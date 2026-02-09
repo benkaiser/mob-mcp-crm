@@ -34,6 +34,7 @@ export interface Contact {
   // Computed
   age?: number | null;
   age_approximate?: boolean;
+  birthday_display?: string | null;
 }
 
 export interface CreateContactInput {
@@ -62,7 +63,7 @@ export interface CreateContactInput {
   work_notes?: string;
 }
 
-export interface UpdateContactInput extends Partial<CreateContactInput> {}
+export type UpdateContactInput = Partial<CreateContactInput>;
 
 export interface ListContactsOptions {
   page?: number;
@@ -71,6 +72,7 @@ export interface ListContactsOptions {
   is_favorite?: boolean;
   search?: string;
   company?: string;
+  tag_name?: string;
   sort_by?: 'name' | 'created_at' | 'updated_at';
   sort_order?: 'asc' | 'desc';
 }
@@ -83,6 +85,38 @@ export interface PaginatedResult<T> {
 }
 
 // ─── Birthday Helpers ───────────────────────────────────────────
+
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'];
+
+/**
+ * Generate a human-readable birthday description that clarifies the precision.
+ * This is included in MCP responses so the LLM understands what is actually known.
+ */
+export function formatBirthdayDisplay(contact: {
+  birthday_mode: string | null;
+  birthday_date: string | null;
+  birthday_month: number | null;
+  birthday_day: number | null;
+  birthday_year_approximate: number | null;
+}): string | null {
+  if (!contact.birthday_mode) return null;
+
+  if (contact.birthday_mode === 'full_date' && contact.birthday_date) {
+    return contact.birthday_date;
+  }
+
+  if (contact.birthday_mode === 'month_day' && contact.birthday_month && contact.birthday_day) {
+    const monthName = MONTH_NAMES[contact.birthday_month - 1] ?? `Month ${contact.birthday_month}`;
+    return `${monthName} ${contact.birthday_day} (year unknown)`;
+  }
+
+  if (contact.birthday_mode === 'approximate_age' && contact.birthday_year_approximate) {
+    return `Approximately born in ${contact.birthday_year_approximate} (exact date unknown)`;
+  }
+
+  return null;
+}
 
 /**
  * Calculate age from birthday information.
@@ -276,6 +310,11 @@ export class ContactService {
       params.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
     }
 
+    if (options.tag_name) {
+      conditions.push('id IN (SELECT ct.contact_id FROM contact_tags ct JOIN tags t ON ct.tag_id = t.id WHERE t.name = ?)');
+      params.push(options.tag_name);
+    }
+
     const whereClause = conditions.join(' AND ');
 
     // Sort
@@ -324,6 +363,9 @@ export class ContactService {
       contact.age = ageInfo.age;
       contact.age_approximate = ageInfo.approximate;
     }
+
+    // Generate human-readable birthday description for LLM clarity
+    contact.birthday_display = formatBirthdayDisplay(contact);
 
     return contact;
   }

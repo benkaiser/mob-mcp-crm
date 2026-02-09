@@ -176,23 +176,6 @@ CREATE TABLE IF NOT EXISTS contact_tags (
   PRIMARY KEY (contact_id, tag_id)
 );
 
--- Groups
-CREATE TABLE IF NOT EXISTS groups_table (
-  id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
-  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  name TEXT NOT NULL,
-  description TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
--- Contact-group junction
-CREATE TABLE IF NOT EXISTS contact_groups (
-  contact_id TEXT NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
-  group_id TEXT NOT NULL REFERENCES groups_table(id) ON DELETE CASCADE,
-  PRIMARY KEY (contact_id, group_id)
-);
-
 -- Activities / Interactions
 CREATE TABLE IF NOT EXISTS activities (
   id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),

@@ -15,7 +15,7 @@ Mob helps you maintain meaningful relationships by remembering everything about 
 - **Reminders** — Never forget a birthday, follow-up, or check-in
 - **Notes** — Pin important things to remember about someone
 - **Gifts & Debts** — Track gift ideas and money owed
-- **Tags & Groups** — Organize contacts into social circles
+- **Tags** — Organize contacts with flexible labels
 
 ## How It Works
 

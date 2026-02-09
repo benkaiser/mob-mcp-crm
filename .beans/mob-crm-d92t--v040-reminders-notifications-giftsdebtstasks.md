@@ -1,11 +1,11 @@
 ---
 # mob-crm-d92t
 title: v0.4.0 — Reminders, Notifications & Gifts/Debts/Tasks
-status: todo
+status: completed
 type: milestone
 priority: normal
 created_at: 2026-02-09T00:05:19Z
-updated_at: 2026-02-09T00:06:36Z
+updated_at: 2026-02-09T00:49:09Z
 blocking:
     - mob-crm-05bd
 ---

@@ -426,7 +426,7 @@ To-do items that can optionally be linked to a specific contact.
 
 ---
 
-## 11. Tags & Groups
+## 11. Tags
 
 ### 11.1 Tags
 
@@ -440,18 +440,6 @@ Tags are lightweight labels for flexible contact organization.
 - A contact can have **multiple tags**.
 - Tags are created on-the-fly when first used.
 - Tags support filtering and search (e.g., "show me all contacts tagged 'berlin'").
-
-### 11.2 Groups
-
-Groups are named collections of contacts, representing real-world social circles.
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `name` | string | ✅ | Group name (e.g., "Book Club", "College Friends", "Soccer Team") |
-| `description` | text | ❌ | Description of the group |
-
-- A contact can belong to **multiple groups**.
-- Groups differ from tags in that they represent **real-world social units** with a meaningful identity, whereas tags are purely organizational labels.
 
 ---
 
@@ -488,7 +476,7 @@ The system must support powerful search and filtering to make it easy to find th
 
 ### 13.1 Contact Search
 
-- **Full-text search** across: name, nickname, company, notes body, custom field values, tags, group names
+- **Full-text search** across: name, nickname, company, notes body, custom field values, tags
 - **Search results** return contacts with a snippet showing why they matched
 
 ### 13.2 Contact Filtering
@@ -496,7 +484,6 @@ The system must support powerful search and filtering to make it easy to find th
 | Filter | Description |
 |--------|-------------|
 | By tag | Contacts with a specific tag |
-| By group | Contacts in a specific group |
 | By company | Contacts at a specific company |
 | By location | Contacts in a specific city, state, or country |
 | By relationship | "Show me Sarah's family" |
@@ -695,7 +682,7 @@ Tools follow the pattern: `{entity}_{action}`
 | Tool | Description |
 |------|-------------|
 | **Contacts** | |
-| `contact_list` | List contacts with optional filters (tag, group, status, favorite, etc.) |
+| `contact_list` | List contacts with optional filters (tag, status, favorite, etc.) |
 | `contact_get` | Get full contact details including all sub-entities |
 | `contact_create` | Create a new contact with basic info |
 | `contact_update` | Update contact fields |
@@ -765,14 +752,6 @@ Tools follow the pattern: `{entity}_{action}`
 | `tag_delete` | Delete a tag |
 | `contact_tag` | Add a tag to a contact |
 | `contact_untag` | Remove a tag from a contact |
-| **Groups** | |
-| `group_list` | List all groups |
-| `group_get` | Get group details with member list |
-| `group_create` | Create a new group |
-| `group_update` | Update a group |
-| `group_delete` | Delete a group |
-| `group_add_member` | Add a contact to a group |
-| `group_remove_member` | Remove a contact from a group |
 | **Notifications** | |
 | `notification_list` | List notifications (filterable: unread, by type, by contact) |
 | `notification_read` | Mark a notification as read |
@@ -847,7 +826,6 @@ tests/
 │   ├── debts.test.ts        # Debt tracking and net balance calculation
 │   ├── tasks.test.ts        # Task CRUD and status transitions
 │   ├── tags.test.ts         # Tag CRUD and contact tagging
-│   ├── groups.test.ts       # Group CRUD and membership
 │   ├── search.test.ts       # Full-text search and filtering
 │   ├── timeline.test.ts     # Timeline aggregation across entity types
 │   ├── auth.test.ts         # Account creation, OAuth flow, token validation
@@ -902,6 +880,6 @@ The following features are explicitly **out of scope** for the initial version b
 | **Push notifications** | Proactive reminder delivery via email/OS notifications |
 | **Calendar integration** | Sync reminders and birthdays to external calendars |
 | **Contact merging** | Deduplicate and merge contact records |
-| **Bulk operations** | Batch tag, group, update, or delete contacts |
+| **Bulk operations** | Batch tag, update, or delete contacts |
 | **Email verification** | Email verification on account creation |
 | **Password reset** | Email-based password reset flow |
