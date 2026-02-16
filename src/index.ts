@@ -2,7 +2,7 @@ import { createServer } from './server/http-server.js';
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const DATA_DIR = process.env.MOB_DATA_DIR || './data';
-const FORGETFUL = process.argv.includes('--forgetful');
+const FORGETFUL = process.argv.includes('--forgetful') || process.env.MOB_FORGETFUL === 'true';
 
 async function main() {
   console.log(`🦘 Mob CRM starting...`);
