@@ -19,6 +19,7 @@ export interface ServerConfig {
   port: number;
   dataDir: string;
   forgetful: boolean;
+  baseUrl: string;
 }
 
 export function createServer(config: ServerConfig): {
@@ -87,7 +88,7 @@ export function createServer(config: ServerConfig): {
   });
 
   // ─── OAuth Protected Resource Metadata ───────────────────
-  const serverUrl = `http://localhost:${port}`;
+  const serverUrl = config.baseUrl;
   app.use(mcpAuthMetadataRouter({
     oauthMetadata: {
       issuer: serverUrl,
