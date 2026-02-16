@@ -136,8 +136,11 @@ export function createServer(config: ServerConfig): {
           if (state) redirectUrl.searchParams.set('state', state);
           res.redirect(redirectUrl.toString());
         } else {
-          // Not in OAuth flow — just show success and link to login
-          res.status(201).send(getRegisterPageHtml(req.originalUrl, undefined, 'Account created! You can now sign in.'));
+          // Not in OAuth flow — auto-login and redirect to dashboard
+          const token = randomUUID();
+          webSessions.set(token, { userId: user.id, userName: user.name, email: user.email });
+          res.setHeader('Set-Cookie', `mob_session=${token}; Path=/; HttpOnly; SameSite=Lax`);
+          res.redirect('/web/dashboard');
         }
       } catch (err: any) {
         console.error('Registration error:', err);
@@ -588,8 +591,9 @@ function getLoginPageHtml(authorizeUrl: string, error?: string): string {
 }
 
 function getRegisterPageHtml(registerUrl: string, error?: string, success?: string): string {
-  // Build login URL preserving the OAuth query params
-  const loginUrl = registerUrl.replace('/auth/register', '/auth/authorize');
+  // Build login URL: if coming from web flow, link back to /web/login; otherwise use OAuth authorize
+  const isWebFlow = registerUrl.includes('from=web');
+  const loginUrl = isWebFlow ? '/web/login' : registerUrl.replace('/auth/register', '/auth/authorize');
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -731,7 +735,7 @@ function getWebLoginPageHtml(error?: string): string {
       <input type="password" id="password" name="password" required>
       <button type="submit">Sign In</button>
     </form>
-    <p class="alt-link">Don't have an account? <a href="/auth/register">Create one</a></p>
+    <p class="alt-link">Don't have an account? <a href="/auth/register?from=web">Create one</a></p>
   </div>
 </body>
 </html>`;
