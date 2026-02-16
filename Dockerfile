@@ -17,7 +17,7 @@ RUN mkdir -p dist/db/migrations && \
     cp src/db/migrations/*.sql dist/db/migrations/
 
 # Prune dev dependencies for production
-RUN npm prune --omit=dev
+RUN npm prune --omit=dev --legacy-peer-deps
 
 # Production stage
 FROM node:22-slim
