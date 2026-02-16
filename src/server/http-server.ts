@@ -140,6 +140,7 @@ export function createServer(config: ServerConfig): {
           res.status(201).send(getRegisterPageHtml(req.originalUrl, undefined, 'Account created! You can now sign in.'));
         }
       } catch (err: any) {
+        console.error('Registration error:', err);
         if (err.message.includes('already exists')) {
           res.status(409).send(getRegisterPageHtml(req.originalUrl, 'An account with that email already exists'));
         } else {
@@ -159,6 +160,7 @@ export function createServer(config: ServerConfig): {
       const user = await accountService.createAccount({ name, email, password });
       res.status(201).json(user);
     } catch (err: any) {
+      console.error('Registration error:', err);
       if (err.message.includes('already exists')) {
         res.status(409).json({ error: err.message });
       } else {
