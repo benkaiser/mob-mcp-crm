@@ -1,0 +1,34 @@
+name: Deploy to Dokku
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - app: mob
+            name: persistent
+          - app: mob-test
+            name: forgetful
+    name: Deploy ${{ matrix.name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DOKKU_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H kaiserapps.com >> ~/.ssh/known_hosts
+
+      - name: Push to Dokku
+        run: |
+          GIT_SSH_COMMAND="ssh -i ~/.ssh/deploy_key" git push dokku@kaiserapps.com:${{ matrix.app }} HEAD:refs/heads/master --force
