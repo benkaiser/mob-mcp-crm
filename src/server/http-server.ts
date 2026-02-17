@@ -14,6 +14,7 @@ import { OAuthService } from '../auth/oauth.js';
 import { McpTokenVerifier } from '../auth/mcp-token-verifier.js';
 import { importMonicaExport } from '../services/monica-import.js';
 import { generateId } from '../utils.js';
+import { ForgetfulTemplate } from '../db/forgetful-template.js';
 
 export interface ServerConfig {
   port: number;
@@ -36,6 +37,10 @@ export function createServer(config: ServerConfig): {
     inMemory: config.forgetful,
   });
   runMigrations(db);
+
+  // Forgetful mode: pre-build a template DB and track per-user clones
+  const forgetfulTemplate = config.forgetful ? new ForgetfulTemplate() : null;
+  const forgetfulDbs = new Map<string, Database.Database>();
 
   // Initialize auth services
   const accountService = new AccountService(db);
@@ -207,7 +212,13 @@ export function createServer(config: ServerConfig): {
       db.prepare(`
         INSERT INTO users (id, name, email, password_hash)
         VALUES (?, ?, ?, ?)
-      `).run(tempId, 'Forgetful User', `forgetful-${tempId}@mob.local`, 'none');
+      `).run(tempId, 'Bluey Heeler', `forgetful-${tempId}@mob.local`, 'none');
+
+      // Clone template DB for this user session
+      if (forgetfulTemplate) {
+        const clonedDb = forgetfulTemplate.clone(tempId);
+        forgetfulDbs.set(tempId, clonedDb);
+      }
 
       const code = oauthService.createAuthorizationCode({
         userId: tempId,
@@ -247,7 +258,13 @@ export function createServer(config: ServerConfig): {
       db.prepare(`
         INSERT INTO users (id, name, email, password_hash)
         VALUES (?, ?, ?, ?)
-      `).run(tempId, 'Forgetful User', `forgetful-${tempId}@mob.local`, 'none');
+      `).run(tempId, 'Bluey Heeler', `forgetful-${tempId}@mob.local`, 'none');
+
+      // Clone template DB for this user session
+      if (forgetfulTemplate) {
+        const clonedDb = forgetfulTemplate.clone(tempId);
+        forgetfulDbs.set(tempId, clonedDb);
+      }
 
       const code = oauthService.createAuthorizationCode({
         userId: tempId,
@@ -348,9 +365,16 @@ export function createServer(config: ServerConfig): {
       // Auto-login in forgetful mode
       const tempId = generateId();
       db.prepare(`INSERT INTO users (id, name, email, password_hash) VALUES (?, ?, ?, ?)`)
-        .run(tempId, 'Forgetful User', `forgetful-${tempId}@mob.local`, 'none');
+        .run(tempId, 'Bluey Heeler', `forgetful-${tempId}@mob.local`, 'none');
+
+      // Clone template DB for this user session
+      if (forgetfulTemplate) {
+        const clonedDb = forgetfulTemplate.clone(tempId);
+        forgetfulDbs.set(tempId, clonedDb);
+      }
+
       const token = randomUUID();
-      webSessions.set(token, { userId: tempId, userName: 'Forgetful User', email: `forgetful-${tempId}@mob.local` });
+      webSessions.set(token, { userId: tempId, userName: 'Bluey Heeler', email: `forgetful-${tempId}@mob.local` });
       res.setHeader('Set-Cookie', `mob_session=${token}; Path=/; HttpOnly; SameSite=Lax`);
       res.redirect('/web/dashboard');
       return;
@@ -449,6 +473,12 @@ export function createServer(config: ServerConfig): {
 
     // New session — only allowed for initialization requests
     if (!sessionId && isInitializeRequest(req.body)) {
+      // Determine which DB to use for this MCP session
+      const userId = (req as any).auth?.extra?.userId as string | undefined;
+      const mcpDb = (config.forgetful && userId && forgetfulDbs.has(userId))
+        ? forgetfulDbs.get(userId)!
+        : db;
+
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => randomUUID(),
         onsessioninitialized: (sid) => {
@@ -460,9 +490,15 @@ export function createServer(config: ServerConfig): {
         if (transport.sessionId) {
           delete transports[transport.sessionId];
         }
+        // Clean up forgetful DB clone when transport closes
+        if (config.forgetful && userId && forgetfulDbs.has(userId)) {
+          const clonedDb = forgetfulDbs.get(userId)!;
+          try { clonedDb.close(); } catch { /* already closed */ }
+          forgetfulDbs.delete(userId);
+        }
       };
 
-      const server = createMcpServer(db);
+      const server = createMcpServer(mcpDb);
       await server.connect(transport);
       await transport.handleRequest(req, res, req.body);
       return;
@@ -536,6 +572,11 @@ export function createServer(config: ServerConfig): {
       }
       // Close database
       db.close();
+      // Close all forgetful DB clones
+      for (const [uid, clonedDb] of forgetfulDbs) {
+        try { clonedDb.close(); } catch { /* already closed */ }
+        forgetfulDbs.delete(uid);
+      }
       // Close HTTP server
       if (httpServer) {
         httpServer.close();
