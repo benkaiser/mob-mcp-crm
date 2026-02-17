@@ -25,8 +25,8 @@ export function seedForgetfulData(db: Database.Database, userId: string): void {
 
   // ─── Contacts ───────────────────────────────────────────────────
   const insertContact = db.prepare(`
-    INSERT INTO contacts (id, user_id, first_name, last_name, nickname, birthday_mode, birthday_date, birthday_month, birthday_day, is_favorite, job_title, company, work_notes, met_description)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO contacts (id, user_id, first_name, last_name, nickname, birthday_mode, birthday_date, birthday_month, birthday_day, is_favorite, job_title, company, work_notes, met_description, is_me)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const bandit = generateId();
@@ -51,45 +51,49 @@ export function seedForgetfulData(db: Database.Database, userId: string): void {
   const jack = generateId();
 
   // 1. Bandit Heeler — Dad, archaeologist at UQ, birthday Nov 19, favorite
-  insertContact.run(bandit, userId, 'Bandit', 'Heeler', null, 'month_day', null, 11, 19, 1, 'Archaeologist', 'University of Queensland', null, null);
+  insertContact.run(bandit, userId, 'Bandit', 'Heeler', null, 'month_day', null, 11, 19, 1, 'Archaeologist', 'University of Queensland', null, null, 0);
   // 2. Chilli Heeler — Mum, airport security part-time, birthday Sep 6, favorite
-  insertContact.run(chilli, userId, 'Chilli', 'Heeler', null, 'month_day', null, 9, 6, 1, 'Airport Security Officer', 'Brisbane Airport', 'Part-time', null);
+  insertContact.run(chilli, userId, 'Chilli', 'Heeler', null, 'month_day', null, 9, 6, 1, 'Airport Security Officer', 'Brisbane Airport', 'Part-time', null, 0);
   // 3. Bingo Heeler — Little sister, birthday Jul 24, favorite
-  insertContact.run(bingo, userId, 'Bingo', 'Heeler', null, 'month_day', null, 7, 24, 1, null, null, null, null);
+  insertContact.run(bingo, userId, 'Bingo', 'Heeler', null, 'month_day', null, 7, 24, 1, null, null, null, null, 0);
   // 4. Stripe Heeler — Uncle (Bandit's brother)
-  insertContact.run(stripe, userId, 'Stripe', 'Heeler', null, null, null, null, null, 0, null, null, null, null);
+  insertContact.run(stripe, userId, 'Stripe', 'Heeler', null, null, null, null, null, 0, null, null, null, null, 0);
   // 5. Trixie Heeler — Aunt (Stripe's wife)
-  insertContact.run(trixie, userId, 'Trixie', 'Heeler', null, null, null, null, null, 0, null, null, null, null);
+  insertContact.run(trixie, userId, 'Trixie', 'Heeler', null, null, null, null, null, 0, null, null, null, null, 0);
   // 6. Muffin Heeler — Cousin, toddler
-  insertContact.run(muffin, userId, 'Muffin', 'Heeler', null, null, null, null, null, 0, null, null, null, null);
+  insertContact.run(muffin, userId, 'Muffin', 'Heeler', null, null, null, null, null, 0, null, null, null, null, 0);
   // 7. Socks Heeler — Cousin, acts like a puppy
-  insertContact.run(socks, userId, 'Socks', 'Heeler', null, null, null, null, null, 0, null, null, null, null);
+  insertContact.run(socks, userId, 'Socks', 'Heeler', null, null, null, null, null, 0, null, null, null, null, 0);
   // 8. Rad Heeler — Uncle, extreme sports, lives overseas
-  insertContact.run(rad, userId, 'Rad', 'Heeler', null, null, null, null, null, 0, null, null, 'Extreme sports enthusiast, lives overseas', null);
+  insertContact.run(rad, userId, 'Rad', 'Heeler', null, null, null, null, null, 0, null, null, 'Extreme sports enthusiast, lives overseas', null, 0);
   // 9. Chris Heeler — Grandmother, nickname "Nana"
-  insertContact.run(chris, userId, 'Chris', 'Heeler', 'Nana', null, null, null, null, 0, null, null, null, null);
+  insertContact.run(chris, userId, 'Chris', 'Heeler', 'Nana', null, null, null, null, 0, null, null, null, null, 0);
   // 10. Bob Heeler — Grandfather
-  insertContact.run(bob, userId, 'Bob', 'Heeler', null, null, null, null, null, 0, null, null, null, null);
+  insertContact.run(bob, userId, 'Bob', 'Heeler', null, null, null, null, null, 0, null, null, null, null, 0);
   // 11. Frisky — Aunt (Chilli's sister), engaged to Rad, nickname "Aunt Frisky"
-  insertContact.run(frisky, userId, 'Frisky', null, 'Aunt Frisky', null, null, null, null, 0, null, null, null, null);
+  insertContact.run(frisky, userId, 'Frisky', null, 'Aunt Frisky', null, null, null, null, 0, null, null, null, null, 0);
   // 12. Mackenzie — School friend, from New Zealand
-  insertContact.run(mackenzie, userId, 'Mackenzie', null, null, null, null, null, null, 0, null, null, null, 'School friend from New Zealand');
+  insertContact.run(mackenzie, userId, 'Mackenzie', null, null, null, null, null, null, 0, null, null, null, 'School friend from New Zealand', 0);
   // 13. Rusty — School friend, lives on a farm
-  insertContact.run(rusty, userId, 'Rusty', null, null, null, null, null, null, 0, null, null, null, 'School friend who lives on a farm');
+  insertContact.run(rusty, userId, 'Rusty', null, null, null, null, null, null, 0, null, null, null, 'School friend who lives on a farm', 0);
   // 14. Judo — Neighbour & friend, competitive
-  insertContact.run(judo, userId, 'Judo', null, null, null, null, null, null, 0, null, null, null, 'Neighbour, quite competitive');
+  insertContact.run(judo, userId, 'Judo', null, null, null, null, null, null, 0, null, null, null, 'Neighbour, quite competitive', 0);
   // 15. Chloe — School friend, dalmatian, gentle
-  insertContact.run(chloe, userId, 'Chloe', null, null, null, null, null, null, 0, null, null, null, 'School friend, very gentle');
+  insertContact.run(chloe, userId, 'Chloe', null, null, null, null, null, null, 0, null, null, null, 'School friend, very gentle', 0);
   // 16. Honey — School friend, shy
-  insertContact.run(honey, userId, 'Honey', null, null, null, null, null, null, 0, null, null, null, 'School friend, quite shy');
+  insertContact.run(honey, userId, 'Honey', null, null, null, null, null, null, 0, null, null, null, 'School friend, quite shy', 0);
   // 17. Snickers — School friend
-  insertContact.run(snickers, userId, 'Snickers', null, null, null, null, null, null, 0, null, null, null, 'School friend');
+  insertContact.run(snickers, userId, 'Snickers', null, null, null, null, null, null, 0, null, null, null, 'School friend', 0);
   // 18. Calypso — Teacher at Glebe Hill School
-  insertContact.run(calypso, userId, 'Calypso', null, null, null, null, null, null, 0, 'Teacher', 'Glebe Hill School', null, null);
+  insertContact.run(calypso, userId, 'Calypso', null, null, null, null, null, null, 0, 'Teacher', 'Glebe Hill School', null, null, 0);
   // 19. Lucky — Next-door neighbour, labrador
-  insertContact.run(lucky, userId, 'Lucky', null, null, null, null, null, null, 0, null, null, null, 'Next-door neighbour');
+  insertContact.run(lucky, userId, 'Lucky', null, null, null, null, null, null, 0, null, null, null, 'Next-door neighbour', 0);
   // 20. Jack — School friend, had to move away
-  insertContact.run(jack, userId, 'Jack', null, null, null, null, null, null, 0, null, null, null, 'School friend who had to move away');
+  insertContact.run(jack, userId, 'Jack', null, null, null, null, null, null, 0, null, null, null, 'School friend who had to move away', 0);
+
+  // 21. Bluey Heeler — Self-contact (the user themselves)
+  const bluey = generateId();
+  insertContact.run(bluey, userId, 'Bluey', 'Heeler', null, null, null, null, null, 0, null, null, null, null, 1);
 
   // ─── Contact Tags ───────────────────────────────────────────────
   const insertContactTag = db.prepare(
@@ -97,7 +101,7 @@ export function seedForgetfulData(db: Database.Database, userId: string): void {
   );
 
   // Family
-  for (const id of [bandit, chilli, bingo, stripe, trixie, muffin, socks, rad, chris, bob, frisky]) {
+  for (const id of [bandit, chilli, bingo, stripe, trixie, muffin, socks, rad, chris, bob, frisky, bluey]) {
     insertContactTag.run(id, tagFamily);
   }
   // Friends
@@ -165,6 +169,18 @@ export function seedForgetfulData(db: Database.Database, userId: string): void {
   // Frisky <-> Rad: significant_other (engaged)
   insertRelationship.run(generateId(), frisky, rad, 'significant_other');
   insertRelationship.run(generateId(), rad, frisky, 'significant_other');
+
+  // Bluey <-> Bandit: child/parent
+  insertRelationship.run(generateId(), bluey, bandit, 'child');
+  insertRelationship.run(generateId(), bandit, bluey, 'parent');
+
+  // Bluey <-> Chilli: child/parent
+  insertRelationship.run(generateId(), bluey, chilli, 'child');
+  insertRelationship.run(generateId(), chilli, bluey, 'parent');
+
+  // Bluey <-> Bingo: sibling
+  insertRelationship.run(generateId(), bluey, bingo, 'sibling');
+  insertRelationship.run(generateId(), bingo, bluey, 'sibling');
 
   // ─── Contact Methods ────────────────────────────────────────────
   const insertContactMethod = db.prepare(

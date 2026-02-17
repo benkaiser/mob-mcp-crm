@@ -100,6 +100,36 @@ export class RelationshipService {
    * Returns the forward relationship.
    */
   add(input: CreateRelationshipInput): Relationship {
+    // Validate both contact IDs exist before attempting insert
+    const contact = this.db.prepare('SELECT id, first_name, last_name FROM contacts WHERE id = ?').get(input.contact_id) as { id: string; first_name: string; last_name: string | null } | undefined;
+    const related = this.db.prepare('SELECT id, first_name, last_name FROM contacts WHERE id = ?').get(input.related_contact_id) as { id: string; first_name: string; last_name: string | null } | undefined;
+
+    // Check if the invalid ID is actually the user's own ID (common mistake)
+    const isUserIdCheck = (id: string) => {
+      const user = this.db.prepare('SELECT id, name FROM users WHERE id = ?').get(id) as { id: string; name: string } | undefined;
+      return user ? ` This looks like your own user ID (${user.name}) — you cannot use your user ID as a contact_id. Use your self-contact ID instead (available from the \`me\` or \`prime\` tool).` : '';
+    };
+
+    if (!contact && !related) {
+      const hint1 = isUserIdCheck(input.contact_id);
+      const hint2 = input.contact_id !== input.related_contact_id ? isUserIdCheck(input.related_contact_id) : '';
+      throw new Error(`Neither contact exists — contact_id "${input.contact_id}" and related_contact_id "${input.related_contact_id}" were not found.${hint1}${hint2} Use contact_list or contact_search to find valid contact IDs.`);
+    }
+    if (!contact) {
+      const relatedName = [related!.first_name, related!.last_name].filter(Boolean).join(' ');
+      const hint = isUserIdCheck(input.contact_id);
+      throw new Error(`contact_id "${input.contact_id}" not found.${hint} The related_contact_id resolved to "${relatedName}" (${input.related_contact_id}). Use contact_list or contact_search to find the correct ID for the other contact.`);
+    }
+    if (!related) {
+      const contactName = [contact.first_name, contact.last_name].filter(Boolean).join(' ');
+      const hint = isUserIdCheck(input.related_contact_id);
+      throw new Error(`related_contact_id "${input.related_contact_id}" not found.${hint} The contact_id resolved to "${contactName}" (${input.contact_id}). Use contact_list or contact_search to find the correct ID for the related contact.`);
+    }
+
+    if (input.contact_id === input.related_contact_id) {
+      throw new Error('contact_id and related_contact_id cannot be the same — a contact cannot have a relationship with itself.');
+    }
+
     const forwardId = generateId();
     const inverseId = generateId();
     const now = new Date().toISOString();
@@ -110,14 +140,23 @@ export class RelationshipService {
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
 
-    const transaction = this.db.transaction(() => {
-      // Forward: A → B
-      insertStmt.run(forwardId, input.contact_id, input.related_contact_id, input.relationship_type, input.notes ?? null, now, now);
-      // Inverse: B → A
-      insertStmt.run(inverseId, input.related_contact_id, input.contact_id, inverseType, input.notes ?? null, now, now);
-    });
+    try {
+      const transaction = this.db.transaction(() => {
+        // Forward: A → B
+        insertStmt.run(forwardId, input.contact_id, input.related_contact_id, input.relationship_type, input.notes ?? null, now, now);
+        // Inverse: B → A
+        insertStmt.run(inverseId, input.related_contact_id, input.contact_id, inverseType, input.notes ?? null, now, now);
+      });
 
-    transaction();
+      transaction();
+    } catch (err: any) {
+      if (err.message?.includes('UNIQUE constraint failed')) {
+        const contactName = [contact.first_name, contact.last_name].filter(Boolean).join(' ');
+        const relatedName = [related.first_name, related.last_name].filter(Boolean).join(' ');
+        throw new Error(`A "${input.relationship_type}" relationship already exists between ${contactName} and ${relatedName}. Use relationship_update to modify it, or relationship_list to see existing relationships.`);
+      }
+      throw err;
+    }
 
     return this.getById(forwardId)!;
   }

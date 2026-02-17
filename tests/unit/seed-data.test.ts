@@ -13,9 +13,9 @@ describe('seedForgetfulData', () => {
     seedForgetfulData(db, userId);
   });
 
-  it('creates exactly 20 contacts', () => {
+  it('creates exactly 21 contacts', () => {
     const count = (db.prepare('SELECT COUNT(*) as c FROM contacts WHERE user_id = ?').get(userId) as any).c;
-    expect(count).toBe(20);
+    expect(count).toBe(21);
   });
 
   it('creates 4 tags (Family, Friends, School, Neighbours)', () => {
@@ -36,14 +36,14 @@ describe('seedForgetfulData', () => {
       WHERE ct.tag_id = ? ORDER BY c.first_name
     `).all(familyTagId) as any[];
     expect(familyContacts.map(c => c.first_name)).toEqual([
-      'Bandit', 'Bingo', 'Bob', 'Chilli', 'Chris', 'Frisky', 'Muffin', 'Rad', 'Socks', 'Stripe', 'Trixie'
+      'Bandit', 'Bingo', 'Bluey', 'Bob', 'Chilli', 'Chris', 'Frisky', 'Muffin', 'Rad', 'Socks', 'Stripe', 'Trixie'
     ]);
   });
 
   it('creates bidirectional relationships', () => {
     const relCount = (db.prepare('SELECT COUNT(*) as c FROM relationships').get() as any).c;
-    // 12 relationship pairs = 24 relationship rows
-    expect(relCount).toBe(24);
+    // 15 relationship pairs = 30 relationship rows
+    expect(relCount).toBe(30);
 
     // Check a specific relationship: Bandit <-> Chilli spouse
     const banditId = (db.prepare("SELECT id FROM contacts WHERE first_name = 'Bandit' AND user_id = ?").get(userId) as any).id;
@@ -173,5 +173,77 @@ describe('seedForgetfulData', () => {
     const calypso = db.prepare("SELECT job_title, company FROM contacts WHERE first_name = 'Calypso' AND user_id = ?").get(userId) as any;
     expect(calypso.job_title).toBe('Teacher');
     expect(calypso.company).toBe('Glebe Hill School');
+  });
+
+  it('creates a self-contact with is_me = 1', () => {
+    const selfContact = db.prepare(
+      "SELECT * FROM contacts WHERE user_id = ? AND is_me = 1"
+    ).get(userId) as any;
+
+    expect(selfContact).toBeDefined();
+    expect(selfContact.first_name).toBe('Bluey');
+    expect(selfContact.last_name).toBe('Heeler');
+    expect(selfContact.is_me).toBe(1);
+  });
+
+  it('creates exactly one self-contact', () => {
+    const count = (db.prepare(
+      "SELECT COUNT(*) as c FROM contacts WHERE user_id = ? AND is_me = 1"
+    ).get(userId) as any).c;
+    expect(count).toBe(1);
+  });
+
+  it('creates relationships between Bluey (self-contact) and family members', () => {
+    const blueyId = (db.prepare(
+      "SELECT id FROM contacts WHERE first_name = 'Bluey' AND user_id = ? AND is_me = 1"
+    ).get(userId) as any).id;
+
+    const banditId = (db.prepare(
+      "SELECT id FROM contacts WHERE first_name = 'Bandit' AND user_id = ?"
+    ).get(userId) as any).id;
+
+    const chilliId = (db.prepare(
+      "SELECT id FROM contacts WHERE first_name = 'Chilli' AND user_id = ?"
+    ).get(userId) as any).id;
+
+    const bingoId = (db.prepare(
+      "SELECT id FROM contacts WHERE first_name = 'Bingo' AND user_id = ?"
+    ).get(userId) as any).id;
+
+    // Bluey -> Bandit: child
+    const blueyToBandit = db.prepare(
+      "SELECT relationship_type FROM relationships WHERE contact_id = ? AND related_contact_id = ?"
+    ).get(blueyId, banditId) as any;
+    expect(blueyToBandit.relationship_type).toBe('child');
+
+    // Bandit -> Bluey: parent
+    const banditToBluey = db.prepare(
+      "SELECT relationship_type FROM relationships WHERE contact_id = ? AND related_contact_id = ?"
+    ).get(banditId, blueyId) as any;
+    expect(banditToBluey.relationship_type).toBe('parent');
+
+    // Bluey -> Chilli: child
+    const blueyToChilli = db.prepare(
+      "SELECT relationship_type FROM relationships WHERE contact_id = ? AND related_contact_id = ?"
+    ).get(blueyId, chilliId) as any;
+    expect(blueyToChilli.relationship_type).toBe('child');
+
+    // Chilli -> Bluey: parent
+    const chilliToBluey = db.prepare(
+      "SELECT relationship_type FROM relationships WHERE contact_id = ? AND related_contact_id = ?"
+    ).get(chilliId, blueyId) as any;
+    expect(chilliToBluey.relationship_type).toBe('parent');
+
+    // Bluey -> Bingo: sibling
+    const blueyToBingo = db.prepare(
+      "SELECT relationship_type FROM relationships WHERE contact_id = ? AND related_contact_id = ?"
+    ).get(blueyId, bingoId) as any;
+    expect(blueyToBingo.relationship_type).toBe('sibling');
+
+    // Bingo -> Bluey: sibling
+    const bingoToBluey = db.prepare(
+      "SELECT relationship_type FROM relationships WHERE contact_id = ? AND related_contact_id = ?"
+    ).get(bingoId, blueyId) as any;
+    expect(bingoToBluey.relationship_type).toBe('sibling');
   });
 });

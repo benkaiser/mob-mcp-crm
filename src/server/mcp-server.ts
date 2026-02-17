@@ -34,6 +34,7 @@ function textResult(data: unknown) {
 }
 
 function errorResult(message: string) {
+  console.error(`[MCP] Tool error: ${message}`);
   return { content: [{ type: 'text' as const, text: JSON.stringify({ error: message }) }], isError: true };
 }
 
@@ -449,9 +450,11 @@ export function createMcpServer(db: Database.Database): McpServer {
   const relationshipTypeEnum = z.enum(getRelationshipTypes() as [string, ...string[]]);
 
   server.registerTool('relationship_add', {
-    description: 'Create a relationship between two contacts. Automatically creates the inverse relationship.',
+    description: 'Create a relationship between two contacts. Automatically creates the inverse relationship. ' +
+      'To create relationships involving yourself, use your own contact_id from the prime/me tool. ' +
+      'Relationships describe how contacts relate to each other (e.g. Bandit is Bingo\'s parent).',
     inputSchema: {
-      contact_id: z.string().describe('The source contact ID'),
+      contact_id: z.string().describe('The source contact ID (use your contact_id from prime/me for yourself)'),
       related_contact_id: z.string().describe('The related contact ID'),
       relationship_type: relationshipTypeEnum.describe('Type of relationship (e.g. parent, spouse, friend, colleague)'),
       notes: z.string().optional().describe('Notes about this relationship'),
@@ -1402,8 +1405,9 @@ export function createMcpServer(db: Database.Database): McpServer {
   // ─── Me Tool (Current User Identity) ──────────────────────────
 
   server.registerTool('me', {
-    description: 'Get information about the current user (you). Returns your name, email, and account creation date. ' +
-      'Use this when the user asks "who am I?" or needs their own identity/profile information.',
+    description: 'Get information about the current user (you). Returns your name, email, account creation date, and your self-contact ID. ' +
+      'Use this when the user asks "who am I?" or needs their own identity/profile information. ' +
+      'Use the returned contact_id (not user_id) when creating relationships involving yourself.',
     inputSchema: {},
   }, (_args, extra) => {
     try {
@@ -1417,8 +1421,14 @@ export function createMcpServer(db: Database.Database): McpServer {
         return errorResult('User not found');
       }
 
+      const selfContact = db.prepare(
+        'SELECT id FROM contacts WHERE user_id = ? AND is_me = 1 AND deleted_at IS NULL'
+      ).get(userId) as { id: string } | undefined;
+
       return textResult({
-        id: userRow.id,
+        user_id: userRow.id,
+        contact_id: selfContact?.id ?? null,
+        _note: 'Use contact_id (not user_id) when creating relationships involving yourself.',
         name: userRow.name,
         email: userRow.email,
         created_at: userRow.created_at,
@@ -1447,6 +1457,11 @@ export function createMcpServer(db: Database.Database): McpServer {
       const userRow = db.prepare(
         'SELECT id, name, email, created_at FROM users WHERE id = ?'
       ).get(userId) as { id: string; name: string; email: string; created_at: string } | undefined;
+
+      // Self-contact ID
+      const selfContact = db.prepare(
+        'SELECT id FROM contacts WHERE user_id = ? AND is_me = 1 AND deleted_at IS NULL'
+      ).get(userId) as { id: string } | undefined;
 
       // Tags: id + name only
       const tagRows = db.prepare(
@@ -1501,7 +1516,7 @@ export function createMcpServer(db: Database.Database): McpServer {
 
       const result = {
         current_timestamp: new Date().toISOString(),
-        me: userRow ? { id: userRow.id, name: userRow.name, email: userRow.email } : null,
+        me: userRow ? { user_id: userRow.id, contact_id: selfContact?.id ?? null, name: userRow.name, email: userRow.email, _note: 'Use contact_id (not user_id) when creating relationships involving yourself.' } : null,
         total_contacts: totalContacts,
         showing_contacts: compactContacts.length,
         tags: tagRows,

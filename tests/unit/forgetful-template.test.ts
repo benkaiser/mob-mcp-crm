@@ -32,7 +32,7 @@ describe('ForgetfulTemplate', () => {
 
     // Contacts should belong to the new user
     const contacts = db.prepare('SELECT COUNT(*) as c FROM contacts WHERE user_id = ?').get(userId) as any;
-    expect(contacts.c).toBe(20);
+    expect(contacts.c).toBe(21);
 
     // No contacts should belong to __TEMPLATE__
     const templateContacts = db.prepare("SELECT COUNT(*) as c FROM contacts WHERE user_id = '__TEMPLATE__'").get() as any;
@@ -55,11 +55,11 @@ describe('ForgetfulTemplate', () => {
     const db1 = template.clone('user-a');
     const db2 = template.clone('user-b');
 
-    // Both should have 20 contacts
+    // Both should have 21 contacts
     const count1 = (db1.prepare("SELECT COUNT(*) as c FROM contacts WHERE user_id = 'user-a'").get() as any).c;
     const count2 = (db2.prepare("SELECT COUNT(*) as c FROM contacts WHERE user_id = 'user-b'").get() as any).c;
-    expect(count1).toBe(20);
-    expect(count2).toBe(20);
+    expect(count1).toBe(21);
+    expect(count2).toBe(21);
 
     // Delete a contact from db1 — should not affect db2
     const contact1 = db1.prepare("SELECT id FROM contacts WHERE user_id = 'user-a' LIMIT 1").get() as any;
@@ -67,8 +67,8 @@ describe('ForgetfulTemplate', () => {
 
     const newCount1 = (db1.prepare("SELECT COUNT(*) as c FROM contacts WHERE user_id = 'user-a'").get() as any).c;
     const newCount2 = (db2.prepare("SELECT COUNT(*) as c FROM contacts WHERE user_id = 'user-b'").get() as any).c;
-    expect(newCount1).toBe(19);
-    expect(newCount2).toBe(20); // Unaffected
+    expect(newCount1).toBe(20);
+    expect(newCount2).toBe(21); // Unaffected
 
     db1.close();
     db2.close();
@@ -91,7 +91,7 @@ describe('ForgetfulTemplate', () => {
 
     // Relationships
     const rels = (db.prepare('SELECT COUNT(*) as c FROM relationships').get() as any).c;
-    expect(rels).toBe(24);
+    expect(rels).toBe(30);
 
     // Contact methods
     const methods = (db.prepare('SELECT COUNT(*) as c FROM contact_methods').get() as any).c;

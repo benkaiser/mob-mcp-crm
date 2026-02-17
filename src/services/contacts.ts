@@ -29,6 +29,7 @@ export interface Contact {
   company: string | null;
   industry: string | null;
   work_notes: string | null;
+  is_me: boolean;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -267,6 +268,16 @@ export class ContactService {
   }
 
   softDelete(userId: string, contactId: string): boolean {
+    // Check if this is a self-contact (is_me = 1) — cannot be deleted
+    const contact = this.db.prepare(`
+      SELECT is_me FROM contacts
+      WHERE id = ? AND user_id = ? AND deleted_at IS NULL
+    `).get(contactId, userId) as { is_me: number } | undefined;
+
+    if (contact && contact.is_me) {
+      throw new Error('Cannot delete your own contact record');
+    }
+
     const result = this.db.prepare(`
       UPDATE contacts
       SET deleted_at = datetime('now'), updated_at = datetime('now')
@@ -357,6 +368,7 @@ export class ContactService {
     const contact: Contact = {
       ...row,
       is_favorite: Boolean(row.is_favorite),
+      is_me: Boolean(row.is_me),
     };
 
     // Calculate age if birthday info is available

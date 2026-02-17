@@ -54,6 +54,17 @@ export class AccountService {
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(id, input.name, input.email, passwordHash, now, now);
 
+    // Auto-create self-contact so the user can participate in relationships
+    const selfContactId = generateId();
+    const nameParts = input.name.split(' ');
+    const firstName = nameParts[0];
+    const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : null;
+
+    this.db.prepare(`
+      INSERT INTO contacts (id, user_id, first_name, last_name, is_me, created_at, updated_at)
+      VALUES (?, ?, ?, ?, 1, ?, ?)
+    `).run(selfContactId, id, firstName, lastName, now, now);
+
     return this.getPublicUser(id)!;
   }
 

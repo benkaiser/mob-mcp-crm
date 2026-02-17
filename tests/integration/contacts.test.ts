@@ -241,6 +241,23 @@ describe('ContactService', () => {
       const result = service.softDelete(userId, created.id);
       expect(result).toBe(false);
     });
+
+    it('should reject deletion of self-contact (is_me = 1)', () => {
+      // Manually insert a self-contact
+      const selfId = Math.random().toString(36).substring(2, 18);
+      db.prepare(`
+        INSERT INTO contacts (id, user_id, first_name, last_name, is_me)
+        VALUES (?, ?, ?, ?, 1)
+      `).run(selfId, userId, 'Test', 'User');
+
+      expect(() => service.softDelete(userId, selfId)).toThrow(
+        'Cannot delete your own contact record'
+      );
+
+      // Verify the contact still exists
+      const stillExists = service.get(userId, selfId);
+      expect(stillExists).not.toBeNull();
+    });
   });
 
   describe('list', () => {
