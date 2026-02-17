@@ -64,7 +64,7 @@ export class ForgetfulTemplate {
     db.pragma('foreign_keys = OFF');
 
     db.prepare('UPDATE users SET id = ?, email = ? WHERE id = ?')
-      .run(newUserId, `forgetful-${newUserId}@mob.local`, TEMPLATE_USER_ID);
+      .run(newUserId, `bluey-${newUserId}@heeler.family`, TEMPLATE_USER_ID);
 
     // Update all tables with user_id FK
     const tablesWithUserId = [

@@ -212,7 +212,7 @@ export function createServer(config: ServerConfig): {
       db.prepare(`
         INSERT INTO users (id, name, email, password_hash)
         VALUES (?, ?, ?, ?)
-      `).run(tempId, 'Bluey Heeler', `forgetful-${tempId}@mob.local`, 'none');
+      `).run(tempId, 'Bluey Heeler', `bluey-${tempId}@heeler.family`, 'none');
 
       // Clone template DB for this user session
       if (forgetfulTemplate) {
@@ -258,7 +258,7 @@ export function createServer(config: ServerConfig): {
       db.prepare(`
         INSERT INTO users (id, name, email, password_hash)
         VALUES (?, ?, ?, ?)
-      `).run(tempId, 'Bluey Heeler', `forgetful-${tempId}@mob.local`, 'none');
+      `).run(tempId, 'Bluey Heeler', `bluey-${tempId}@heeler.family`, 'none');
 
       // Clone template DB for this user session
       if (forgetfulTemplate) {
@@ -365,7 +365,7 @@ export function createServer(config: ServerConfig): {
       // Auto-login in forgetful mode
       const tempId = generateId();
       db.prepare(`INSERT INTO users (id, name, email, password_hash) VALUES (?, ?, ?, ?)`)
-        .run(tempId, 'Bluey Heeler', `forgetful-${tempId}@mob.local`, 'none');
+        .run(tempId, 'Bluey Heeler', `bluey-${tempId}@heeler.family`, 'none');
 
       // Clone template DB for this user session
       if (forgetfulTemplate) {
@@ -374,7 +374,7 @@ export function createServer(config: ServerConfig): {
       }
 
       const token = randomUUID();
-      webSessions.set(token, { userId: tempId, userName: 'Bluey Heeler', email: `forgetful-${tempId}@mob.local` });
+      webSessions.set(token, { userId: tempId, userName: 'Bluey Heeler', email: `bluey-${tempId}@heeler.family` });
       res.setHeader('Set-Cookie', `mob_session=${token}; Path=/; HttpOnly; SameSite=Lax`);
       res.redirect('/web/dashboard');
       return;

@@ -16,7 +16,7 @@ describe('ForgetfulTemplate', () => {
     const user = db.prepare('SELECT id, name, email FROM users WHERE id = ?').get(userId) as any;
     expect(user).toBeDefined();
     expect(user.name).toBe('Bluey Heeler');
-    expect(user.email).toBe(`forgetful-${userId}@mob.local`);
+    expect(user.email).toBe(`bluey-${userId}@heeler.family`);
 
     // Template user should NOT exist
     const templateUser = db.prepare("SELECT id FROM users WHERE id = '__TEMPLATE__'").get();
