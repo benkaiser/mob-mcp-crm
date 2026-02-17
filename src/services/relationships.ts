@@ -72,6 +72,11 @@ export interface Relationship {
   updated_at: string;
 }
 
+export interface RelationshipWithNames extends Relationship {
+  contact_name: string;
+  related_contact_name: string;
+}
+
 export interface CreateRelationshipInput {
   contact_id: string;
   related_contact_id: string;
@@ -196,12 +201,19 @@ export class RelationshipService {
   }
 
   /**
-   * List all relationships for a contact.
+   * List all relationships for a contact, including names of both contacts.
    */
-  listByContact(contactId: string): Relationship[] {
-    return this.db.prepare(
-      'SELECT * FROM relationships WHERE contact_id = ? ORDER BY relationship_type, created_at'
-    ).all(contactId) as Relationship[];
+  listByContact(contactId: string): RelationshipWithNames[] {
+    return this.db.prepare(`
+      SELECT r.*,
+        TRIM(c1.first_name || ' ' || COALESCE(c1.last_name, '')) AS contact_name,
+        TRIM(c2.first_name || ' ' || COALESCE(c2.last_name, '')) AS related_contact_name
+      FROM relationships r
+      JOIN contacts c1 ON r.contact_id = c1.id
+      JOIN contacts c2 ON r.related_contact_id = c2.id
+      WHERE r.contact_id = ?
+      ORDER BY r.relationship_type, r.created_at
+    `).all(contactId) as RelationshipWithNames[];
   }
 
   private getById(id: string): Relationship | null {

@@ -1399,11 +1399,42 @@ export function createMcpServer(db: Database.Database): McpServer {
     }
   });
 
+  // ─── Me Tool (Current User Identity) ──────────────────────────
+
+  server.registerTool('me', {
+    description: 'Get information about the current user (you). Returns your name, email, and account creation date. ' +
+      'Use this when the user asks "who am I?" or needs their own identity/profile information.',
+    inputSchema: {},
+  }, (_args, extra) => {
+    try {
+      const userId = getUserId(extra);
+
+      const userRow = db.prepare(
+        'SELECT id, name, email, created_at, updated_at FROM users WHERE id = ?'
+      ).get(userId) as { id: string; name: string; email: string; created_at: string; updated_at: string } | undefined;
+
+      if (!userRow) {
+        return errorResult('User not found');
+      }
+
+      return textResult({
+        id: userRow.id,
+        name: userRow.name,
+        email: userRow.email,
+        created_at: userRow.created_at,
+        updated_at: userRow.updated_at,
+      });
+    } catch (err: any) {
+      return errorResult(err.message);
+    }
+  });
+
   // ─── Prime Tool (Context Loader) ─────────────────────────────
 
   server.registerTool('prime', {
     description: 'IMPORTANT: Call this tool FIRST before any other tool to load essential CRM context. ' +
-      'Returns a compact overview of the user\'s data: all tags, the 200 most recently updated contacts ' +
+      'Returns a compact overview of the user\'s data: the current user\'s identity (call the "me" tool for full details), ' +
+      'all tags, the 200 most recently updated contacts ' +
       '(id, name, and tag IDs), and the 10 most recent notes. This primes your context so you can reference ' +
       'contacts by name, understand the user\'s tag taxonomy, and see recent activity without needing ' +
       'separate list calls. Always call this at the start of a conversation.',
@@ -1411,6 +1442,11 @@ export function createMcpServer(db: Database.Database): McpServer {
   }, (_args, extra) => {
     try {
       const userId = getUserId(extra);
+
+      // Current user identity
+      const userRow = db.prepare(
+        'SELECT id, name, email, created_at FROM users WHERE id = ?'
+      ).get(userId) as { id: string; name: string; email: string; created_at: string } | undefined;
 
       // Tags: id + name only
       const tagRows = db.prepare(
@@ -1465,6 +1501,7 @@ export function createMcpServer(db: Database.Database): McpServer {
 
       const result = {
         current_timestamp: new Date().toISOString(),
+        me: userRow ? { id: userRow.id, name: userRow.name, email: userRow.email } : null,
         total_contacts: totalContacts,
         showing_contacts: compactContacts.length,
         tags: tagRows,
