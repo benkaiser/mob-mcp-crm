@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { createServer } from '../../src/server/http-server.js';
 import type { ServerConfig } from '../../src/server/http-server.js';
 
-const testConfig: ServerConfig = { port: 0, dataDir: ':memory:', forgetful: true };
+const testConfig: ServerConfig = { port: 0, dataDir: ':memory:', forgetful: true, baseUrl: 'http://localhost:0' };
 
 describe('HTTP Server', () => {
   let server: ReturnType<typeof createServer> | null = null;

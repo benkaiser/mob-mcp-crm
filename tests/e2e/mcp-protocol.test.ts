@@ -4,7 +4,8 @@ import http from 'node:http';
 
 /**
  * E2E MCP Protocol Tests
- * Tests the full MCP protocol flow via HTTP requests with OAuth authentication
+ * Tests the full MCP protocol flow via HTTP requests.
+ * In forgetful mode, no OAuth is needed — connect to /mcp directly.
  */
 describe('E2E MCP Protocol', () => {
   let serverInstance: ReturnType<typeof createServer>;
@@ -12,7 +13,7 @@ describe('E2E MCP Protocol', () => {
   let port: number;
 
   async function startServer(forgetful = false) {
-    serverInstance = createServer({ port: 0, dataDir: ':memory:', forgetful });
+    serverInstance = createServer({ port: 0, dataDir: ':memory:', forgetful, baseUrl: 'http://localhost:0' });
     const app = serverInstance.app;
     httpServer = http.createServer(app);
     await new Promise<void>((resolve) => httpServer.listen(0, resolve));
@@ -24,41 +25,6 @@ describe('E2E MCP Protocol', () => {
     if (httpServer) httpServer.close();
     if (serverInstance) serverInstance.stop();
   });
-
-  /**
-   * Obtain an OAuth access token via the forgetful-mode flow.
-   * (No credentials needed — auto-creates a temp user.)
-   */
-  async function obtainToken(): Promise<string> {
-    // Step 1: Get authorization code
-    const authResponse = await fetch(`http://localhost:${port}/auth/authorize`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        client_id: 'test-client',
-        code_challenge: 'test-verifier', // plain method
-        code_challenge_method: 'plain',
-        redirect_uri: 'http://localhost',
-      }),
-    });
-    const authData = await authResponse.json() as any;
-    const code = authData.code;
-
-    // Step 2: Exchange code for token
-    const tokenResponse = await fetch(`http://localhost:${port}/auth/token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        grant_type: 'authorization_code',
-        code,
-        code_verifier: 'test-verifier',
-        client_id: 'test-client',
-        redirect_uri: 'http://localhost',
-      }),
-    });
-    const tokenData = await tokenResponse.json() as any;
-    return tokenData.access_token;
-  }
 
   /**
    * Parse an MCP response which may be JSON or SSE
@@ -104,7 +70,7 @@ describe('E2E MCP Protocol', () => {
     return response;
   }
 
-  async function initSession(token: string): Promise<string> {
+  async function initSession(token?: string): Promise<string> {
     const response = await mcpRequest({
       jsonrpc: '2.0',
       id: 1,
@@ -127,34 +93,10 @@ describe('E2E MCP Protocol', () => {
     return sessionId;
   }
 
-  it('should return 401 for unauthenticated requests to /mcp', async () => {
+  it('should establish a session in forgetful mode without OAuth', async () => {
     await startServer(true);
 
-    const response = await fetch(`http://localhost:${port}/mcp`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json, text/event-stream',
-      },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'initialize',
-        params: {
-          protocolVersion: '2025-03-26',
-          capabilities: {},
-          clientInfo: { name: 'test-client', version: '1.0' },
-        },
-      }),
-    });
-
-    expect(response.status).toBe(401);
-  });
-
-  it('should establish a session via MCP initialize with Bearer token', async () => {
-    await startServer(true);
-    const token = await obtainToken();
-
+    // No token needed — connect directly
     const response = await mcpRequest({
       jsonrpc: '2.0',
       id: 1,
@@ -164,7 +106,7 @@ describe('E2E MCP Protocol', () => {
         capabilities: {},
         clientInfo: { name: 'test-client', version: '1.0' },
       },
-    }, undefined, token);
+    });
 
     expect(response.status).toBe(200);
     const sessionId = response.headers.get('mcp-session-id');
@@ -175,32 +117,31 @@ describe('E2E MCP Protocol', () => {
     expect(data.result.serverInfo.name).toBe('mob-crm');
   });
 
-  it('should reject non-init requests without session', async () => {
+  it('should reject non-init requests without session in forgetful mode', async () => {
     await startServer(true);
-    const token = await obtainToken();
 
     const response = await mcpRequest({
       jsonrpc: '2.0',
       id: 1,
       method: 'tools/list',
       params: {},
-    }, undefined, token);
+    });
 
-    expect(response.status).toBe(400);
+    // Non-init request without session gets 401 from forgetful middleware
+    expect(response.status).toBe(401);
   });
 
-  it('should list tools after session establishment', async () => {
+  it('should list tools after session establishment in forgetful mode', async () => {
     await startServer(true);
-    const token = await obtainToken();
-    const sessionId = await initSession(token);
+    const sessionId = await initSession();
 
-    // List tools
+    // List tools — no token needed
     const toolsResponse = await mcpRequest({
       jsonrpc: '2.0',
       id: 2,
       method: 'tools/list',
       params: {},
-    }, sessionId, token);
+    }, sessionId);
 
     expect(toolsResponse.status).toBe(200);
     const toolsData = await parseMcpResponse(toolsResponse);
@@ -217,12 +158,11 @@ describe('E2E MCP Protocol', () => {
     expect(toolNames).toContain('data_statistics');
   });
 
-  it('should call a tool and get a response', async () => {
+  it('should call a tool and get a response in forgetful mode', async () => {
     await startServer(true);
-    const token = await obtainToken();
-    const sessionId = await initSession(token);
+    const sessionId = await initSession();
 
-    // Create a contact
+    // Create a contact — no token needed
     const createResponse = await mcpRequest({
       jsonrpc: '2.0',
       id: 2,
@@ -235,7 +175,7 @@ describe('E2E MCP Protocol', () => {
           company: 'ACME Corp',
         },
       },
-    }, sessionId, token);
+    }, sessionId);
 
     expect(createResponse.status).toBe(200);
     const createData = await parseMcpResponse(createResponse);
@@ -251,8 +191,7 @@ describe('E2E MCP Protocol', () => {
 
   it('should handle tool errors gracefully', async () => {
     await startServer(true);
-    const token = await obtainToken();
-    const sessionId = await initSession(token);
+    const sessionId = await initSession();
 
     // Try to get non-existent contact
     const getResponse = await mcpRequest({
@@ -265,14 +204,14 @@ describe('E2E MCP Protocol', () => {
           contact_id: 'nonexistent',
         },
       },
-    }, sessionId, token);
+    }, sessionId);
 
     expect(getResponse.status).toBe(200);
     const getData = await parseMcpResponse(getResponse);
     expect(getData.result.isError).toBe(true);
   });
 
-  it('should reject GET /mcp without auth', async () => {
+  it('should reject GET /mcp without valid session in forgetful mode', async () => {
     await startServer(true);
 
     const response = await fetch(`http://localhost:${port}/mcp`, {
@@ -282,7 +221,7 @@ describe('E2E MCP Protocol', () => {
     expect(response.status).toBe(401);
   });
 
-  it('should reject DELETE /mcp without auth', async () => {
+  it('should reject DELETE /mcp without valid session in forgetful mode', async () => {
     await startServer(true);
 
     const response = await fetch(`http://localhost:${port}/mcp`, {
@@ -292,10 +231,32 @@ describe('E2E MCP Protocol', () => {
     expect(response.status).toBe(401);
   });
 
-  it('should work in forgetful mode', async () => {
+  it('should work in forgetful mode with Bluey seed data via prime', async () => {
     await startServer(true);
-    const token = await obtainToken();
-    const sessionId = await initSession(token);
+    const sessionId = await initSession();
+
+    // Call prime — should return Bluey data with 'me' field
+    const primeResponse = await mcpRequest({
+      jsonrpc: '2.0',
+      id: 2,
+      method: 'tools/call',
+      params: {
+        name: 'prime',
+        arguments: {},
+      },
+    }, sessionId);
+
+    expect(primeResponse.status).toBe(200);
+    const primeData = await parseMcpResponse(primeResponse);
+    const result = JSON.parse(primeData.result.content[0].text);
+    expect(result.me).toBeDefined();
+    expect(result.me.name).toBe('Bluey Heeler');
+    expect(result.total_contacts).toBeGreaterThan(0);
+  });
+
+  it('should work in forgetful mode with data_statistics', async () => {
+    await startServer(true);
+    const sessionId = await initSession();
 
     // Should be able to use tools
     const statsResponse = await mcpRequest({
@@ -306,11 +267,45 @@ describe('E2E MCP Protocol', () => {
         name: 'data_statistics',
         arguments: {},
       },
-    }, sessionId, token);
+    }, sessionId);
 
     expect(statsResponse.status).toBe(200);
     const statsData = await parseMcpResponse(statsResponse);
     const stats = JSON.parse(statsData.result.content[0].text);
     expect(stats.total_contacts).toBeDefined();
+  });
+
+  it('should isolate forgetful sessions from each other', async () => {
+    await startServer(true);
+
+    // Session A: init and create a contact
+    const sessionA = await initSession();
+    await mcpRequest({
+      jsonrpc: '2.0',
+      id: 2,
+      method: 'tools/call',
+      params: {
+        name: 'contact_create',
+        arguments: { first_name: 'Alice', last_name: 'Only' },
+      },
+    }, sessionA);
+
+    // Session B: init and list contacts — should not see Alice
+    const sessionB = await initSession();
+    const listResponse = await mcpRequest({
+      jsonrpc: '2.0',
+      id: 2,
+      method: 'tools/call',
+      params: {
+        name: 'contact_search',
+        arguments: { query: 'Alice Only' },
+      },
+    }, sessionB);
+
+    const listData = await parseMcpResponse(listResponse);
+    const contacts = JSON.parse(listData.result.content[0].text);
+
+    // Session B should NOT see Session A's contacts
+    expect(contacts.data).toHaveLength(0);
   });
 });

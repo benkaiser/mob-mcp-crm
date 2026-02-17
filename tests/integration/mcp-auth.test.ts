@@ -3,9 +3,10 @@ import { createServer } from '../../src/server/http-server.js';
 import http from 'node:http';
 
 /**
- * MCP OAuth Auth Enforcement Tests
- * Tests that the /mcp endpoint properly requires Bearer token authentication
- * and that multi-user isolation works correctly.
+ * MCP Auth Enforcement Tests
+ * Tests that the /mcp endpoint properly requires authentication.
+ * - In persistent mode: requires Bearer token (OAuth)
+ * - In forgetful mode: no OAuth needed, but sessions are enforced
  */
 describe('MCP Auth Enforcement', () => {
   let serverInstance: ReturnType<typeof createServer>;
@@ -13,7 +14,7 @@ describe('MCP Auth Enforcement', () => {
   let port: number;
 
   async function startServer(forgetful = true) {
-    serverInstance = createServer({ port: 0, dataDir: ':memory:', forgetful });
+    serverInstance = createServer({ port: 0, dataDir: ':memory:', forgetful, baseUrl: 'http://localhost:0' });
     const app = serverInstance.app;
     httpServer = http.createServer(app);
     await new Promise<void>((resolve) => httpServer.listen(0, resolve));
@@ -25,34 +26,6 @@ describe('MCP Auth Enforcement', () => {
     if (httpServer) httpServer.close();
     if (serverInstance) serverInstance.stop();
   });
-
-  async function obtainToken(): Promise<string> {
-    const authResponse = await fetch(`http://localhost:${port}/auth/authorize`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        client_id: 'test-client',
-        code_challenge: 'test-verifier',
-        code_challenge_method: 'plain',
-        redirect_uri: 'http://localhost',
-      }),
-    });
-    const authData = await authResponse.json() as any;
-
-    const tokenResponse = await fetch(`http://localhost:${port}/auth/token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        grant_type: 'authorization_code',
-        code: authData.code,
-        code_verifier: 'test-verifier',
-        client_id: 'test-client',
-        redirect_uri: 'http://localhost',
-      }),
-    });
-    const tokenData = await tokenResponse.json() as any;
-    return tokenData.access_token;
-  }
 
   async function parseMcpResponse(response: Response): Promise<any> {
     const contentType = response.headers.get('content-type') || '';
@@ -88,7 +61,7 @@ describe('MCP Auth Enforcement', () => {
     });
   }
 
-  async function initSession(token: string): Promise<string> {
+  async function initForgetfulSession(): Promise<string> {
     const response = await mcpRequest({
       jsonrpc: '2.0',
       id: 1,
@@ -98,21 +71,76 @@ describe('MCP Auth Enforcement', () => {
         capabilities: {},
         clientInfo: { name: 'test-client', version: '1.0' },
       },
-    }, undefined, token);
+    });
 
     const sessionId = response.headers.get('mcp-session-id')!;
     await mcpRequest({
       jsonrpc: '2.0',
       method: 'notifications/initialized',
-    }, sessionId, token);
+    }, sessionId);
 
     return sessionId;
   }
 
-  // ─── 401 Tests ──────────────────────────────────────────────
+  // ─── Forgetful Mode: No OAuth Needed ─────────────────────
 
-  it('should return 401 without Bearer token on POST /mcp', async () => {
-    await startServer();
+  it('should allow init request without Bearer token in forgetful mode', async () => {
+    await startServer(true);
+
+    const response = await mcpRequest({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: {
+        protocolVersion: '2025-03-26',
+        capabilities: {},
+        clientInfo: { name: 'test-client', version: '1.0' },
+      },
+    });
+
+    expect(response.status).toBe(200);
+    const sessionId = response.headers.get('mcp-session-id');
+    expect(sessionId).toBeDefined();
+  });
+
+  it('should return 401 for non-init POST without session in forgetful mode', async () => {
+    await startServer(true);
+    const response = await mcpRequest({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/list',
+      params: {},
+    });
+    expect(response.status).toBe(401);
+  });
+
+  it('should return 401 for GET /mcp without session in forgetful mode', async () => {
+    await startServer(true);
+    const response = await fetch(`http://localhost:${port}/mcp`, { method: 'GET' });
+    expect(response.status).toBe(401);
+  });
+
+  it('should return 401 for DELETE /mcp without session in forgetful mode', async () => {
+    await startServer(true);
+    const response = await fetch(`http://localhost:${port}/mcp`, { method: 'DELETE' });
+    expect(response.status).toBe(401);
+  });
+
+  it('should return 401 for POST with invalid/unknown session in forgetful mode', async () => {
+    await startServer(true);
+    const response = await mcpRequest({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/list',
+      params: {},
+    }, 'totally-fake-session-id-12345');
+    expect(response.status).toBe(401);
+  });
+
+  // ─── Persistent Mode: OAuth Required ─────────────────────
+
+  it('should return 401 without Bearer token on POST /mcp in persistent mode', async () => {
+    await startServer(false);
     const response = await fetch(`http://localhost:${port}/mcp`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -121,20 +149,20 @@ describe('MCP Auth Enforcement', () => {
     expect(response.status).toBe(401);
   });
 
-  it('should return 401 without Bearer token on GET /mcp', async () => {
-    await startServer();
+  it('should return 401 without Bearer token on GET /mcp in persistent mode', async () => {
+    await startServer(false);
     const response = await fetch(`http://localhost:${port}/mcp`, { method: 'GET' });
     expect(response.status).toBe(401);
   });
 
-  it('should return 401 without Bearer token on DELETE /mcp', async () => {
-    await startServer();
+  it('should return 401 without Bearer token on DELETE /mcp in persistent mode', async () => {
+    await startServer(false);
     const response = await fetch(`http://localhost:${port}/mcp`, { method: 'DELETE' });
     expect(response.status).toBe(401);
   });
 
-  it('should return 401 with an invalid/fake Bearer token', async () => {
-    await startServer();
+  it('should return 401 with an invalid/fake Bearer token in persistent mode', async () => {
+    await startServer(false);
     const response = await fetch(`http://localhost:${port}/mcp`, {
       method: 'POST',
       headers: {
@@ -155,14 +183,13 @@ describe('MCP Auth Enforcement', () => {
     expect(response.status).toBe(401);
   });
 
-  // ─── Successful Auth Flow ──────────────────────────────────
+  // ─── Forgetful Mode: Full Tool Flow ──────────────────────
 
-  it('should complete full auth flow: authorize -> token -> MCP tool call', async () => {
-    await startServer();
-    const token = await obtainToken();
-    const sessionId = await initSession(token);
+  it('should complete full flow in forgetful mode: init → tool call (no OAuth)', async () => {
+    await startServer(true);
+    const sessionId = await initForgetfulSession();
 
-    // Use a tool
+    // Use a tool — no bearer token needed
     const response = await mcpRequest({
       jsonrpc: '2.0',
       id: 2,
@@ -171,7 +198,7 @@ describe('MCP Auth Enforcement', () => {
         name: 'contact_create',
         arguments: { first_name: 'AuthTest', last_name: 'User' },
       },
-    }, sessionId, token);
+    }, sessionId);
 
     expect(response.status).toBe(200);
     const data = await parseMcpResponse(response);
@@ -180,14 +207,13 @@ describe('MCP Auth Enforcement', () => {
     expect(contact.id).toBeDefined();
   });
 
-  // ─── Multi-User Isolation ──────────────────────────────────
+  // ─── Multi-Session Isolation (Forgetful Mode) ────────────
 
-  it('should isolate contacts between different authenticated users', async () => {
-    await startServer();
+  it('should isolate contacts between different forgetful sessions', async () => {
+    await startServer(true);
 
-    // User A: obtain token and create a contact
-    const tokenA = await obtainToken();
-    const sessionA = await initSession(tokenA);
+    // Session A: create a contact
+    const sessionA = await initForgetfulSession();
 
     await mcpRequest({
       jsonrpc: '2.0',
@@ -197,31 +223,29 @@ describe('MCP Auth Enforcement', () => {
         name: 'contact_create',
         arguments: { first_name: 'Alice', last_name: 'Only' },
       },
-    }, sessionA, tokenA);
+    }, sessionA);
 
-    // User B: obtain a different token and list contacts
-    const tokenB = await obtainToken();
-    const sessionB = await initSession(tokenB);
+    // Session B: list contacts — should not see Alice
+    const sessionB = await initForgetfulSession();
 
     const listResponse = await mcpRequest({
       jsonrpc: '2.0',
       id: 2,
       method: 'tools/call',
       params: {
-        name: 'contact_list',
-        arguments: {},
+        name: 'contact_search',
+        arguments: { query: 'Alice Only' },
       },
-    }, sessionB, tokenB);
+    }, sessionB);
 
     const listData = await parseMcpResponse(listResponse);
     const contacts = JSON.parse(listData.result.content[0].text);
 
-    // User B should NOT see User A's contacts
+    // Session B should NOT see Session A's contacts
     expect(contacts.data).toHaveLength(0);
-    expect(contacts.total).toBe(0);
   });
 
-  // ─── Well-Known Metadata Endpoints ──────────────────────────
+  // ─── Well-Known Metadata Endpoints ──────────────────────
 
   it('should serve OAuth protected resource metadata', async () => {
     await startServer();

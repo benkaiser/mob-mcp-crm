@@ -11,7 +11,7 @@ describe('Forgetful Mode', () => {
   });
 
   it('should start in forgetful mode with in-memory database', () => {
-    serverInstance = createServer({ port: 0, dataDir: ':memory:', forgetful: true });
+    serverInstance = createServer({ port: 0, dataDir: ':memory:', forgetful: true, baseUrl: 'http://localhost:0' });
     expect(serverInstance.db).toBeDefined();
     // In-memory database should be functional
     const result = serverInstance.db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all();
@@ -19,7 +19,7 @@ describe('Forgetful Mode', () => {
   });
 
   it('should report forgetful mode in health check', async () => {
-    serverInstance = createServer({ port: 0, dataDir: ':memory:', forgetful: true });
+    serverInstance = createServer({ port: 0, dataDir: ':memory:', forgetful: true, baseUrl: 'http://localhost:0' });
     const app = serverInstance.app;
 
     // Use direct supertest-like approach
@@ -40,7 +40,7 @@ describe('Forgetful Mode', () => {
   });
 
   it('should report persistent mode in health check', async () => {
-    serverInstance = createServer({ port: 0, dataDir: ':memory:', forgetful: false });
+    serverInstance = createServer({ port: 0, dataDir: ':memory:', forgetful: false, baseUrl: 'http://localhost:0' });
     const app = serverInstance.app;
 
     const { default: http } = await import('node:http');
@@ -59,8 +59,8 @@ describe('Forgetful Mode', () => {
     }
   });
 
-  it('should auto-approve OAuth in forgetful mode', async () => {
-    serverInstance = createServer({ port: 0, dataDir: ':memory:', forgetful: true });
+  it('should reject OAuth in forgetful mode (OAuth is disabled)', async () => {
+    serverInstance = createServer({ port: 0, dataDir: ':memory:', forgetful: true, baseUrl: 'http://localhost:0' });
     const app = serverInstance.app;
 
     const { default: http } = await import('node:http');
@@ -70,7 +70,7 @@ describe('Forgetful Mode', () => {
     const port = address.port;
 
     try {
-      // In forgetful mode, authorize without credentials
+      // In forgetful mode, OAuth authorize should be rejected
       const authResponse = await fetch(`http://localhost:${port}/auth/authorize`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -82,24 +82,47 @@ describe('Forgetful Mode', () => {
         }),
       });
 
-      const authData = await authResponse.json() as any;
-      expect(authData.code).toBeDefined();
+      // Should reject with 404 since OAuth is disabled in forgetful mode
+      expect(authResponse.status).toBe(404);
+    } finally {
+      server.close();
+    }
+  });
 
-      // Exchange code for token
-      const tokenResponse = await fetch(`http://localhost:${port}/auth/token`, {
+  it('should allow direct MCP connection without OAuth in forgetful mode', async () => {
+    serverInstance = createServer({ port: 0, dataDir: ':memory:', forgetful: true, baseUrl: 'http://localhost:0' });
+    const app = serverInstance.app;
+
+    const { default: http } = await import('node:http');
+    const server = http.createServer(app);
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    const address = server.address() as any;
+    const port = address.port;
+
+    try {
+      // Connect to /mcp directly — no OAuth needed
+      const initResponse = await fetch(`http://localhost:${port}/mcp`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+        },
         body: JSON.stringify({
-          grant_type: 'authorization_code',
-          code: authData.code,
-          code_verifier: 'test-challenge',
-          client_id: 'test-client',
-          redirect_uri: 'http://localhost/callback',
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'initialize',
+          params: {
+            protocolVersion: '2025-03-26',
+            capabilities: {},
+            clientInfo: { name: 'test-client', version: '1.0' },
+          },
         }),
       });
 
-      const tokenData = await tokenResponse.json() as any;
-      expect(tokenData.access_token).toBeDefined();
+      expect(initResponse.status).toBe(200);
+      const sessionId = initResponse.headers.get('mcp-session-id');
+      expect(sessionId).toBeDefined();
+      expect(sessionId).not.toBeNull();
     } finally {
       server.close();
     }

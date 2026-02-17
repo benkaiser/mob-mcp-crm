@@ -4,11 +4,10 @@ import http from 'node:http';
 
 /**
  * Tests that the server properly handles user creation and contact operations
- * through the OAuth-authenticated MCP flow.
+ * through the MCP flow.
  *
- * Previously, these tests verified the DEFAULT_USER_ID seeding mechanism.
- * Now that auth is enforced on /mcp, each user is created via the OAuth flow
- * (either forgetful-mode temp users or registered persistent users).
+ * In forgetful mode, no OAuth is needed — connect to /mcp directly.
+ * In persistent mode, OAuth is required.
  */
 describe('Authenticated User Contact Creation', () => {
   let serverInstance: ReturnType<typeof createServer>;
@@ -21,40 +20,12 @@ describe('Authenticated User Contact Creation', () => {
   });
 
   async function startServer(forgetful = false) {
-    serverInstance = createServer({ port: 0, dataDir: ':memory:', forgetful });
+    serverInstance = createServer({ port: 0, dataDir: ':memory:', forgetful, baseUrl: 'http://localhost:0' });
     const app = serverInstance.app;
     httpServer = http.createServer(app);
     await new Promise<void>((resolve) => httpServer.listen(0, resolve));
     const address = httpServer.address() as any;
     port = address.port;
-  }
-
-  async function obtainToken(): Promise<string> {
-    const authResponse = await fetch(`http://localhost:${port}/auth/authorize`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        client_id: 'test-client',
-        code_challenge: 'test-verifier',
-        code_challenge_method: 'plain',
-        redirect_uri: 'http://localhost',
-      }),
-    });
-    const authData = await authResponse.json() as any;
-
-    const tokenResponse = await fetch(`http://localhost:${port}/auth/token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        grant_type: 'authorization_code',
-        code: authData.code,
-        code_verifier: 'test-verifier',
-        client_id: 'test-client',
-        redirect_uri: 'http://localhost',
-      }),
-    });
-    const tokenData = await tokenResponse.json() as any;
-    return tokenData.access_token;
   }
 
   async function parseMcpResponse(response: Response): Promise<any> {
@@ -76,72 +47,60 @@ describe('Authenticated User Contact Creation', () => {
     return response.json();
   }
 
-  it('should allow contact_create via authenticated MCP in forgetful mode', async () => {
+  async function mcpRequest(body: any, sessionId?: string, token?: string) {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json, text/event-stream',
+    };
+    if (sessionId) headers['mcp-session-id'] = sessionId;
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    return fetch(`http://localhost:${port}/mcp`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    });
+  }
+
+  async function initForgetfulSession(): Promise<string> {
+    const response = await mcpRequest({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: {
+        protocolVersion: '2025-03-26',
+        capabilities: {},
+        clientInfo: { name: 'test-client', version: '1.0' },
+      },
+    });
+
+    const sessionId = response.headers.get('mcp-session-id')!;
+    await mcpRequest({
+      jsonrpc: '2.0',
+      method: 'notifications/initialized',
+    }, sessionId);
+
+    return sessionId;
+  }
+
+  it('should allow contact_create via MCP in forgetful mode (no OAuth)', async () => {
     await startServer(true);
-    const token = await obtainToken();
+    const sessionId = await initForgetfulSession();
 
-    // Initialize MCP session
-    const initResponse = await fetch(`http://localhost:${port}/mcp`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json, text/event-stream',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'initialize',
-        params: {
-          protocolVersion: '2025-03-26',
-          capabilities: {},
-          clientInfo: { name: 'test-client', version: '1.0' },
+    // Call contact_create — no token needed in forgetful mode
+    const createResponse = await mcpRequest({
+      jsonrpc: '2.0',
+      id: 2,
+      method: 'tools/call',
+      params: {
+        name: 'contact_create',
+        arguments: {
+          first_name: 'Test',
+          last_name: 'User',
+          company: 'ACME Corp',
         },
-      }),
-    });
-
-    expect(initResponse.status).toBe(200);
-    const sessionId = initResponse.headers.get('mcp-session-id')!;
-    expect(sessionId).toBeDefined();
-
-    // Send initialized notification
-    await fetch(`http://localhost:${port}/mcp`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json, text/event-stream',
-        'mcp-session-id': sessionId,
-        'Authorization': `Bearer ${token}`,
       },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        method: 'notifications/initialized',
-      }),
-    });
-
-    // Call contact_create
-    const createResponse = await fetch(`http://localhost:${port}/mcp`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json, text/event-stream',
-        'mcp-session-id': sessionId,
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 2,
-        method: 'tools/call',
-        params: {
-          name: 'contact_create',
-          arguments: {
-            first_name: 'Test',
-            last_name: 'User',
-            company: 'ACME Corp',
-          },
-        },
-      }),
-    });
+    }, sessionId);
 
     expect(createResponse.status).toBe(200);
 
@@ -155,13 +114,13 @@ describe('Authenticated User Contact Creation', () => {
     expect(contact.last_name).toBe('User');
     expect(contact.company).toBe('ACME Corp');
     expect(contact.id).toBeDefined();
-    // user_id should be the authenticated user's ID, not 'default'
+    // user_id should be the forgetful session user's ID, not 'default'
     expect(contact.user_id).toBeDefined();
     expect(contact.user_id).not.toBe('default');
   });
 
-  it('should reject unauthenticated MCP requests', async () => {
-    await startServer(true);
+  it('should reject unauthenticated MCP requests in persistent mode', async () => {
+    await startServer(false);
 
     const response = await fetch(`http://localhost:${port}/mcp`, {
       method: 'POST',
@@ -232,59 +191,36 @@ describe('Authenticated User Contact Creation', () => {
     expect(token).toBeDefined();
 
     // Init MCP session
-    const initResponse = await fetch(`http://localhost:${port}/mcp`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json, text/event-stream',
-        'Authorization': `Bearer ${token}`,
+    const initResponse = await mcpRequest({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: {
+        protocolVersion: '2025-03-26',
+        capabilities: {},
+        clientInfo: { name: 'test-client', version: '1.0' },
       },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'initialize',
-        params: {
-          protocolVersion: '2025-03-26',
-          capabilities: {},
-          clientInfo: { name: 'test-client', version: '1.0' },
-        },
-      }),
-    });
+    }, undefined, token);
 
     expect(initResponse.status).toBe(200);
     const sessionId = initResponse.headers.get('mcp-session-id')!;
 
     // Send initialized notification
-    await fetch(`http://localhost:${port}/mcp`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json, text/event-stream',
-        'mcp-session-id': sessionId,
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }),
-    });
+    await mcpRequest({
+      jsonrpc: '2.0',
+      method: 'notifications/initialized',
+    }, sessionId, token);
 
     // Create contact
-    const createResponse = await fetch(`http://localhost:${port}/mcp`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json, text/event-stream',
-        'mcp-session-id': sessionId,
-        'Authorization': `Bearer ${token}`,
+    const createResponse = await mcpRequest({
+      jsonrpc: '2.0',
+      id: 2,
+      method: 'tools/call',
+      params: {
+        name: 'contact_create',
+        arguments: { first_name: 'Persistent', last_name: 'Contact' },
       },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 2,
-        method: 'tools/call',
-        params: {
-          name: 'contact_create',
-          arguments: { first_name: 'Persistent', last_name: 'Contact' },
-        },
-      }),
-    });
+    }, sessionId, token);
 
     expect(createResponse.status).toBe(200);
     const data = await parseMcpResponse(createResponse);

@@ -38,9 +38,10 @@ export function createServer(config: ServerConfig): {
   });
   runMigrations(db);
 
-  // Forgetful mode: pre-build a template DB and track per-user clones
+  // Forgetful mode: pre-build a template DB and track per-session clones
   const forgetfulTemplate = config.forgetful ? new ForgetfulTemplate() : null;
-  const forgetfulDbs = new Map<string, Database.Database>();
+  // Map MCP sessionId → { userId, db } for forgetful mode (replaces OAuth)
+  const forgetfulSessions = new Map<string, { userId: string; db: Database.Database }>();
 
   // Initialize auth services
   const accountService = new AccountService(db);
@@ -49,6 +50,42 @@ export function createServer(config: ServerConfig): {
   // Set up OAuth token verifier and bearer auth middleware for MCP endpoints
   const tokenVerifier = new McpTokenVerifier(oauthService);
   const bearerAuth = requireBearerAuth({ verifier: tokenVerifier });
+
+  /** Forgetful-mode MCP middleware: bypasses OAuth entirely, maps sessions to cloned DBs */
+  function forgetfulMcpAuth(req: express.Request, res: express.Response, next: express.NextFunction): void {
+    const sessionId = req.headers['mcp-session-id'] as string | undefined;
+
+    // Existing session — inject auth from stored session
+    if (sessionId && forgetfulSessions.has(sessionId)) {
+      const session = forgetfulSessions.get(sessionId)!;
+      (req as any).auth = {
+        token: 'forgetful', clientId: 'forgetful', scopes: [],
+        expiresAt: Infinity, extra: { userId: session.userId },
+      };
+      next();
+      return;
+    }
+
+    // New session (no session ID yet) — create user + clone DB
+    if (!sessionId && isInitializeRequest(req.body)) {
+      const userId = generateId();
+      const clonedDb = forgetfulTemplate!.clone(userId);
+      // Store temporarily on req for the POST handler to pick up after onsessioninitialized
+      (req as any)._forgetfulSession = { userId, db: clonedDb };
+      (req as any).auth = {
+        token: 'forgetful', clientId: 'forgetful', scopes: [],
+        expiresAt: Infinity, extra: { userId },
+      };
+      next();
+      return;
+    }
+
+    // For non-init requests without a valid session, or GET/DELETE with unknown session
+    res.status(401).json({ error: 'Invalid session' });
+  }
+
+  // Choose auth middleware based on mode
+  const mcpAuth = config.forgetful ? forgetfulMcpAuth : bearerAuth;
 
   const app = express();
   app.use(express.json());
@@ -84,7 +121,7 @@ export function createServer(config: ServerConfig): {
 
   // ─── Homepage ──────────────────────────────────────────────
   app.get('/', (_req, res) => {
-    res.send(getHomepageHtml(port));
+    res.send(getHomepageHtml(serverUrl, config.forgetful));
   });
 
   // ─── Health Check ──────────────────────────────────────────
@@ -206,35 +243,6 @@ export function createServer(config: ServerConfig): {
       return;
     }
 
-    // In forgetful mode, auto-approve: create temp user, issue code, redirect
-    if (config.forgetful) {
-      const tempId = generateId();
-      db.prepare(`
-        INSERT INTO users (id, name, email, password_hash)
-        VALUES (?, ?, ?, ?)
-      `).run(tempId, 'Bluey Heeler', `bluey-${tempId}@heeler.family`, 'none');
-
-      // Clone template DB for this user session
-      if (forgetfulTemplate) {
-        const clonedDb = forgetfulTemplate.clone(tempId);
-        forgetfulDbs.set(tempId, clonedDb);
-      }
-
-      const code = oauthService.createAuthorizationCode({
-        userId: tempId,
-        clientId: client_id || 'anonymous',
-        codeChallenge: code_challenge || 'none',
-        codeChallengeMethod: code_challenge_method || 'plain',
-        redirectUri: redirect_uri || 'http://localhost',
-      });
-
-      const redirectUrl = new URL(redirect_uri || 'http://localhost');
-      redirectUrl.searchParams.set('code', code);
-      if (state) redirectUrl.searchParams.set('state', state);
-      res.redirect(redirectUrl.toString());
-      return;
-    }
-
     // Persistent mode — show login form
     res.send(getLoginPageHtml(req.originalUrl));
   });
@@ -251,38 +259,9 @@ export function createServer(config: ServerConfig): {
     const redirect_uri = req.body.redirect_uri || req.query.redirect_uri as string;
     const state = req.body.state || req.query.state as string;
 
-    // In forgetful mode, skip login and issue code for a temporary user
+    // In forgetful mode, no OAuth is needed for MCP — reject API auth requests
     if (config.forgetful) {
-      // Create a temporary user for this session
-      const tempId = generateId();
-      db.prepare(`
-        INSERT INTO users (id, name, email, password_hash)
-        VALUES (?, ?, ?, ?)
-      `).run(tempId, 'Bluey Heeler', `bluey-${tempId}@heeler.family`, 'none');
-
-      // Clone template DB for this user session
-      if (forgetfulTemplate) {
-        const clonedDb = forgetfulTemplate.clone(tempId);
-        forgetfulDbs.set(tempId, clonedDb);
-      }
-
-      const code = oauthService.createAuthorizationCode({
-        userId: tempId,
-        clientId: client_id || 'anonymous',
-        codeChallenge: code_challenge || 'none',
-        codeChallengeMethod: code_challenge_method || 'plain',
-        redirectUri: redirect_uri || 'http://localhost',
-      });
-
-      // Form posts (browser login) get a redirect; JSON API calls get JSON
-      if (isFormPost && redirect_uri) {
-        const redirectUrl = new URL(redirect_uri);
-        redirectUrl.searchParams.set('code', code);
-        if (state) redirectUrl.searchParams.set('state', state);
-        res.redirect(redirectUrl.toString());
-      } else {
-        res.json({ code, redirect_uri: redirect_uri || 'http://localhost' });
-      }
+      res.status(404).json({ error: 'OAuth is disabled in forgetful mode. Connect to /mcp directly.' });
       return;
     }
 
@@ -364,14 +343,12 @@ export function createServer(config: ServerConfig): {
     if (config.forgetful) {
       // Auto-login in forgetful mode
       const tempId = generateId();
-      db.prepare(`INSERT INTO users (id, name, email, password_hash) VALUES (?, ?, ?, ?)`)
-        .run(tempId, 'Bluey Heeler', `bluey-${tempId}@heeler.family`, 'none');
 
-      // Clone template DB for this user session
-      if (forgetfulTemplate) {
-        const clonedDb = forgetfulTemplate.clone(tempId);
-        forgetfulDbs.set(tempId, clonedDb);
-      }
+      // Clone template DB for this web session
+      const clonedDb = forgetfulTemplate!.clone(tempId);
+      // Store in forgetfulSessions with a web-specific key
+      const webSessionKey = `web-${tempId}`;
+      forgetfulSessions.set(webSessionKey, { userId: tempId, db: clonedDb });
 
       const token = randomUUID();
       webSessions.set(token, { userId: tempId, userName: 'Bluey Heeler', email: `bluey-${tempId}@heeler.family` });
@@ -462,7 +439,7 @@ export function createServer(config: ServerConfig): {
   });
 
   // ─── MCP Streamable HTTP: POST ─────────────────────────────
-  app.post('/mcp', bearerAuth, async (req, res) => {
+  app.post('/mcp', mcpAuth, async (req, res) => {
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
     // Existing session — reuse its transport
@@ -474,27 +451,30 @@ export function createServer(config: ServerConfig): {
     // New session — only allowed for initialization requests
     if (!sessionId && isInitializeRequest(req.body)) {
       // Determine which DB to use for this MCP session
-      const userId = (req as any).auth?.extra?.userId as string | undefined;
-      const mcpDb = (config.forgetful && userId && forgetfulDbs.has(userId))
-        ? forgetfulDbs.get(userId)!
+      const mcpDb = config.forgetful
+        ? (req as any)._forgetfulSession?.db
         : db;
 
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => randomUUID(),
         onsessioninitialized: (sid) => {
           transports[sid] = transport;
+          // In forgetful mode, map the MCP session ID to the user/DB
+          if (config.forgetful && (req as any)._forgetfulSession) {
+            forgetfulSessions.set(sid, (req as any)._forgetfulSession);
+          }
         },
       });
 
       transport.onclose = () => {
         if (transport.sessionId) {
           delete transports[transport.sessionId];
-        }
-        // Clean up forgetful DB clone when transport closes
-        if (config.forgetful && userId && forgetfulDbs.has(userId)) {
-          const clonedDb = forgetfulDbs.get(userId)!;
-          try { clonedDb.close(); } catch { /* already closed */ }
-          forgetfulDbs.delete(userId);
+          // Clean up forgetful DB clone when transport closes
+          if (config.forgetful && forgetfulSessions.has(transport.sessionId)) {
+            const session = forgetfulSessions.get(transport.sessionId)!;
+            try { session.db.close(); } catch { /* already closed */ }
+            forgetfulSessions.delete(transport.sessionId);
+          }
         }
       };
 
@@ -513,7 +493,7 @@ export function createServer(config: ServerConfig): {
   });
 
   // ─── MCP Streamable HTTP: GET (SSE stream) ─────────────────
-  app.get('/mcp', bearerAuth, async (req, res) => {
+  app.get('/mcp', mcpAuth, async (req, res) => {
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
     if (sessionId && transports[sessionId]) {
       await transports[sessionId].handleRequest(req, res);
@@ -527,7 +507,7 @@ export function createServer(config: ServerConfig): {
   });
 
   // ─── MCP Streamable HTTP: DELETE (session termination) ──────
-  app.delete('/mcp', bearerAuth, async (req, res) => {
+  app.delete('/mcp', mcpAuth, async (req, res) => {
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
     if (sessionId && transports[sessionId]) {
       await transports[sessionId].handleRequest(req, res);
@@ -573,9 +553,9 @@ export function createServer(config: ServerConfig): {
       // Close database
       db.close();
       // Close all forgetful DB clones
-      for (const [uid, clonedDb] of forgetfulDbs) {
-        try { clonedDb.close(); } catch { /* already closed */ }
-        forgetfulDbs.delete(uid);
+      for (const [key, session] of forgetfulSessions) {
+        try { session.db.close(); } catch { /* already closed */ }
+        forgetfulSessions.delete(key);
       }
       // Close HTTP server
       if (httpServer) {
@@ -681,7 +661,48 @@ function getRegisterPageHtml(registerUrl: string, error?: string, success?: stri
 </html>`;
 }
 
-function getHomepageHtml(port: number): string {
+function getHomepageHtml(serverUrl: string, forgetful: boolean): string {
+  const mcpUrl = `${serverUrl}/mcp`;
+
+  const authRow = forgetful
+    ? '<tr><th>Auth</th><td>None required (Guest Mode)</td></tr>'
+    : '<tr><th>Auth</th><td>OAuth 2.0 with PKCE</td></tr>';
+
+  const guestModeSection = forgetful ? `
+  <div class="guest-banner">
+    <h2>Guest Mode</h2>
+    <p>This server is running in <strong>guest mode</strong> for testing and demos. No account or login is required.</p>
+    <ul>
+      <li>Each MCP session gets its own isolated database pre-loaded with sample data</li>
+      <li>You are signed in as <strong>Bluey Heeler</strong> with 20 contacts from the Heeler family and friends</li>
+      <li>All data is temporary and will be lost when the session ends or the server restarts</li>
+      <li>Just point your MCP client at <code>${mcpUrl}</code> and start chatting</li>
+    </ul>
+  </div>` : '';
+
+  const dashboardSection = forgetful ? '' : `
+  <h2>Web Dashboard</h2>
+  <p><a href="/web/login">Sign in to the web dashboard</a> to import your Monica CRM data.</p>`;
+
+  const examples = forgetful ? `
+  <ul class="examples">
+    <li>Who are my favourite contacts?</li>
+    <li>When is Bingo's birthday?</li>
+    <li>Log that I played Keepy Uppy with Bandit and Bingo at home</li>
+    <li>What's Muffin's food preferences?</li>
+    <li>Remind me to plan a playdate with Mackenzie next week</li>
+    <li>Show me my family contacts</li>
+    <li>Add a gift idea for Bingo: a new Floppy bunny plush for her birthday</li>
+    <li>Who haven't I talked to in a while?</li>
+  </ul>` : `
+  <ul class="examples">
+    <li>Add a new contact: Sarah Chen, she works at Google as a senior engineer</li>
+    <li>Log that I had coffee with Mike yesterday at Blue Bottle</li>
+    <li>When is Tom's birthday?</li>
+    <li>Remind me to call Lisa next Tuesday</li>
+    <li>Who haven't I talked to in a while?</li>
+  </ul>`;
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -704,37 +725,36 @@ function getHomepageHtml(port: number): string {
     th { color: #555; font-weight: 600; }
     .examples { list-style: none; }
     .examples li { padding: 0.5rem 0; border-bottom: 1px solid #f0f0f0; }
-    .examples li::before { content: '💬 '; }
+    .examples li::before { content: '\uD83D\uDCAC '; }
     a { color: #2563eb; }
+    .guest-banner { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; padding: 1.2rem 1.5rem; margin-top: 2rem; margin-bottom: 0.5rem; }
+    .guest-banner h2 { margin-top: 0; color: #1d4ed8; }
+    .guest-banner p { margin-bottom: 0.7rem; }
+    .guest-banner ul { margin: 0.5rem 0 0 1.2rem; }
+    .guest-banner li { margin-bottom: 0.3rem; font-size: 0.95rem; }
+    .guest-banner code { background: #dbeafe; }
   </style>
 </head>
 <body>
-  <h1>🦘 Mob</h1>
+  <h1>\uD83E\uDD98 Mob</h1>
   <p class="tagline">An AI-first Personal CRM</p>
   <p class="origin">"Mob" is the name for a group of kangaroos.</p>
 
   <p>Mob is a personal CRM you interact with entirely through natural language via an AI assistant. No forms, no dashboards — just talk about your relationships and Mob keeps track.</p>
+  ${guestModeSection}
 
   <h2>How to Connect</h2>
   <table>
     <tr><th>Transport</th><td>Streamable HTTP</td></tr>
-    <tr><th>Server URL</th><td><code>http://localhost:${port}/mcp</code></td></tr>
-    <tr><th>Auth</th><td>OAuth 2.0 with PKCE</td></tr>
+    <tr><th>Server URL</th><td><code>${mcpUrl}</code></td></tr>
+    ${authRow}
   </table>
 
   <p>Recommended client: <a href="https://github.com/benkaiser/joey-mcp-client">Joey MCP Client</a></p>
 
   <h2>Example Interactions</h2>
-  <ul class="examples">
-    <li>Add a new contact: Sarah Chen, she works at Google as a senior engineer</li>
-    <li>Log that I had coffee with Mike yesterday at Blue Bottle</li>
-    <li>When is Tom's birthday?</li>
-    <li>Remind me to call Lisa next Tuesday</li>
-    <li>Who haven't I talked to in a while?</li>
-  </ul>
-
-  <h2>Web Dashboard</h2>
-  <p><a href="/web/login">Sign in to the web dashboard</a> to import your Monica CRM data.</p>
+  ${examples}
+  ${dashboardSection}
 </body>
 </html>`;
 }
