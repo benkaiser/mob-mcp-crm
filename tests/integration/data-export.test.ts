@@ -52,7 +52,7 @@ describe('DataExportService', () => {
 
       // Create one of each entity type
       const noteService = new NoteService(db);
-      noteService.create({ contact_id: contactId, body: 'A note' });
+      noteService.create(userId, { contact_id: contactId, body: 'A note' });
 
       const activityService = new ActivityService(db);
       activityService.create(userId, {
@@ -62,28 +62,28 @@ describe('DataExportService', () => {
       });
 
       const lifeEventService = new LifeEventService(db);
-      lifeEventService.create({
+      lifeEventService.create(userId, {
         contact_id: contactId,
         event_type: 'new_job',
         title: 'New Job',
       });
 
       const reminderService = new ReminderService(db);
-      reminderService.create({
+      reminderService.create(userId, {
         contact_id: contactId,
         title: 'Call Alice',
         reminder_date: '2024-07-01',
       });
 
       const giftService = new GiftService(db);
-      giftService.create({
+      giftService.create(userId, {
         contact_id: contactId,
         name: 'Book',
         direction: 'giving',
       });
 
       const debtService = new DebtService(db);
-      debtService.create({
+      debtService.create(userId, {
         contact_id: contactId,
         amount: 50,
         direction: 'i_owe_them',
@@ -118,8 +118,8 @@ describe('DataExportService', () => {
 
     it('should exclude soft-deleted entities', () => {
       const noteService = new NoteService(db);
-      const note = noteService.create({ contact_id: contactId, body: 'Deleted note' });
-      noteService.softDelete(note.id);
+      const note = noteService.create(userId, { contact_id: contactId, body: 'Deleted note' });
+      noteService.softDelete(userId, note.id);
 
       const data = service.exportAll(userId);
       expect(data.notes).toHaveLength(0);
@@ -160,8 +160,8 @@ describe('DataExportService', () => {
 
     it('should count activities and notes', () => {
       const noteService = new NoteService(db);
-      noteService.create({ contact_id: contactId, body: 'Note 1' });
-      noteService.create({ contact_id: contactId, body: 'Note 2' });
+      noteService.create(userId, { contact_id: contactId, body: 'Note 1' });
+      noteService.create(userId, { contact_id: contactId, body: 'Note 2' });
 
       const activityService = new ActivityService(db);
       activityService.create(userId, {
@@ -178,11 +178,11 @@ describe('DataExportService', () => {
 
     it('should count pending items', () => {
       const reminderService = new ReminderService(db);
-      reminderService.create({ contact_id: contactId, title: 'R1', reminder_date: '2024-07-01' });
-      reminderService.create({ contact_id: contactId, title: 'R2', reminder_date: '2024-07-02' });
+      reminderService.create(userId, { contact_id: contactId, title: 'R1', reminder_date: '2024-07-01' });
+      reminderService.create(userId, { contact_id: contactId, title: 'R2', reminder_date: '2024-07-02' });
 
       const debtService = new DebtService(db);
-      debtService.create({ contact_id: contactId, amount: 50, direction: 'i_owe_them' });
+      debtService.create(userId, { contact_id: contactId, amount: 50, direction: 'i_owe_them' });
 
       const taskService = new TaskService(db);
       taskService.create(userId, { title: 'T1' });
@@ -190,7 +190,7 @@ describe('DataExportService', () => {
       taskService.complete(userId, t2.id);
 
       const giftService = new GiftService(db);
-      giftService.create({ contact_id: contactId, name: 'Idea', direction: 'giving' });
+      giftService.create(userId, { contact_id: contactId, name: 'Idea', direction: 'giving' });
 
       const stats = service.getStatistics(userId);
       expect(stats.pending_reminders).toBe(2);

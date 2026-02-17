@@ -19,6 +19,8 @@ import { GiftService } from '../services/gifts.js';
 import { DebtService } from '../services/debts.js';
 import { TaskService } from '../services/tasks.js';
 import { DataExportService } from '../services/data-export.js';
+import { SearchService } from '../services/search.js';
+import { registerPrompts } from './prompts.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────
 
@@ -27,6 +29,31 @@ function getUserId(extra: { authInfo?: AuthInfo }): string {
   const userId = extra.authInfo?.extra?.userId as string | undefined;
   if (!userId) throw new Error('Not authenticated');
   return userId;
+}
+
+/** Verify that a contact belongs to the authenticated user */
+function verifyContactOwnership(db: Database.Database, userId: string, contactId: string): void {
+  const contact = db.prepare(
+    'SELECT id FROM contacts WHERE id = ? AND user_id = ? AND deleted_at IS NULL'
+  ).get(contactId, userId);
+  if (!contact) throw new Error('Contact not found');
+}
+
+/** Verify that a record's contact belongs to the authenticated user */
+function verifyRecordOwnership(db: Database.Database, userId: string, table: string, recordId: string): void {
+  const row = db.prepare(
+    `SELECT contact_id FROM ${table} WHERE id = ?`
+  ).get(recordId) as { contact_id: string } | undefined;
+  if (!row) throw new Error('Record not found');
+  verifyContactOwnership(db, userId, row.contact_id);
+}
+
+/** Verify that a notification belongs to the authenticated user */
+function verifyNotificationOwnership(db: Database.Database, userId: string, notificationId: string): void {
+  const row = db.prepare(
+    'SELECT id FROM notifications WHERE id = ? AND user_id = ?'
+  ).get(notificationId, userId);
+  if (!row) throw new Error('Notification not found');
 }
 
 function textResult(data: unknown) {
@@ -69,6 +96,7 @@ export function createMcpServer(db: Database.Database): McpServer {
   const debtService = new DebtService(db);
   const taskService = new TaskService(db);
   const dataExportService = new DataExportService(db);
+  const searchService = new SearchService(db);
 
   // ─── Contact Tools ────────────────────────────────────────────
 
@@ -111,7 +139,7 @@ export function createMcpServer(db: Database.Database): McpServer {
   });
 
   server.registerTool('contact_get', {
-    description: 'Get full contact details including all sub-entities (contact methods, addresses, food preferences, custom fields)',
+    description: 'Get full contact details including all related data in one call: contact methods, addresses, food preferences, custom fields, tags, relationships, recent notes, recent activities, life events, active reminders, open tasks, recent gifts, active debts, and debt summary',
     inputSchema: {
       contact_id: z.string().describe('The contact ID'),
     },
@@ -122,12 +150,57 @@ export function createMcpServer(db: Database.Database): McpServer {
       if (!contact) return errorResult('Contact not found');
 
       // Enrich with sub-entities
+      const recentNotes = notes.listByContact(userId, args.contact_id, { per_page: 10 });
+      const recentActivities = activityService.list(userId, { contact_id: args.contact_id, per_page: 10 });
+      const allLifeEvents = lifeEvents.listByContact(userId, args.contact_id, { per_page: 1000 });
+
+      // Active reminders (not completed/dismissed) for this contact
+      const activeReminderRows = db.prepare(`
+        SELECT r.* FROM reminders r
+        JOIN contacts c ON r.contact_id = c.id
+        WHERE r.contact_id = ? AND r.deleted_at IS NULL AND c.deleted_at IS NULL AND c.user_id = ?
+          AND r.status NOT IN ('completed', 'dismissed')
+        ORDER BY r.reminder_date ASC
+      `).all(args.contact_id, userId) as any[];
+      const activeReminders = activeReminderRows.map((r: any) => ({
+        ...r,
+        is_auto_generated: Boolean(r.is_auto_generated),
+      }));
+
+      // Open tasks (not completed) for this contact
+      const openTaskRows = db.prepare(`
+        SELECT * FROM tasks
+        WHERE contact_id = ? AND user_id = ? AND deleted_at IS NULL
+          AND status != 'completed'
+        ORDER BY
+          CASE priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 WHEN 'low' THEN 2 END,
+          due_date ASC NULLS LAST,
+          created_at DESC
+      `).all(args.contact_id, userId) as any[];
+
+      const recentGifts = giftService.list(userId, { contact_id: args.contact_id, per_page: 10 });
+
+      // Active (unsettled) debts for this contact
+      const activeDebts = debtService.list(userId, { contact_id: args.contact_id, status: 'active' });
+
+      const debtSummary = debtService.summary(userId, args.contact_id);
+
       const result = {
         ...contact,
         contact_methods: contactMethods.listByContact(args.contact_id),
         addresses: addresses.listByContact(args.contact_id),
         food_preferences: foodPreferences.get(args.contact_id),
         custom_fields: customFields.listByContact(args.contact_id),
+        tags: tags.listByContact(args.contact_id),
+        relationships: relationships.listByContact(args.contact_id),
+        recent_notes: recentNotes.data,
+        recent_activities: recentActivities.data,
+        life_events: allLifeEvents.data,
+        active_reminders: activeReminders,
+        open_tasks: openTaskRows,
+        recent_gifts: recentGifts.data,
+        active_debts: activeDebts.data,
+        debt_summary: debtSummary,
       };
 
       return textResult(result);
@@ -192,6 +265,21 @@ export function createMcpServer(db: Database.Database): McpServer {
     }
   });
 
+  server.registerTool('contact_restore', {
+    description: 'Restore a soft-deleted contact',
+    inputSchema: {
+      contact_id: z.string().describe('The contact ID to restore'),
+    },
+  }, (args, extra) => {
+    try {
+      const userId = getUserId(extra);
+      const contact = contacts.restore(userId, args.contact_id);
+      return textResult(contact);
+    } catch (err: any) {
+      return errorResult(err.message);
+    }
+  });
+
   server.registerTool('contact_list', {
     description: 'List contacts with optional filters (status, favorite, company, tag, search). Returns paginated results.',
     inputSchema: {
@@ -204,6 +292,7 @@ export function createMcpServer(db: Database.Database): McpServer {
       tag_name: z.string().optional().describe('Filter by tag name'),
       sort_by: z.enum(['name', 'created_at', 'updated_at']).optional().describe('Sort field (default: name)'),
       sort_order: z.enum(['asc', 'desc']).optional().describe('Sort order (default: asc)'),
+      include_deleted: z.boolean().optional().describe('Include soft-deleted contacts in results (default: false)'),
     },
   }, (args, extra) => {
     try {
@@ -215,21 +304,31 @@ export function createMcpServer(db: Database.Database): McpServer {
     }
   });
 
-  server.registerTool('contact_search', {
-    description: 'Full-text search across contacts by name, company, job title, or nickname',
+  // ─── Contact Merge & Duplicate Detection ─────────────────────
+
+  server.registerTool('contact_merge', {
+    description: 'Merge two contacts into one. All child records (notes, activities, tags, etc.) from the secondary contact are moved to the primary. The secondary contact is soft-deleted after merge.',
     inputSchema: {
-      query: z.string().describe('Search query'),
-      page: z.number().optional().describe('Page number (default: 1)'),
-      per_page: z.number().optional().describe('Results per page (default: 20)'),
+      primary_contact_id: z.string().describe('The contact ID to keep (primary)'),
+      secondary_contact_id: z.string().describe('The contact ID to merge into the primary (will be soft-deleted)'),
     },
   }, (args, extra) => {
     try {
       const userId = getUserId(extra);
-      const result = contacts.list(userId, {
-        search: args.query,
-        page: args.page,
-        per_page: args.per_page,
-      });
+      const result = contacts.merge(userId, args.primary_contact_id, args.secondary_contact_id);
+      return textResult(result);
+    } catch (err: any) {
+      return errorResult(err.message);
+    }
+  });
+
+  server.registerTool('contact_find_duplicates', {
+    description: 'Scan for potential duplicate contacts using name, email, and phone matching. Returns pairs of contacts that may be duplicates with the reason for the match.',
+    inputSchema: {},
+  }, (_args, extra) => {
+    try {
+      const userId = getUserId(extra);
+      const result = contacts.findDuplicates(userId);
       return textResult(result);
     } catch (err: any) {
       return errorResult(err.message);
@@ -238,56 +337,39 @@ export function createMcpServer(db: Database.Database): McpServer {
 
   // ─── Contact Method Tools ─────────────────────────────────────
 
-  server.registerTool('contact_method_add', {
-    description: 'Add a contact method (email, phone, social handle, etc.) to a contact',
+  server.registerTool('contact_method_manage', {
+    description: 'Add, update, or remove a contact method (email, phone, social handle, etc.)',
     inputSchema: {
-      contact_id: z.string().describe('The contact ID'),
+      action: z.enum(['add', 'update', 'remove']).describe('Action to perform'),
+      contact_id: z.string().optional().describe('The contact ID (required for "add")'),
+      id: z.string().optional().describe('The contact method ID (required for "update" and "remove")'),
       type: z.enum(['email', 'phone', 'whatsapp', 'telegram', 'signal', 'twitter', 'instagram', 'facebook', 'linkedin', 'website', 'other'])
-        .describe('Type of contact method'),
-      value: z.string().describe('The value (e.g. email address, phone number, handle)'),
+        .optional().describe('Type of contact method (required for "add")'),
+      value: z.string().optional().describe('The value — email, phone number, handle (required for "add")'),
       label: z.string().optional().describe('Label (e.g. "Personal", "Work")'),
-      is_primary: z.boolean().optional().describe('Set as the primary method for this type (default: false)'),
+      is_primary: z.boolean().optional().describe('Set as primary for this type'),
     },
-  }, (args) => {
+  }, (args, extra) => {
     try {
-      const method = contactMethods.add(args);
-      return textResult(method);
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
-  server.registerTool('contact_method_update', {
-    description: 'Update an existing contact method',
-    inputSchema: {
-      id: z.string().describe('The contact method ID'),
-      type: z.enum(['email', 'phone', 'whatsapp', 'telegram', 'signal', 'twitter', 'instagram', 'facebook', 'linkedin', 'website', 'other'])
-        .optional().describe('Type of contact method'),
-      value: z.string().optional().describe('The value'),
-      label: z.string().optional().describe('Label'),
-      is_primary: z.boolean().optional().describe('Set as primary'),
-    },
-  }, (args) => {
-    try {
-      const { id, ...updates } = args;
-      const method = contactMethods.update(id, updates);
-      if (!method) return errorResult('Contact method not found');
-      return textResult(method);
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
-  server.registerTool('contact_method_remove', {
-    description: 'Remove a contact method',
-    inputSchema: {
-      id: z.string().describe('The contact method ID to remove'),
-    },
-  }, (args) => {
-    try {
-      const success = contactMethods.remove(args.id);
-      if (!success) return errorResult('Contact method not found');
-      return textResult({ success: true, message: 'Contact method removed' });
+      const userId = getUserId(extra);
+      if (args.action === 'add') {
+        if (!args.contact_id || !args.type || !args.value) return errorResult('contact_id, type, and value are required for "add"');
+        verifyContactOwnership(db, userId, args.contact_id);
+        const method = contactMethods.add({ contact_id: args.contact_id, type: args.type, value: args.value, label: args.label, is_primary: args.is_primary });
+        return textResult(method);
+      } else if (args.action === 'update') {
+        if (!args.id) return errorResult('id is required for "update"');
+        verifyRecordOwnership(db, userId, 'contact_methods', args.id);
+        const method = contactMethods.update(args.id, { type: args.type, value: args.value, label: args.label, is_primary: args.is_primary });
+        if (!method) return errorResult('Contact method not found');
+        return textResult(method);
+      } else {
+        if (!args.id) return errorResult('id is required for "remove"');
+        verifyRecordOwnership(db, userId, 'contact_methods', args.id);
+        const success = contactMethods.remove(args.id);
+        if (!success) return errorResult('Contact method not found');
+        return textResult({ success: true, message: 'Contact method removed' });
+      }
     } catch (err: any) {
       return errorResult(err.message);
     }
@@ -295,62 +377,43 @@ export function createMcpServer(db: Database.Database): McpServer {
 
   // ─── Address Tools ────────────────────────────────────────────
 
-  server.registerTool('address_add', {
-    description: 'Add an address to a contact',
+  server.registerTool('address_manage', {
+    description: 'Add, update, or remove an address for a contact',
     inputSchema: {
-      contact_id: z.string().describe('The contact ID'),
+      action: z.enum(['add', 'update', 'remove']).describe('Action to perform'),
+      contact_id: z.string().optional().describe('The contact ID (required for "add")'),
+      id: z.string().optional().describe('The address ID (required for "update" and "remove")'),
       label: z.string().optional().describe('Label (e.g. "Home", "Work")'),
       street_line_1: z.string().optional().describe('Street address line 1'),
       street_line_2: z.string().optional().describe('Street address line 2'),
       city: z.string().optional().describe('City'),
       state_province: z.string().optional().describe('State or province'),
       postal_code: z.string().optional().describe('Postal/ZIP code'),
-      country: z.string().optional().describe('Country (ISO 3166-1 alpha-2 code recommended)'),
-      is_primary: z.boolean().optional().describe('Set as the primary address (default: false)'),
+      country: z.string().optional().describe('Country (ISO 3166-1 alpha-2 recommended)'),
+      is_primary: z.boolean().optional().describe('Set as primary address'),
     },
-  }, (args) => {
+  }, (args, extra) => {
     try {
-      const address = addresses.add(args);
-      return textResult(address);
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
-  server.registerTool('address_update', {
-    description: 'Update an existing address',
-    inputSchema: {
-      id: z.string().describe('The address ID'),
-      label: z.string().optional().describe('Label'),
-      street_line_1: z.string().optional().describe('Street address line 1'),
-      street_line_2: z.string().optional().describe('Street address line 2'),
-      city: z.string().optional().describe('City'),
-      state_province: z.string().optional().describe('State or province'),
-      postal_code: z.string().optional().describe('Postal/ZIP code'),
-      country: z.string().optional().describe('Country'),
-      is_primary: z.boolean().optional().describe('Set as primary'),
-    },
-  }, (args) => {
-    try {
-      const { id, ...updates } = args;
-      const address = addresses.update(id, updates);
-      if (!address) return errorResult('Address not found');
-      return textResult(address);
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
-  server.registerTool('address_remove', {
-    description: 'Remove an address from a contact',
-    inputSchema: {
-      id: z.string().describe('The address ID to remove'),
-    },
-  }, (args) => {
-    try {
-      const success = addresses.remove(args.id);
-      if (!success) return errorResult('Address not found');
-      return textResult({ success: true, message: 'Address removed' });
+      const userId = getUserId(extra);
+      if (args.action === 'add') {
+        if (!args.contact_id) return errorResult('contact_id is required for "add"');
+        verifyContactOwnership(db, userId, args.contact_id);
+        const address = addresses.add({ contact_id: args.contact_id, label: args.label, street_line_1: args.street_line_1, street_line_2: args.street_line_2, city: args.city, state_province: args.state_province, postal_code: args.postal_code, country: args.country, is_primary: args.is_primary });
+        return textResult(address);
+      } else if (args.action === 'update') {
+        if (!args.id) return errorResult('id is required for "update"');
+        verifyRecordOwnership(db, userId, 'addresses', args.id);
+        const { action, contact_id, id, ...updates } = args;
+        const address = addresses.update(id, updates);
+        if (!address) return errorResult('Address not found');
+        return textResult(address);
+      } else {
+        if (!args.id) return errorResult('id is required for "remove"');
+        verifyRecordOwnership(db, userId, 'addresses', args.id);
+        const success = addresses.remove(args.id);
+        if (!success) return errorResult('Address not found');
+        return textResult({ success: true, message: 'Address removed' });
+      }
     } catch (err: any) {
       return errorResult(err.message);
     }
@@ -363,8 +426,10 @@ export function createMcpServer(db: Database.Database): McpServer {
     inputSchema: {
       contact_id: z.string().describe('The contact ID'),
     },
-  }, (args) => {
+  }, (args, extra) => {
     try {
+      const userId = getUserId(extra);
+      verifyContactOwnership(db, userId, args.contact_id);
       const prefs = foodPreferences.get(args.contact_id);
       if (!prefs) return textResult({ message: 'No food preferences recorded for this contact' });
       return textResult(prefs);
@@ -383,8 +448,10 @@ export function createMcpServer(db: Database.Database): McpServer {
       disliked_foods: z.array(z.string()).optional().describe('Disliked foods'),
       notes: z.string().optional().describe('Additional notes about food preferences'),
     },
-  }, (args) => {
+  }, (args, extra) => {
     try {
+      const userId = getUserId(extra);
+      verifyContactOwnership(db, userId, args.contact_id);
       const prefs = foodPreferences.upsert(args);
       return textResult(prefs);
     } catch (err: any) {
@@ -394,52 +461,37 @@ export function createMcpServer(db: Database.Database): McpServer {
 
   // ─── Custom Field Tools ───────────────────────────────────────
 
-  server.registerTool('custom_field_add', {
-    description: 'Add a custom field to a contact (for any data that doesn\'t fit standard fields)',
+  server.registerTool('custom_field_manage', {
+    description: 'Add, update, or remove a custom field on a contact',
     inputSchema: {
-      contact_id: z.string().describe('The contact ID'),
-      field_name: z.string().describe('Field name (e.g. "Favorite Color", "T-shirt Size")'),
-      field_value: z.string().describe('Field value'),
-      field_group: z.string().optional().describe('Optional group to organize fields (e.g. "Preferences", "Work")'),
+      action: z.enum(['add', 'update', 'remove']).describe('Action to perform'),
+      contact_id: z.string().optional().describe('The contact ID (required for "add")'),
+      id: z.string().optional().describe('The custom field ID (required for "update" and "remove")'),
+      field_name: z.string().optional().describe('Field name, e.g. "Favorite Color" (required for "add")'),
+      field_value: z.string().optional().describe('Field value (required for "add")'),
+      field_group: z.string().optional().describe('Group to organize fields, e.g. "Preferences"'),
     },
-  }, (args) => {
+  }, (args, extra) => {
     try {
-      const field = customFields.add(args);
-      return textResult(field);
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
-  server.registerTool('custom_field_update', {
-    description: 'Update an existing custom field',
-    inputSchema: {
-      id: z.string().describe('The custom field ID'),
-      field_name: z.string().optional().describe('Field name'),
-      field_value: z.string().optional().describe('Field value'),
-      field_group: z.string().optional().describe('Field group'),
-    },
-  }, (args) => {
-    try {
-      const { id, ...updates } = args;
-      const field = customFields.update(id, updates);
-      if (!field) return errorResult('Custom field not found');
-      return textResult(field);
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
-  server.registerTool('custom_field_remove', {
-    description: 'Remove a custom field from a contact',
-    inputSchema: {
-      id: z.string().describe('The custom field ID to remove'),
-    },
-  }, (args) => {
-    try {
-      const success = customFields.remove(args.id);
-      if (!success) return errorResult('Custom field not found');
-      return textResult({ success: true, message: 'Custom field removed' });
+      const userId = getUserId(extra);
+      if (args.action === 'add') {
+        if (!args.contact_id || !args.field_name || !args.field_value) return errorResult('contact_id, field_name, and field_value are required for "add"');
+        verifyContactOwnership(db, userId, args.contact_id);
+        const field = customFields.add({ contact_id: args.contact_id, field_name: args.field_name, field_value: args.field_value, field_group: args.field_group });
+        return textResult(field);
+      } else if (args.action === 'update') {
+        if (!args.id) return errorResult('id is required for "update"');
+        verifyRecordOwnership(db, userId, 'custom_fields', args.id);
+        const field = customFields.update(args.id, { field_name: args.field_name, field_value: args.field_value, field_group: args.field_group });
+        if (!field) return errorResult('Custom field not found');
+        return textResult(field);
+      } else {
+        if (!args.id) return errorResult('id is required for "remove"');
+        verifyRecordOwnership(db, userId, 'custom_fields', args.id);
+        const success = customFields.remove(args.id);
+        if (!success) return errorResult('Custom field not found');
+        return textResult({ success: true, message: 'Custom field removed' });
+      }
     } catch (err: any) {
       return errorResult(err.message);
     }
@@ -449,67 +501,51 @@ export function createMcpServer(db: Database.Database): McpServer {
 
   const relationshipTypeEnum = z.enum(getRelationshipTypes() as [string, ...string[]]);
 
-  server.registerTool('relationship_add', {
-    description: 'Create a relationship between two contacts. Automatically creates the inverse relationship. ' +
-      'To create relationships involving yourself, use your own contact_id from the prime/me tool. ' +
-      'Relationships describe how contacts relate to each other (e.g. Bandit is Bingo\'s parent).',
+  server.registerTool('relationship_manage', {
+    description: 'Add, update, remove, or list relationships between contacts.\n' +
+      '• action="add": Create a relationship between two contacts. Automatically creates the inverse relationship. ' +
+      'Requires contact_id, related_contact_id, and relationship_type. ' +
+      'To create relationships involving yourself, use your own contact_id from the prime tool. ' +
+      'Relationships describe how contacts relate to each other (e.g. Bandit is Bingo\'s parent).\n' +
+      '• action="update": Update a relationship. Also updates the inverse relationship. Requires id. Optionally set relationship_type and/or notes.\n' +
+      '• action="remove": Remove a relationship and its inverse. Requires id.\n' +
+      '• action="list": List all relationships for a contact. Requires contact_id.',
     inputSchema: {
-      contact_id: z.string().describe('The source contact ID (use your contact_id from prime/me for yourself)'),
-      related_contact_id: z.string().describe('The related contact ID'),
-      relationship_type: relationshipTypeEnum.describe('Type of relationship (e.g. parent, spouse, friend, colleague)'),
-      notes: z.string().optional().describe('Notes about this relationship'),
+      action: z.enum(['add', 'update', 'remove', 'list']).describe('Action to perform'),
+      contact_id: z.string().optional().describe('The source contact ID (required for "add" and "list")'),
+      related_contact_id: z.string().optional().describe('The related contact ID (required for "add")'),
+      id: z.string().optional().describe('The relationship ID (required for "update" and "remove")'),
+      relationship_type: relationshipTypeEnum.optional().describe('Type of relationship (required for "add", optional for "update")'),
+      notes: z.string().optional().describe('Notes about this relationship (optional for "add" and "update")'),
     },
-  }, (args) => {
+  }, (args, extra) => {
     try {
-      const rel = relationships.add(args);
-      return textResult(rel);
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
-  server.registerTool('relationship_update', {
-    description: 'Update a relationship. Also updates the inverse relationship.',
-    inputSchema: {
-      id: z.string().describe('The relationship ID'),
-      relationship_type: relationshipTypeEnum.optional().describe('New relationship type'),
-      notes: z.string().optional().describe('Notes'),
-    },
-  }, (args) => {
-    try {
-      const { id, ...updates } = args;
-      const rel = relationships.update(id, updates);
-      if (!rel) return errorResult('Relationship not found');
-      return textResult(rel);
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
-  server.registerTool('relationship_remove', {
-    description: 'Remove a relationship and its inverse',
-    inputSchema: {
-      id: z.string().describe('The relationship ID to remove'),
-    },
-  }, (args) => {
-    try {
-      const success = relationships.remove(args.id);
-      if (!success) return errorResult('Relationship not found');
-      return textResult({ success: true, message: 'Relationship removed' });
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
-  server.registerTool('relationship_list', {
-    description: 'List all relationships for a contact',
-    inputSchema: {
-      contact_id: z.string().describe('The contact ID'),
-    },
-  }, (args) => {
-    try {
-      const rels = relationships.listByContact(args.contact_id);
-      return textResult(rels);
+      const userId = getUserId(extra);
+      if (args.action === 'add') {
+        if (!args.contact_id || !args.related_contact_id || !args.relationship_type) return errorResult('contact_id, related_contact_id, and relationship_type are required for "add"');
+        verifyContactOwnership(db, userId, args.contact_id);
+        verifyContactOwnership(db, userId, args.related_contact_id);
+        const rel = relationships.add({ contact_id: args.contact_id, related_contact_id: args.related_contact_id, relationship_type: args.relationship_type, notes: args.notes });
+        return textResult(rel);
+      } else if (args.action === 'update') {
+        if (!args.id) return errorResult('id is required for "update"');
+        verifyRecordOwnership(db, userId, 'relationships', args.id);
+        const { action, contact_id, related_contact_id, id, ...updates } = args;
+        const rel = relationships.update(id, updates);
+        if (!rel) return errorResult('Relationship not found');
+        return textResult(rel);
+      } else if (args.action === 'remove') {
+        if (!args.id) return errorResult('id is required for "remove"');
+        verifyRecordOwnership(db, userId, 'relationships', args.id);
+        const success = relationships.remove(args.id);
+        if (!success) return errorResult('Relationship not found');
+        return textResult({ success: true, message: 'Relationship removed' });
+      } else {
+        if (!args.contact_id) return errorResult('contact_id is required for "list"');
+        verifyContactOwnership(db, userId, args.contact_id);
+        const rels = relationships.listByContact(args.contact_id);
+        return textResult(rels);
+      }
     } catch (err: any) {
       return errorResult(err.message);
     }
@@ -517,69 +553,83 @@ export function createMcpServer(db: Database.Database): McpServer {
 
   // ─── Note Tools ───────────────────────────────────────────────
 
-  server.registerTool('note_create', {
-    description: 'Add a note to a contact. Supports markdown.',
+  server.registerTool('note_manage', {
+    description: 'Create, update, delete, or restore a note for a contact.\n' +
+      '• action="create": Add a new note. Requires contact_id and body. Optional title, is_pinned.\n' +
+      '• action="update": Update an existing note. Requires id. Optional title, body, is_pinned.\n' +
+      '• action="delete": Soft-delete a note. Requires id.\n' +
+      '• action="restore": Restore a soft-deleted note. Requires id.',
     inputSchema: {
-      contact_id: z.string().describe('The contact ID'),
-      title: z.string().optional().describe('Optional title'),
-      body: z.string().describe('Note body (supports markdown)'),
-      is_pinned: z.boolean().optional().describe('Pin this note to the top (default: false)'),
+      action: z.enum(['create', 'update', 'delete', 'restore']).describe('Action to perform'),
+      contact_id: z.string().optional().describe('The contact ID (required for "create")'),
+      id: z.string().optional().describe('The note ID (required for "update", "delete", "restore")'),
+      title: z.string().optional().describe('Note title (optional for "create" and "update")'),
+      body: z.string().optional().describe('Note body, supports markdown (required for "create", optional for "update")'),
+      is_pinned: z.boolean().optional().describe('Pin/unpin note (optional for "create" and "update")'),
     },
-  }, (args) => {
+  }, (args, extra) => {
     try {
-      const note = notes.create(args);
-      return textResult(note);
+      const userId = getUserId(extra);
+      if (args.action === 'create') {
+        if (!args.contact_id || !args.body) return errorResult('contact_id and body are required for "create"');
+        verifyContactOwnership(db, userId, args.contact_id);
+        const note = notes.create(userId, { contact_id: args.contact_id, body: args.body, title: args.title, is_pinned: args.is_pinned });
+        return textResult(note);
+      } else if (args.action === 'update') {
+        if (!args.id) return errorResult('id is required for "update"');
+        verifyRecordOwnership(db, userId, 'notes', args.id);
+        const { action, contact_id, id, ...updates } = args;
+        const note = notes.update(userId, id, updates);
+        if (!note) return errorResult('Note not found');
+        return textResult(note);
+      } else if (args.action === 'delete') {
+        if (!args.id) return errorResult('id is required for "delete"');
+        verifyRecordOwnership(db, userId, 'notes', args.id);
+        const success = notes.softDelete(userId, args.id);
+        if (!success) return errorResult('Note not found');
+        return textResult({ success: true, message: 'Note deleted' });
+      } else {
+        // restore
+        if (!args.id) return errorResult('id is required for "restore"');
+        const note = notes.restore(userId, args.id);
+        return textResult(note);
+      }
     } catch (err: any) {
       return errorResult(err.message);
     }
   });
 
   server.registerTool('note_list', {
-    description: 'List notes for a contact. Pinned notes appear first.',
+    description: 'List and search notes. When contact_id is provided alone, lists that contact\'s notes (pinned first). ' +
+      'Add query, tag_name, is_pinned, or omit contact_id to search across all contacts.',
     inputSchema: {
-      contact_id: z.string().describe('The contact ID'),
+      contact_id: z.string().optional().describe('Filter by contact ID (optional — omit to search across all contacts)'),
+      query: z.string().optional().describe('Search term matched against note title and body'),
+      tag_name: z.string().optional().describe('Filter to notes belonging to contacts with this tag'),
+      is_pinned: z.boolean().optional().describe('Filter by pinned status'),
+      sort_by: z.enum(['created_at', 'updated_at']).optional().describe('Sort field (default: updated_at)'),
+      sort_order: z.enum(['asc', 'desc']).optional().describe('Sort direction (default: desc)'),
       page: z.number().optional().describe('Page number (default: 1)'),
       per_page: z.number().optional().describe('Results per page (default: 20)'),
+      include_deleted: z.boolean().optional().describe('Include soft-deleted notes in results (default: false)'),
     },
-  }, (args) => {
+  }, (args, extra) => {
     try {
-      const { contact_id, ...options } = args;
-      const result = notes.listByContact(contact_id, options);
+      const userId = getUserId(extra);
+      // If only contact_id is provided with no search params, use the simpler listByContact
+      const hasSearchParams = args.query || args.tag_name || args.is_pinned !== undefined || args.sort_by || args.sort_order;
+      if (args.contact_id && !hasSearchParams) {
+        verifyContactOwnership(db, userId, args.contact_id);
+        const { contact_id, ...options } = args;
+        const result = notes.listByContact(userId, contact_id, options);
+        return textResult(result);
+      }
+      // Otherwise, use searchNotes which supports cross-contact search
+      if (args.contact_id) {
+        verifyContactOwnership(db, userId, args.contact_id);
+      }
+      const result = notes.searchNotes(userId, args);
       return textResult(result);
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
-  server.registerTool('note_update', {
-    description: 'Update a note',
-    inputSchema: {
-      id: z.string().describe('The note ID'),
-      title: z.string().optional().describe('Title'),
-      body: z.string().optional().describe('Body (supports markdown)'),
-      is_pinned: z.boolean().optional().describe('Pin/unpin'),
-    },
-  }, (args) => {
-    try {
-      const { id, ...updates } = args;
-      const note = notes.update(id, updates);
-      if (!note) return errorResult('Note not found');
-      return textResult(note);
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
-  server.registerTool('note_delete', {
-    description: 'Soft-delete a note',
-    inputSchema: {
-      id: z.string().describe('The note ID to delete'),
-    },
-  }, (args) => {
-    try {
-      const success = notes.softDelete(args.id);
-      if (!success) return errorResult('Note not found');
-      return textResult({ success: true, message: 'Note deleted' });
     } catch (err: any) {
       return errorResult(err.message);
     }
@@ -587,112 +637,53 @@ export function createMcpServer(db: Database.Database): McpServer {
 
   // ─── Tag Tools ────────────────────────────────────────────────
 
-  server.registerTool('tag_list', {
-    description: 'List all tags',
-    inputSchema: {},
-  }, (_args, extra) => {
-    try {
-      const userId = getUserId(extra);
-      const result = tags.list(userId);
-      return textResult(result);
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
-  server.registerTool('tag_create', {
-    description: 'Create a new tag (or return existing if name already exists)',
+  server.registerTool('tag_manage', {
+    description: 'Manage tags and contact tagging.\n' +
+      '• action="list": List all tags for the authenticated user. No additional fields required.\n' +
+      '• action="create": Create a new tag (or return existing if name already exists). Requires name. Optional color.\n' +
+      '• action="update": Update a tag name or color. Requires id. Optional name and color.\n' +
+      '• action="delete": Delete a tag. Requires id.\n' +
+      '• action="tag_contact": Tag a contact. Creates the tag if it doesn\'t exist. Requires name (the tag name) and contact_id. Optional color (only used if creating new tag).\n' +
+      '• action="untag_contact": Remove a tag from a contact. Requires id (the tag ID) and contact_id.',
     inputSchema: {
-      name: z.string().describe('Tag name'),
-      color: z.string().optional().describe('Optional color (hex code)'),
+      action: z.enum(['list', 'create', 'update', 'delete', 'tag_contact', 'untag_contact']).describe('Action to perform'),
+      id: z.string().optional().describe('The tag ID (required for update, delete, untag_contact)'),
+      name: z.string().optional().describe('Tag name (required for create and tag_contact)'),
+      color: z.string().optional().describe('Tag color hex code (optional for create, update, tag_contact)'),
+      contact_id: z.string().optional().describe('The contact ID (required for tag_contact and untag_contact)'),
     },
   }, (args, extra) => {
     try {
       const userId = getUserId(extra);
-      const tag = tags.create(userId, args.name, args.color);
-      return textResult(tag);
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
-  server.registerTool('tag_update', {
-    description: 'Update a tag name or color',
-    inputSchema: {
-      id: z.string().describe('The tag ID'),
-      name: z.string().optional().describe('New name'),
-      color: z.string().optional().describe('New color'),
-    },
-  }, (args, extra) => {
-    try {
-      const userId = getUserId(extra);
-      const { id, ...updates } = args;
-      const tag = tags.update(userId, id, updates);
-      if (!tag) return errorResult('Tag not found');
-      return textResult(tag);
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
-  server.registerTool('tag_delete', {
-    description: 'Delete a tag',
-    inputSchema: {
-      id: z.string().describe('The tag ID to delete'),
-    },
-  }, (args, extra) => {
-    try {
-      const userId = getUserId(extra);
-      const success = tags.delete(userId, args.id);
-      if (!success) return errorResult('Tag not found');
-      return textResult({ success: true, message: 'Tag deleted' });
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
-  server.registerTool('contact_tag', {
-    description: 'Tag a contact. Creates the tag if it doesn\'t exist.',
-    inputSchema: {
-      contact_id: z.string().describe('The contact ID'),
-      tag_name: z.string().describe('Tag name'),
-      color: z.string().optional().describe('Tag color (only used if creating new tag)'),
-    },
-  }, (args, extra) => {
-    try {
-      const userId = getUserId(extra);
-      const tag = tags.tagContact(userId, args.contact_id, args.tag_name, args.color);
-      return textResult(tag);
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
-  server.registerTool('contact_untag', {
-    description: 'Remove a tag from a contact',
-    inputSchema: {
-      contact_id: z.string().describe('The contact ID'),
-      tag_id: z.string().describe('The tag ID to remove'),
-    },
-  }, (args) => {
-    try {
-      const success = tags.untagContact(args.contact_id, args.tag_id);
-      if (!success) return errorResult('Tag not found on this contact');
-      return textResult({ success: true, message: 'Tag removed from contact' });
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
-  server.registerTool('contact_tags_list', {
-    description: 'List all tags for a contact',
-    inputSchema: {
-      contact_id: z.string().describe('The contact ID'),
-    },
-  }, (args) => {
-    try {
-      const result = tags.listByContact(args.contact_id);
-      return textResult(result);
+      if (args.action === 'list') {
+        const result = tags.list(userId);
+        return textResult(result);
+      } else if (args.action === 'create') {
+        if (!args.name) return errorResult('name is required for "create"');
+        const tag = tags.create(userId, args.name, args.color);
+        return textResult(tag);
+      } else if (args.action === 'update') {
+        if (!args.id) return errorResult('id is required for "update"');
+        const tag = tags.update(userId, args.id, { name: args.name, color: args.color });
+        if (!tag) return errorResult('Tag not found');
+        return textResult(tag);
+      } else if (args.action === 'delete') {
+        if (!args.id) return errorResult('id is required for "delete"');
+        const success = tags.delete(userId, args.id);
+        if (!success) return errorResult('Tag not found');
+        return textResult({ success: true, message: 'Tag deleted' });
+      } else if (args.action === 'tag_contact') {
+        if (!args.name || !args.contact_id) return errorResult('name and contact_id are required for "tag_contact"');
+        const tag = tags.tagContact(userId, args.contact_id, args.name, args.color);
+        return textResult(tag);
+      } else {
+        // untag_contact
+        if (!args.id || !args.contact_id) return errorResult('id and contact_id are required for "untag_contact"');
+        verifyContactOwnership(db, userId, args.contact_id);
+        const success = tags.untagContact(args.contact_id, args.id);
+        if (!success) return errorResult('Tag not found on this contact');
+        return textResult({ success: true, message: 'Tag removed from contact' });
+      }
     } catch (err: any) {
       return errorResult(err.message);
     }
@@ -700,57 +691,93 @@ export function createMcpServer(db: Database.Database): McpServer {
 
   // ─── Activity Tools ────────────────────────────────────────────
 
-  server.registerTool('activity_create', {
-    description: 'Record a new activity/interaction with one or more contacts',
+  server.registerTool('activity_manage', {
+    description: 'Create, get, update, delete, or restore an activity/interaction.\n' +
+      '• action="create": Record a new activity. Requires type, occurred_at, participant_contact_ids. Optional title, description, duration_minutes, location, activity_type_id.\n' +
+      '• action="get": Get full details of an activity. Requires id.\n' +
+      '• action="update": Update an activity. Requires id. Optional type, title, description, occurred_at, duration_minutes, location, participant_contact_ids.\n' +
+      '• action="delete": Soft-delete an activity. Requires id.\n' +
+      '• action="restore": Restore a soft-deleted activity. Requires id.',
     inputSchema: {
+      action: z.enum(['create', 'get', 'update', 'delete', 'restore']).describe('Action to perform'),
+      id: z.string().optional().describe('The activity ID (required for "get", "update", "delete", "restore")'),
       type: z.enum(['phone_call', 'video_call', 'text_message', 'in_person', 'email', 'activity', 'other'])
-        .describe('Type of interaction'),
+        .optional().describe('Type of interaction (required for "create", optional for "update")'),
       title: z.string().optional().describe('Title (e.g. "Coffee at Blue Bottle")'),
       description: z.string().optional().describe('Description or notes'),
-      occurred_at: z.string().describe('When it happened (ISO date/datetime)'),
+      occurred_at: z.string().optional().describe('When it happened (ISO date/datetime) (required for "create", optional for "update")'),
       duration_minutes: z.number().optional().describe('Duration in minutes'),
       location: z.string().optional().describe('Where it happened'),
       activity_type_id: z.string().optional().describe('Custom activity type ID'),
-      participant_contact_ids: z.array(z.string()).describe('Contact IDs of participants'),
+      participant_contact_ids: z.array(z.string()).optional().describe('Contact IDs of participants (required for "create", optional for "update")'),
     },
   }, (args, extra) => {
     try {
       const userId = getUserId(extra);
-      const activity = activityService.create(userId, args);
-      return textResult(activity);
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
-  server.registerTool('activity_get', {
-    description: 'Get full details of an activity',
-    inputSchema: {
-      id: z.string().describe('The activity ID'),
-    },
-  }, (args, extra) => {
-    try {
-      const userId = getUserId(extra);
-      const activity = activityService.get(userId, args.id);
-      if (!activity) return errorResult('Activity not found');
-      return textResult(activity);
+      if (args.action === 'create') {
+        if (!args.type || !args.occurred_at || !args.participant_contact_ids) return errorResult('type, occurred_at, and participant_contact_ids are required for "create"');
+        const activity = activityService.create(userId, {
+          type: args.type,
+          title: args.title,
+          description: args.description,
+          occurred_at: args.occurred_at,
+          duration_minutes: args.duration_minutes,
+          location: args.location,
+          activity_type_id: args.activity_type_id,
+          participant_contact_ids: args.participant_contact_ids,
+        });
+        return textResult(activity);
+      } else if (args.action === 'get') {
+        if (!args.id) return errorResult('id is required for "get"');
+        const activity = activityService.get(userId, args.id);
+        if (!activity) return errorResult('Activity not found');
+        return textResult(activity);
+      } else if (args.action === 'update') {
+        if (!args.id) return errorResult('id is required for "update"');
+        const { action, id, activity_type_id, ...updates } = args;
+        const activity = activityService.update(userId, id, updates);
+        if (!activity) return errorResult('Activity not found');
+        return textResult(activity);
+      } else if (args.action === 'delete') {
+        if (!args.id) return errorResult('id is required for "delete"');
+        const success = activityService.softDelete(userId, args.id);
+        if (!success) return errorResult('Activity not found');
+        return textResult({ success: true, message: 'Activity deleted' });
+      } else {
+        // restore
+        if (!args.id) return errorResult('id is required for "restore"');
+        const activity = activityService.restore(userId, args.id);
+        return textResult(activity);
+      }
     } catch (err: any) {
       return errorResult(err.message);
     }
   });
 
   server.registerTool('activity_list', {
-    description: 'List activities, optionally filtered by contact or type',
+    description: 'List activities, optionally filtered by contact or type. ' +
+      'Add days_back or since for a chronological activity journal with participant names.',
     inputSchema: {
       contact_id: z.string().optional().describe('Filter by contact ID'),
       type: z.enum(['phone_call', 'video_call', 'text_message', 'in_person', 'email', 'activity', 'other'])
         .optional().describe('Filter by interaction type'),
+      days_back: z.number().min(1).max(365).optional()
+        .describe('Look-back window in days (uses activity log mode with participant names). Ignored if since is provided.'),
+      since: z.string().optional()
+        .describe('Show activities since this ISO date (uses activity log mode with participant names)'),
+      sort_order: z.enum(['asc', 'desc']).optional().describe('Sort direction by occurred_at (default: desc, only for activity log mode)'),
       page: z.number().optional().describe('Page number (default: 1)'),
       per_page: z.number().optional().describe('Results per page (default: 20)'),
+      include_deleted: z.boolean().optional().describe('Include soft-deleted activities in results (default: false)'),
     },
   }, (args, extra) => {
     try {
       const userId = getUserId(extra);
+      // If days_back or since is provided, use the richer activity log mode
+      if (args.days_back || args.since) {
+        const result = activityService.getActivityLog(userId, args);
+        return textResult(result);
+      }
       const result = activityService.list(userId, args);
       return textResult(result);
     } catch (err: any) {
@@ -758,72 +785,38 @@ export function createMcpServer(db: Database.Database): McpServer {
     }
   });
 
-  server.registerTool('activity_update', {
-    description: 'Update an activity',
-    inputSchema: {
-      id: z.string().describe('The activity ID'),
-      type: z.enum(['phone_call', 'video_call', 'text_message', 'in_person', 'email', 'activity', 'other'])
-        .optional().describe('Type'),
-      title: z.string().optional().describe('Title'),
-      description: z.string().optional().describe('Description'),
-      occurred_at: z.string().optional().describe('When it happened'),
-      duration_minutes: z.number().optional().describe('Duration'),
-      location: z.string().optional().describe('Location'),
-      participant_contact_ids: z.array(z.string()).optional().describe('Updated participant list'),
-    },
-  }, (args, extra) => {
-    try {
-      const userId = getUserId(extra);
-      const { id, ...updates } = args;
-      const activity = activityService.update(userId, id, updates);
-      if (!activity) return errorResult('Activity not found');
-      return textResult(activity);
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
 
-  server.registerTool('activity_delete', {
-    description: 'Soft-delete an activity',
+  server.registerTool('activity_type_manage', {
+    description: 'List, create, update, or delete custom activity types',
     inputSchema: {
-      id: z.string().describe('The activity ID to delete'),
-    },
-  }, (args, extra) => {
-    try {
-      const userId = getUserId(extra);
-      const success = activityService.softDelete(userId, args.id);
-      if (!success) return errorResult('Activity not found');
-      return textResult({ success: true, message: 'Activity deleted' });
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
-  server.registerTool('activity_type_list', {
-    description: 'List available custom activity types',
-    inputSchema: {},
-  }, (_args, extra) => {
-    try {
-      const userId = getUserId(extra);
-      const result = activityTypes.list(userId);
-      return textResult(result);
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
-  server.registerTool('activity_type_create', {
-    description: 'Create a custom activity type',
-    inputSchema: {
-      name: z.string().describe('Activity type name'),
+      action: z.enum(['list', 'create', 'update', 'delete']).describe('Action to perform'),
+      id: z.string().optional().describe('Activity type ID (required for "update" and "delete")'),
+      name: z.string().optional().describe('Activity type name (required for "create")'),
       category: z.string().optional().describe('Category (e.g. "Food & Drink", "Sports")'),
       icon: z.string().optional().describe('Icon identifier'),
     },
   }, (args, extra) => {
     try {
       const userId = getUserId(extra);
-      const type = activityTypes.create(userId, args.name, args.category, args.icon);
-      return textResult(type);
+      if (args.action === 'list') {
+        const result = activityTypes.list(userId);
+        return textResult(result);
+      } else if (args.action === 'create') {
+        if (!args.name) return errorResult('name is required for "create"');
+        const type = activityTypes.create(userId, args.name, args.category, args.icon);
+        return textResult(type);
+      } else if (args.action === 'update') {
+        if (!args.id) return errorResult('id is required for "update"');
+        const { action, id, ...input } = args;
+        const type = activityTypes.update(userId, id, input);
+        if (!type) return errorResult('Activity type not found');
+        return textResult(type);
+      } else {
+        if (!args.id) return errorResult('id is required for "delete"');
+        const result = activityTypes.delete(userId, args.id);
+        if (!result.deleted) return errorResult('Activity type not found');
+        return textResult(result);
+      }
     } catch (err: any) {
       return errorResult(err.message);
     }
@@ -831,73 +824,68 @@ export function createMcpServer(db: Database.Database): McpServer {
 
   // ─── Life Event Tools ─────────────────────────────────────────
 
-  server.registerTool('life_event_create', {
-    description: 'Record a new life event for a contact',
+  server.registerTool('life_event_manage', {
+    description: 'Create, list, update, delete, or restore life events for a contact.\n' +
+      '• action="create": Record a new life event. Requires contact_id, event_type, and title. Optional description, occurred_at, related_contact_ids.\n' +
+      '• action="list": List life events for a contact. Requires contact_id. Optional page, per_page, include_deleted.\n' +
+      '• action="update": Update a life event. Requires id. Optional event_type, title, description, occurred_at, related_contact_ids.\n' +
+      '• action="delete": Soft-delete a life event. Requires id.\n' +
+      '• action="restore": Restore a soft-deleted life event. Requires id.',
     inputSchema: {
-      contact_id: z.string().describe('The contact ID'),
-      event_type: z.string().describe('Event type (e.g. "new_job", "got_married", "moved")'),
-      title: z.string().describe('Title (e.g. "Started at Google", "Moved to Berlin")'),
-      description: z.string().optional().describe('Description'),
-      occurred_at: z.string().optional().describe('When it happened (ISO date)'),
-      related_contact_ids: z.array(z.string()).optional().describe('IDs of other contacts involved'),
+      action: z.enum(['create', 'list', 'update', 'delete', 'restore']).describe('Action to perform'),
+      contact_id: z.string().optional().describe('The contact ID (required for "create" and "list")'),
+      id: z.string().optional().describe('The life event ID (required for "update", "delete", "restore")'),
+      event_type: z.string().optional().describe('Event type (e.g. "new_job", "got_married", "moved") — required for "create", optional for "update"'),
+      title: z.string().optional().describe('Title (e.g. "Started at Google", "Moved to Berlin") — required for "create", optional for "update"'),
+      description: z.string().optional().describe('Description (optional for "create" and "update")'),
+      occurred_at: z.string().optional().describe('When it happened (ISO date, optional for "create" and "update")'),
+      related_contact_ids: z.array(z.string()).optional().describe('IDs of other contacts involved (optional for "create" and "update")'),
+      page: z.number().optional().describe('Page number for "list" (default: 1)'),
+      per_page: z.number().optional().describe('Results per page for "list" (default: 20)'),
+      include_deleted: z.boolean().optional().describe('Include soft-deleted life events in "list" results (default: false)'),
     },
-  }, (args) => {
+  }, (args, extra) => {
     try {
-      const event = lifeEvents.create(args);
-      return textResult(event);
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
-  server.registerTool('life_event_list', {
-    description: 'List life events for a contact',
-    inputSchema: {
-      contact_id: z.string().describe('The contact ID'),
-      page: z.number().optional().describe('Page number (default: 1)'),
-      per_page: z.number().optional().describe('Results per page (default: 20)'),
-    },
-  }, (args) => {
-    try {
-      const { contact_id, ...options } = args;
-      const result = lifeEvents.listByContact(contact_id, options);
-      return textResult(result);
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
-  server.registerTool('life_event_update', {
-    description: 'Update a life event',
-    inputSchema: {
-      id: z.string().describe('The life event ID'),
-      event_type: z.string().optional().describe('Event type'),
-      title: z.string().optional().describe('Title'),
-      description: z.string().optional().describe('Description'),
-      occurred_at: z.string().optional().describe('When it happened'),
-      related_contact_ids: z.array(z.string()).optional().describe('Updated related contacts'),
-    },
-  }, (args) => {
-    try {
-      const { id, ...updates } = args;
-      const event = lifeEvents.update(id, updates);
-      if (!event) return errorResult('Life event not found');
-      return textResult(event);
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
-  server.registerTool('life_event_delete', {
-    description: 'Soft-delete a life event',
-    inputSchema: {
-      id: z.string().describe('The life event ID to delete'),
-    },
-  }, (args) => {
-    try {
-      const success = lifeEvents.softDelete(args.id);
-      if (!success) return errorResult('Life event not found');
-      return textResult({ success: true, message: 'Life event deleted' });
+      const userId = getUserId(extra);
+      if (args.action === 'create') {
+        if (!args.contact_id || !args.event_type || !args.title) return errorResult('contact_id, event_type, and title are required for "create"');
+        verifyContactOwnership(db, userId, args.contact_id);
+        if (args.related_contact_ids) {
+          for (const relId of args.related_contact_ids) {
+            verifyContactOwnership(db, userId, relId);
+          }
+        }
+        const event = lifeEvents.create(userId, { contact_id: args.contact_id, event_type: args.event_type, title: args.title, description: args.description, occurred_at: args.occurred_at, related_contact_ids: args.related_contact_ids });
+        return textResult(event);
+      } else if (args.action === 'list') {
+        if (!args.contact_id) return errorResult('contact_id is required for "list"');
+        verifyContactOwnership(db, userId, args.contact_id);
+        const result = lifeEvents.listByContact(userId, args.contact_id, { page: args.page, per_page: args.per_page, include_deleted: args.include_deleted });
+        return textResult(result);
+      } else if (args.action === 'update') {
+        if (!args.id) return errorResult('id is required for "update"');
+        verifyRecordOwnership(db, userId, 'life_events', args.id);
+        if (args.related_contact_ids) {
+          for (const relId of args.related_contact_ids) {
+            verifyContactOwnership(db, userId, relId);
+          }
+        }
+        const { action, contact_id, id, page, per_page, include_deleted, ...updates } = args;
+        const event = lifeEvents.update(userId, id, updates);
+        if (!event) return errorResult('Life event not found');
+        return textResult(event);
+      } else if (args.action === 'delete') {
+        if (!args.id) return errorResult('id is required for "delete"');
+        verifyRecordOwnership(db, userId, 'life_events', args.id);
+        const success = lifeEvents.softDelete(userId, args.id);
+        if (!success) return errorResult('Life event not found');
+        return textResult({ success: true, message: 'Life event deleted' });
+      } else {
+        // restore
+        if (!args.id) return errorResult('id is required for "restore"');
+        const event = lifeEvents.restore(userId, args.id);
+        return textResult(event);
+      }
     } catch (err: any) {
       return errorResult(err.message);
     }
@@ -914,8 +902,10 @@ export function createMcpServer(db: Database.Database): McpServer {
       page: z.number().optional().describe('Page number (default: 1)'),
       per_page: z.number().optional().describe('Results per page (default: 20)'),
     },
-  }, (args) => {
+  }, (args, extra) => {
     try {
+      const userId = getUserId(extra);
+      verifyContactOwnership(db, userId, args.contact_id);
       const { contact_id, ...options } = args;
       const result = timeline.getTimeline(contact_id, options);
       return textResult(result);
@@ -926,102 +916,90 @@ export function createMcpServer(db: Database.Database): McpServer {
 
   // ─── Reminder Tools ──────────────────────────────────────────
 
-  server.registerTool('reminder_create', {
-    description: 'Create a reminder for a contact',
+  server.registerTool('reminder_manage', {
+    description: 'Create, list, update, complete, snooze, delete, or restore reminders.\n' +
+      '• action="create": Create a reminder for a contact. Requires contact_id, title, and reminder_date. Optional description, frequency.\n' +
+      '• action="list": List reminders, optionally filtered by contact or status. Optional contact_id, status, page, per_page, include_deleted.\n' +
+      '• action="update": Update a reminder. Requires id. Optional title, description, reminder_date, frequency.\n' +
+      '• action="complete": Mark a reminder as completed. For recurring reminders, advances to the next occurrence. Requires id.\n' +
+      '• action="snooze": Snooze a reminder to a new date. Requires id and new_date.\n' +
+      '• action="delete": Soft-delete a reminder. Requires id.\n' +
+      '• action="restore": Restore a soft-deleted reminder. Requires id.',
     inputSchema: {
-      contact_id: z.string().describe('The contact ID'),
-      title: z.string().describe('Reminder title'),
-      description: z.string().optional().describe('Description'),
-      reminder_date: z.string().describe('When to remind (ISO date YYYY-MM-DD)'),
-      frequency: z.enum(['one_time', 'weekly', 'monthly', 'yearly']).optional().describe('Frequency (default: one_time)'),
+      action: z.enum(['create', 'list', 'update', 'complete', 'snooze', 'delete', 'restore']).describe('Action to perform'),
+      id: z.string().optional().describe('The reminder ID (required for "update", "complete", "snooze", "delete", "restore")'),
+      contact_id: z.string().optional().describe('The contact ID (required for "create", optional filter for "list")'),
+      title: z.string().optional().describe('Reminder title (required for "create", optional for "update")'),
+      description: z.string().optional().describe('Description (optional for "create" and "update")'),
+      reminder_date: z.string().optional().describe('When to remind (ISO date YYYY-MM-DD) (required for "create", optional for "update")'),
+      frequency: z.enum(['one_time', 'weekly', 'monthly', 'yearly']).optional().describe('Frequency (default: one_time, optional for "create" and "update")'),
+      new_date: z.string().optional().describe('New reminder date (ISO date YYYY-MM-DD) (required for "snooze")'),
+      status: z.enum(['active', 'snoozed', 'completed', 'dismissed']).optional().describe('Filter by status (for "list" only)'),
+      page: z.number().optional().describe('Page number for "list" (default: 1)'),
+      per_page: z.number().optional().describe('Results per page for "list" (default: 20)'),
+      include_deleted: z.boolean().optional().describe('Include soft-deleted reminders in "list" results (default: false)'),
     },
-  }, (args) => {
+  }, (args, extra) => {
     try {
-      const reminder = reminderService.create(args);
-      return textResult(reminder);
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
-  server.registerTool('reminder_list', {
-    description: 'List reminders, optionally filtered by contact or status',
-    inputSchema: {
-      contact_id: z.string().optional().describe('Filter by contact ID'),
-      status: z.enum(['active', 'snoozed', 'completed', 'dismissed']).optional().describe('Filter by status'),
-      page: z.number().optional().describe('Page number (default: 1)'),
-      per_page: z.number().optional().describe('Results per page (default: 20)'),
-    },
-  }, (args) => {
-    try {
-      const result = reminderService.list(args);
-      return textResult(result);
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
-  server.registerTool('reminder_update', {
-    description: 'Update a reminder',
-    inputSchema: {
-      id: z.string().describe('The reminder ID'),
-      title: z.string().optional().describe('Title'),
-      description: z.string().optional().describe('Description'),
-      reminder_date: z.string().optional().describe('New reminder date'),
-      frequency: z.enum(['one_time', 'weekly', 'monthly', 'yearly']).optional().describe('Frequency'),
-    },
-  }, (args) => {
-    try {
-      const { id, ...updates } = args;
-      const reminder = reminderService.update(id, updates);
-      if (!reminder) return errorResult('Reminder not found');
-      return textResult(reminder);
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
-  server.registerTool('reminder_complete', {
-    description: 'Mark a reminder as completed. For recurring reminders, advances to the next occurrence.',
-    inputSchema: {
-      id: z.string().describe('The reminder ID'),
-    },
-  }, (args) => {
-    try {
-      const reminder = reminderService.complete(args.id);
-      if (!reminder) return errorResult('Reminder not found');
-      return textResult(reminder);
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
-  server.registerTool('reminder_snooze', {
-    description: 'Snooze a reminder to a new date',
-    inputSchema: {
-      id: z.string().describe('The reminder ID'),
-      new_date: z.string().describe('New reminder date (ISO date YYYY-MM-DD)'),
-    },
-  }, (args) => {
-    try {
-      const reminder = reminderService.snooze(args.id, args.new_date);
-      if (!reminder) return errorResult('Reminder not found');
-      return textResult(reminder);
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
-  server.registerTool('reminder_delete', {
-    description: 'Soft-delete a reminder',
-    inputSchema: {
-      id: z.string().describe('The reminder ID to delete'),
-    },
-  }, (args) => {
-    try {
-      const success = reminderService.softDelete(args.id);
-      if (!success) return errorResult('Reminder not found');
-      return textResult({ success: true, message: 'Reminder deleted' });
+      const userId = getUserId(extra);
+      if (args.action === 'create') {
+        if (!args.contact_id || !args.title || !args.reminder_date) return errorResult('contact_id, title, and reminder_date are required for "create"');
+        verifyContactOwnership(db, userId, args.contact_id);
+        const reminder = reminderService.create(userId, { contact_id: args.contact_id, title: args.title, description: args.description, reminder_date: args.reminder_date, frequency: args.frequency });
+        return textResult(reminder);
+      } else if (args.action === 'list') {
+        if (args.contact_id) {
+          verifyContactOwnership(db, userId, args.contact_id);
+        }
+        // Scope to user's contacts
+        const page = args.page ?? 1;
+        const perPage = args.per_page ?? 20;
+        const offset = (page - 1) * perPage;
+        const conditions: string[] = ['c.deleted_at IS NULL', 'c.user_id = ?'];
+        const params: any[] = [userId];
+        if (!args.include_deleted) { conditions.push('r.deleted_at IS NULL'); }
+        if (args.contact_id) { conditions.push('r.contact_id = ?'); params.push(args.contact_id); }
+        if (args.status) { conditions.push('r.status = ?'); params.push(args.status); }
+        const whereClause = conditions.join(' AND ');
+        const countResult = db.prepare(
+          `SELECT COUNT(*) as count FROM reminders r JOIN contacts c ON r.contact_id = c.id WHERE ${whereClause}`
+        ).get(...params) as any;
+        const rows = db.prepare(
+          `SELECT r.* FROM reminders r JOIN contacts c ON r.contact_id = c.id WHERE ${whereClause} ORDER BY r.reminder_date ASC LIMIT ? OFFSET ?`
+        ).all(...params, perPage, offset) as any[];
+        const data = rows.map((r: any) => ({ ...r, is_auto_generated: Boolean(r.is_auto_generated) }));
+        return textResult({ data, total: countResult.count, page, per_page: perPage });
+      } else if (args.action === 'update') {
+        if (!args.id) return errorResult('id is required for "update"');
+        verifyRecordOwnership(db, userId, 'reminders', args.id);
+        const { action, id, contact_id, new_date, status, page, per_page, include_deleted, ...updates } = args;
+        const reminder = reminderService.update(userId, id, updates);
+        if (!reminder) return errorResult('Reminder not found');
+        return textResult(reminder);
+      } else if (args.action === 'complete') {
+        if (!args.id) return errorResult('id is required for "complete"');
+        verifyRecordOwnership(db, userId, 'reminders', args.id);
+        const reminder = reminderService.complete(userId, args.id);
+        if (!reminder) return errorResult('Reminder not found');
+        return textResult(reminder);
+      } else if (args.action === 'snooze') {
+        if (!args.id || !args.new_date) return errorResult('id and new_date are required for "snooze"');
+        verifyRecordOwnership(db, userId, 'reminders', args.id);
+        const reminder = reminderService.snooze(userId, args.id, args.new_date);
+        if (!reminder) return errorResult('Reminder not found');
+        return textResult(reminder);
+      } else if (args.action === 'delete') {
+        if (!args.id) return errorResult('id is required for "delete"');
+        verifyRecordOwnership(db, userId, 'reminders', args.id);
+        const success = reminderService.softDelete(userId, args.id);
+        if (!success) return errorResult('Reminder not found');
+        return textResult({ success: true, message: 'Reminder deleted' });
+      } else {
+        // restore
+        if (!args.id) return errorResult('id is required for "restore"');
+        const reminder = reminderService.restore(userId, args.id);
+        return textResult(reminder);
+      }
     } catch (err: any) {
       return errorResult(err.message);
     }
@@ -1065,12 +1043,20 @@ export function createMcpServer(db: Database.Database): McpServer {
   });
 
   server.registerTool('notification_read', {
-    description: 'Mark a notification as read',
+    description: 'Mark notification(s) as read. Pass id for a single notification, or all=true for all.',
     inputSchema: {
-      id: z.string().describe('The notification ID'),
+      id: z.string().optional().describe('The notification ID (required unless all=true)'),
+      all: z.boolean().optional().describe('Mark all notifications as read (default: false)'),
     },
-  }, (args) => {
+  }, (args, extra) => {
     try {
+      const userId = getUserId(extra);
+      if (args.all) {
+        const count = notificationService.markAllRead(userId);
+        return textResult({ success: true, message: `${count} notifications marked as read` });
+      }
+      if (!args.id) return errorResult('id is required (or set all=true)');
+      verifyNotificationOwnership(db, userId, args.id);
       const success = notificationService.markRead(args.id);
       if (!success) return errorResult('Notification not found or already read');
       return textResult({ success: true, message: 'Notification marked as read' });
@@ -1079,26 +1065,19 @@ export function createMcpServer(db: Database.Database): McpServer {
     }
   });
 
-  server.registerTool('notification_read_all', {
-    description: 'Mark all notifications as read',
-    inputSchema: {},
-  }, (_args, extra) => {
-    try {
-      const userId = getUserId(extra);
-      const count = notificationService.markAllRead(userId);
-      return textResult({ success: true, message: `${count} notifications marked as read` });
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
   // ─── Gift Tools ────────────────────────────────────────────────
 
-  server.registerTool('gift_create', {
-    description: 'Track a gift idea, plan, or record a given/received gift',
+  server.registerTool('gift_manage', {
+    description: 'Create, update, delete, or restore a gift for a contact.\n' +
+      '• action="create": Track a gift idea, plan, or record a given/received gift. Requires contact_id, name, and direction. Optional description, url, estimated_cost, currency, occasion, status, date.\n' +
+      '• action="update": Update an existing gift (change status, add details, etc.). Requires id. Optional name, description, url, estimated_cost, currency, occasion, status, direction, date.\n' +
+      '• action="delete": Soft-delete a gift. Requires id.\n' +
+      '• action="restore": Restore a soft-deleted gift. Requires id.',
     inputSchema: {
-      contact_id: z.string().describe('The contact ID'),
-      name: z.string().describe('Gift name'),
+      action: z.enum(['create', 'update', 'delete', 'restore']).describe('Action to perform'),
+      contact_id: z.string().optional().describe('The contact ID (required for "create")'),
+      id: z.string().optional().describe('The gift ID (required for "update", "delete", "restore")'),
+      name: z.string().optional().describe('Gift name (required for "create")'),
       description: z.string().optional().describe('Description'),
       url: z.string().optional().describe('Link to the gift'),
       estimated_cost: z.number().optional().describe('Estimated cost'),
@@ -1106,71 +1085,86 @@ export function createMcpServer(db: Database.Database): McpServer {
       occasion: z.string().optional().describe('Occasion (e.g. "Birthday", "Christmas")'),
       status: z.enum(['idea', 'planned', 'purchased', 'given', 'received']).optional()
         .describe('Gift status (default: idea)'),
-      direction: z.enum(['giving', 'receiving']).describe('Giving to or receiving from this contact'),
+      direction: z.enum(['giving', 'receiving']).optional().describe('Giving to or receiving from this contact (required for "create")'),
       date: z.string().optional().describe('Date of giving/receiving (ISO date)'),
     },
-  }, (args) => {
+  }, (args, extra) => {
     try {
-      const gift = giftService.create(args);
-      return textResult(gift);
+      const userId = getUserId(extra);
+      if (args.action === 'create') {
+        if (!args.contact_id || !args.name || !args.direction) return errorResult('contact_id, name, and direction are required for "create"');
+        verifyContactOwnership(db, userId, args.contact_id);
+        const { action, id, ...createData } = args;
+        const gift = giftService.create(userId, createData as any);
+        return textResult(gift);
+      } else if (args.action === 'update') {
+        if (!args.id) return errorResult('id is required for "update"');
+        verifyRecordOwnership(db, userId, 'gifts', args.id);
+        const { action, contact_id, id, ...updates } = args;
+        const gift = giftService.update(userId, id, updates);
+        if (!gift) return errorResult('Gift not found');
+        return textResult(gift);
+      } else if (args.action === 'delete') {
+        if (!args.id) return errorResult('id is required for "delete"');
+        verifyRecordOwnership(db, userId, 'gifts', args.id);
+        const success = giftService.softDelete(userId, args.id);
+        if (!success) return errorResult('Gift not found');
+        return textResult({ success: true, message: 'Gift deleted' });
+      } else {
+        // restore
+        if (!args.id) return errorResult('id is required for "restore"');
+        const gift = giftService.restore(userId, args.id);
+        return textResult(gift);
+      }
     } catch (err: any) {
       return errorResult(err.message);
     }
   });
 
   server.registerTool('gift_list', {
-    description: 'List gifts, optionally filtered by contact, status, or direction',
+    description: 'List gifts, optionally filtered by contact, status, or direction. ' +
+      'Add occasion, sort_by, sort_order, or omit contact_id for a cross-contact gift tracker with summary stats.',
     inputSchema: {
       contact_id: z.string().optional().describe('Filter by contact ID'),
       status: z.enum(['idea', 'planned', 'purchased', 'given', 'received']).optional().describe('Filter by status'),
       direction: z.enum(['giving', 'receiving']).optional().describe('Filter by direction'),
+      occasion: z.string().optional().describe('Filter by occasion (fuzzy match, e.g. "birthday", "Christmas")'),
+      sort_by: z.enum(['date', 'created_at', 'estimated_cost']).optional()
+        .describe('Sort field (default: date for tracker mode, created_at otherwise)'),
+      sort_order: z.enum(['asc', 'desc']).optional().describe('Sort direction (default: desc)'),
       page: z.number().optional().describe('Page number (default: 1)'),
       per_page: z.number().optional().describe('Results per page (default: 20)'),
+      include_deleted: z.boolean().optional().describe('Include soft-deleted gifts in results (default: false)'),
     },
-  }, (args) => {
+  }, (args, extra) => {
     try {
-      const result = giftService.list(args);
-      return textResult(result);
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
-  server.registerTool('gift_update', {
-    description: 'Update a gift (change status, add details, etc.)',
-    inputSchema: {
-      id: z.string().describe('The gift ID'),
-      name: z.string().optional().describe('Gift name'),
-      description: z.string().optional().describe('Description'),
-      url: z.string().optional().describe('Link'),
-      estimated_cost: z.number().optional().describe('Cost'),
-      currency: z.string().optional().describe('Currency'),
-      occasion: z.string().optional().describe('Occasion'),
-      status: z.enum(['idea', 'planned', 'purchased', 'given', 'received']).optional().describe('Status'),
-      direction: z.enum(['giving', 'receiving']).optional().describe('Direction'),
-      date: z.string().optional().describe('Date'),
-    },
-  }, (args) => {
-    try {
-      const { id, ...updates } = args;
-      const gift = giftService.update(id, updates);
-      if (!gift) return errorResult('Gift not found');
-      return textResult(gift);
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
-  server.registerTool('gift_delete', {
-    description: 'Soft-delete a gift',
-    inputSchema: {
-      id: z.string().describe('The gift ID to delete'),
-    },
-  }, (args) => {
-    try {
-      const success = giftService.softDelete(args.id);
-      if (!success) return errorResult('Gift not found');
-      return textResult({ success: true, message: 'Gift deleted' });
+      const userId = getUserId(extra);
+      if (args.contact_id) {
+        verifyContactOwnership(db, userId, args.contact_id);
+      }
+      // If occasion, sort_by, sort_order are provided, or no contact_id, use the richer gift tracker mode
+      const hasTrackerParams = args.occasion || args.sort_by || args.sort_order || !args.contact_id;
+      if (hasTrackerParams) {
+        const result = giftService.getGiftTracker(userId, args);
+        return textResult(result);
+      }
+      // Simple list mode scoped to a contact
+      const page = args.page ?? 1;
+      const perPage = args.per_page ?? 20;
+      const offset = (page - 1) * perPage;
+      const conditions: string[] = ['g.deleted_at IS NULL', 'c.deleted_at IS NULL', 'c.user_id = ?'];
+      const params: any[] = [userId];
+      if (args.contact_id) { conditions.push('g.contact_id = ?'); params.push(args.contact_id); }
+      if (args.status) { conditions.push('g.status = ?'); params.push(args.status); }
+      if (args.direction) { conditions.push('g.direction = ?'); params.push(args.direction); }
+      const whereClause = conditions.join(' AND ');
+      const countResult = db.prepare(
+        `SELECT COUNT(*) as count FROM gifts g JOIN contacts c ON g.contact_id = c.id WHERE ${whereClause}`
+      ).get(...params) as any;
+      const rows = db.prepare(
+        `SELECT g.* FROM gifts g JOIN contacts c ON g.contact_id = c.id WHERE ${whereClause} ORDER BY g.created_at DESC LIMIT ? OFFSET ?`
+      ).all(...params, perPage, offset) as any[];
+      return textResult({ data: rows, total: countResult.count, page, per_page: perPage });
     } catch (err: any) {
       return errorResult(err.message);
     }
@@ -1178,102 +1172,88 @@ export function createMcpServer(db: Database.Database): McpServer {
 
   // ─── Debt Tools ────────────────────────────────────────────────
 
-  server.registerTool('debt_create', {
-    description: 'Track a debt (money owed in either direction)',
+  server.registerTool('debt_manage', {
+    description: 'Create, list, update, settle, delete, restore, or summarize debts.\n' +
+      '• action="create": Track a new debt. Requires contact_id, amount, direction. Optional currency, reason, incurred_at.\n' +
+      '• action="list": List debts. Optional contact_id, status, page, per_page, include_deleted.\n' +
+      '• action="update": Update a debt. Requires id. Optional amount, currency, direction, reason, incurred_at.\n' +
+      '• action="settle": Mark a debt as settled. Requires id.\n' +
+      '• action="delete": Soft-delete a debt. Requires id.\n' +
+      '• action="restore": Restore a soft-deleted debt. Requires id.\n' +
+      '• action="summary": Get net balance summary for a contact. Requires contact_id.',
     inputSchema: {
-      contact_id: z.string().describe('The contact ID'),
-      amount: z.number().describe('Amount owed'),
+      action: z.enum(['create', 'list', 'update', 'settle', 'delete', 'restore', 'summary']).describe('Action to perform'),
+      id: z.string().optional().describe('The debt ID (required for "update", "settle", "delete", "restore")'),
+      contact_id: z.string().optional().describe('The contact ID (required for "create" and "summary", optional filter for "list")'),
+      amount: z.number().optional().describe('Amount owed (required for "create", optional for "update")'),
       currency: z.string().optional().describe('Currency (default: USD)'),
-      direction: z.enum(['i_owe_them', 'they_owe_me']).describe('Who owes whom'),
+      direction: z.enum(['i_owe_them', 'they_owe_me']).optional().describe('Who owes whom (required for "create", optional for "update")'),
       reason: z.string().optional().describe('Reason for the debt'),
       incurred_at: z.string().optional().describe('When the debt was incurred (ISO date)'),
+      status: z.enum(['active', 'settled']).optional().describe('Filter by status (for "list" only)'),
+      page: z.number().optional().describe('Page number for "list" (default: 1)'),
+      per_page: z.number().optional().describe('Results per page for "list" (default: 20)'),
+      include_deleted: z.boolean().optional().describe('Include soft-deleted debts in "list" results (default: false)'),
     },
-  }, (args) => {
+  }, (args, extra) => {
     try {
-      const debt = debtService.create(args);
-      return textResult(debt);
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
-  server.registerTool('debt_list', {
-    description: 'List debts, optionally filtered by contact or status',
-    inputSchema: {
-      contact_id: z.string().optional().describe('Filter by contact ID'),
-      status: z.enum(['active', 'settled']).optional().describe('Filter by status'),
-      page: z.number().optional().describe('Page number (default: 1)'),
-      per_page: z.number().optional().describe('Results per page (default: 20)'),
-    },
-  }, (args) => {
-    try {
-      const result = debtService.list(args);
-      return textResult(result);
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
-  server.registerTool('debt_update', {
-    description: 'Update a debt',
-    inputSchema: {
-      id: z.string().describe('The debt ID'),
-      amount: z.number().optional().describe('Amount'),
-      currency: z.string().optional().describe('Currency'),
-      direction: z.enum(['i_owe_them', 'they_owe_me']).optional().describe('Direction'),
-      reason: z.string().optional().describe('Reason'),
-      incurred_at: z.string().optional().describe('When incurred'),
-    },
-  }, (args) => {
-    try {
-      const { id, ...updates } = args;
-      const debt = debtService.update(id, updates);
-      if (!debt) return errorResult('Debt not found');
-      return textResult(debt);
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
-  server.registerTool('debt_settle', {
-    description: 'Mark a debt as settled',
-    inputSchema: {
-      id: z.string().describe('The debt ID'),
-    },
-  }, (args) => {
-    try {
-      const debt = debtService.settle(args.id);
-      if (!debt) return errorResult('Debt not found');
-      return textResult(debt);
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
-  server.registerTool('debt_delete', {
-    description: 'Soft-delete a debt',
-    inputSchema: {
-      id: z.string().describe('The debt ID to delete'),
-    },
-  }, (args) => {
-    try {
-      const success = debtService.softDelete(args.id);
-      if (!success) return errorResult('Debt not found');
-      return textResult({ success: true, message: 'Debt deleted' });
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
-  server.registerTool('debt_summary', {
-    description: 'Get the net balance summary for debts with a contact',
-    inputSchema: {
-      contact_id: z.string().describe('The contact ID'),
-    },
-  }, (args) => {
-    try {
-      const summary = debtService.summary(args.contact_id);
-      return textResult(summary);
+      const userId = getUserId(extra);
+      if (args.action === 'create') {
+        if (!args.contact_id || !args.amount || !args.direction) return errorResult('contact_id, amount, and direction are required for "create"');
+        verifyContactOwnership(db, userId, args.contact_id);
+        const debt = debtService.create(userId, { contact_id: args.contact_id, amount: args.amount, direction: args.direction, currency: args.currency, reason: args.reason, incurred_at: args.incurred_at });
+        return textResult(debt);
+      } else if (args.action === 'list') {
+        if (args.contact_id) {
+          verifyContactOwnership(db, userId, args.contact_id);
+        }
+        // Scope to user's contacts
+        const page = args.page ?? 1;
+        const perPage = args.per_page ?? 20;
+        const offset = (page - 1) * perPage;
+        const conditions: string[] = ['c.deleted_at IS NULL', 'c.user_id = ?'];
+        const params: any[] = [userId];
+        if (!args.include_deleted) { conditions.push('d.deleted_at IS NULL'); }
+        if (args.contact_id) { conditions.push('d.contact_id = ?'); params.push(args.contact_id); }
+        if (args.status) { conditions.push('d.status = ?'); params.push(args.status); }
+        const whereClause = conditions.join(' AND ');
+        const countResult = db.prepare(
+          `SELECT COUNT(*) as count FROM debts d JOIN contacts c ON d.contact_id = c.id WHERE ${whereClause}`
+        ).get(...params) as any;
+        const rows = db.prepare(
+          `SELECT d.* FROM debts d JOIN contacts c ON d.contact_id = c.id WHERE ${whereClause} ORDER BY d.created_at DESC LIMIT ? OFFSET ?`
+        ).all(...params, perPage, offset) as any[];
+        return textResult({ data: rows, total: countResult.count, page, per_page: perPage });
+      } else if (args.action === 'update') {
+        if (!args.id) return errorResult('id is required for "update"');
+        verifyRecordOwnership(db, userId, 'debts', args.id);
+        const { action, id, contact_id, page, per_page, include_deleted, status, ...updates } = args;
+        const debt = debtService.update(userId, id, updates);
+        if (!debt) return errorResult('Debt not found');
+        return textResult(debt);
+      } else if (args.action === 'settle') {
+        if (!args.id) return errorResult('id is required for "settle"');
+        verifyRecordOwnership(db, userId, 'debts', args.id);
+        const debt = debtService.settle(userId, args.id);
+        if (!debt) return errorResult('Debt not found');
+        return textResult(debt);
+      } else if (args.action === 'delete') {
+        if (!args.id) return errorResult('id is required for "delete"');
+        verifyRecordOwnership(db, userId, 'debts', args.id);
+        const success = debtService.softDelete(userId, args.id);
+        if (!success) return errorResult('Debt not found');
+        return textResult({ success: true, message: 'Debt deleted' });
+      } else if (args.action === 'restore') {
+        if (!args.id) return errorResult('id is required for "restore"');
+        const debt = debtService.restore(userId, args.id);
+        return textResult(debt);
+      } else {
+        // summary
+        if (!args.contact_id) return errorResult('contact_id is required for "summary"');
+        verifyContactOwnership(db, userId, args.contact_id);
+        const summary = debtService.summary(userId, args.contact_id);
+        return textResult(summary);
+      }
     } catch (err: any) {
       return errorResult(err.message);
     }
@@ -1281,94 +1261,59 @@ export function createMcpServer(db: Database.Database): McpServer {
 
   // ─── Task Tools ────────────────────────────────────────────────
 
-  server.registerTool('task_create', {
-    description: 'Create a task, optionally linked to a contact',
+  server.registerTool('task_manage', {
+    description: 'Create, list, update, complete, delete, or restore tasks.\n' +
+      '• action="create": Create a task. Requires title. Optional description, contact_id, due_date, priority.\n' +
+      '• action="list": List tasks. Optional contact_id, status, priority, page, per_page, include_deleted.\n' +
+      '• action="update": Update a task. Requires id. Optional title, description, contact_id, due_date, priority, status.\n' +
+      '• action="complete": Mark a task as completed. Requires id.\n' +
+      '• action="delete": Soft-delete a task. Requires id.\n' +
+      '• action="restore": Restore a soft-deleted task. Requires id.',
     inputSchema: {
-      title: z.string().describe('Task title'),
-      description: z.string().optional().describe('Description'),
-      contact_id: z.string().optional().describe('Link to a contact'),
-      due_date: z.string().optional().describe('Due date (ISO date)'),
-      priority: z.enum(['low', 'medium', 'high']).optional().describe('Priority (default: medium)'),
+      action: z.enum(['create', 'list', 'update', 'complete', 'delete', 'restore']).describe('Action to perform'),
+      id: z.string().optional().describe('The task ID (required for "update", "complete", "delete", "restore")'),
+      title: z.string().optional().describe('Task title (required for "create", optional for "update")'),
+      description: z.string().optional().describe('Description (optional for "create" and "update")'),
+      contact_id: z.string().optional().describe('Link to a contact (optional for "create"/"update", filter for "list")'),
+      due_date: z.string().optional().describe('Due date (ISO date, optional for "create" and "update")'),
+      priority: z.enum(['low', 'medium', 'high']).optional().describe('Priority (optional for "create"/"update", filter for "list")'),
+      status: z.enum(['pending', 'in_progress', 'completed']).optional().describe('Status (optional for "update", filter for "list")'),
+      page: z.number().optional().describe('Page number for "list" (default: 1)'),
+      per_page: z.number().optional().describe('Results per page for "list" (default: 20)'),
+      include_deleted: z.boolean().optional().describe('Include soft-deleted tasks in "list" results (default: false)'),
     },
   }, (args, extra) => {
     try {
       const userId = getUserId(extra);
-      const task = taskService.create(userId, args);
-      return textResult(task);
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
-  server.registerTool('task_list', {
-    description: 'List tasks, optionally filtered by contact, status, or priority',
-    inputSchema: {
-      contact_id: z.string().optional().describe('Filter by contact ID'),
-      status: z.enum(['pending', 'in_progress', 'completed']).optional().describe('Filter by status'),
-      priority: z.enum(['low', 'medium', 'high']).optional().describe('Filter by priority'),
-      page: z.number().optional().describe('Page number (default: 1)'),
-      per_page: z.number().optional().describe('Results per page (default: 20)'),
-    },
-  }, (args, extra) => {
-    try {
-      const userId = getUserId(extra);
-      const result = taskService.list(userId, args);
-      return textResult(result);
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
-  server.registerTool('task_update', {
-    description: 'Update a task',
-    inputSchema: {
-      id: z.string().describe('The task ID'),
-      title: z.string().optional().describe('Title'),
-      description: z.string().optional().describe('Description'),
-      contact_id: z.string().optional().describe('Link to a contact'),
-      due_date: z.string().optional().describe('Due date'),
-      priority: z.enum(['low', 'medium', 'high']).optional().describe('Priority'),
-      status: z.enum(['pending', 'in_progress', 'completed']).optional().describe('Status'),
-    },
-  }, (args, extra) => {
-    try {
-      const userId = getUserId(extra);
-      const { id, ...updates } = args;
-      const task = taskService.update(userId, id, updates);
-      if (!task) return errorResult('Task not found');
-      return textResult(task);
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
-  server.registerTool('task_complete', {
-    description: 'Mark a task as completed',
-    inputSchema: {
-      id: z.string().describe('The task ID'),
-    },
-  }, (args, extra) => {
-    try {
-      const userId = getUserId(extra);
-      const task = taskService.complete(userId, args.id);
-      if (!task) return errorResult('Task not found');
-      return textResult(task);
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
-  server.registerTool('task_delete', {
-    description: 'Soft-delete a task',
-    inputSchema: {
-      id: z.string().describe('The task ID to delete'),
-    },
-  }, (args, extra) => {
-    try {
-      const userId = getUserId(extra);
-      const success = taskService.softDelete(userId, args.id);
-      if (!success) return errorResult('Task not found');
-      return textResult({ success: true, message: 'Task deleted' });
+      if (args.action === 'create') {
+        if (!args.title) return errorResult('title is required for "create"');
+        const task = taskService.create(userId, { title: args.title, description: args.description, contact_id: args.contact_id, due_date: args.due_date, priority: args.priority });
+        return textResult(task);
+      } else if (args.action === 'list') {
+        const result = taskService.list(userId, { contact_id: args.contact_id, status: args.status, priority: args.priority, page: args.page, per_page: args.per_page, include_deleted: args.include_deleted });
+        return textResult(result);
+      } else if (args.action === 'update') {
+        if (!args.id) return errorResult('id is required for "update"');
+        const { action, id, page, per_page, include_deleted, ...updates } = args;
+        const task = taskService.update(userId, id, updates);
+        if (!task) return errorResult('Task not found');
+        return textResult(task);
+      } else if (args.action === 'complete') {
+        if (!args.id) return errorResult('id is required for "complete"');
+        const task = taskService.complete(userId, args.id);
+        if (!task) return errorResult('Task not found');
+        return textResult(task);
+      } else if (args.action === 'delete') {
+        if (!args.id) return errorResult('id is required for "delete"');
+        const success = taskService.softDelete(userId, args.id);
+        if (!success) return errorResult('Task not found');
+        return textResult({ success: true, message: 'Task deleted' });
+      } else {
+        // restore
+        if (!args.id) return errorResult('id is required for "restore"');
+        const task = taskService.restore(userId, args.id);
+        return textResult(task);
+      }
     } catch (err: any) {
       return errorResult(err.message);
     }
@@ -1402,48 +1347,11 @@ export function createMcpServer(db: Database.Database): McpServer {
     }
   });
 
-  // ─── Me Tool (Current User Identity) ──────────────────────────
-
-  server.registerTool('me', {
-    description: 'Get information about the current user (you). Returns your name, email, account creation date, and your self-contact ID. ' +
-      'Use this when the user asks "who am I?" or needs their own identity/profile information. ' +
-      'Use the returned contact_id (not user_id) when creating relationships involving yourself.',
-    inputSchema: {},
-  }, (_args, extra) => {
-    try {
-      const userId = getUserId(extra);
-
-      const userRow = db.prepare(
-        'SELECT id, name, email, created_at, updated_at FROM users WHERE id = ?'
-      ).get(userId) as { id: string; name: string; email: string; created_at: string; updated_at: string } | undefined;
-
-      if (!userRow) {
-        return errorResult('User not found');
-      }
-
-      const selfContact = db.prepare(
-        'SELECT id FROM contacts WHERE user_id = ? AND is_me = 1 AND deleted_at IS NULL'
-      ).get(userId) as { id: string } | undefined;
-
-      return textResult({
-        user_id: userRow.id,
-        contact_id: selfContact?.id ?? null,
-        _note: 'Use contact_id (not user_id) when creating relationships involving yourself.',
-        name: userRow.name,
-        email: userRow.email,
-        created_at: userRow.created_at,
-        updated_at: userRow.updated_at,
-      });
-    } catch (err: any) {
-      return errorResult(err.message);
-    }
-  });
-
   // ─── Prime Tool (Context Loader) ─────────────────────────────
 
   server.registerTool('prime', {
     description: 'IMPORTANT: Call this tool FIRST before any other tool to load essential CRM context. ' +
-      'Returns a compact overview of the user\'s data: the current user\'s identity (call the "me" tool for full details), ' +
+      'Returns a compact overview of the user\'s data: the current user\'s identity (name, email, contact_id), ' +
       'all tags, the 200 most recently updated contacts ' +
       '(id, name, and tag IDs), and the 10 most recent notes. This primes your context so you can reference ' +
       'contacts by name, understand the user\'s tag taxonomy, and see recent activity without needing ' +
@@ -1530,275 +1438,180 @@ export function createMcpServer(db: Database.Database): McpServer {
     }
   });
 
+  // ─── Cross-Contact Query Tools ──────────────────────────────
+
+  server.registerTool('upcoming_birthdays', {
+    description: 'Find contacts with birthdays coming up within a time window or in a specific month. ' +
+      'Returns contacts sorted by soonest birthday first, with age calculations when available.',
+    inputSchema: {
+      days_ahead: z.number().min(1).max(365).optional()
+        .describe('Look-ahead window in days from today (default: 30). Ignored if month is provided.'),
+      month: z.number().min(1).max(12).optional()
+        .describe('Optional: show all birthdays in a specific month (1-12) instead of using days_ahead'),
+    },
+  }, (args, extra) => {
+    try {
+      const userId = getUserId(extra);
+      const result = contacts.getUpcomingBirthdays(userId, args);
+      return textResult(result);
+    } catch (err: any) {
+      return errorResult(err.message);
+    }
+  });
+
+  server.registerTool('global_search', {
+    description: 'Search across all entity types (contacts, notes, activities, life events, gifts, tasks, reminders, debts, relationships, contact methods, addresses, custom fields) in a single query. ' +
+      'Returns grouped results by entity type with snippets and contact context.',
+    inputSchema: {
+      query: z.string().describe('Search term'),
+      entity_types: z.array(z.enum(['contacts', 'notes', 'activities', 'life_events', 'gifts', 'tasks', 'reminders', 'debts', 'relationships', 'contact_methods', 'addresses', 'custom_fields'])).optional()
+        .describe('Optional: filter to specific entity types (default: all types)'),
+      limit_per_type: z.number().min(1).max(50).optional()
+        .describe('Max results per entity type (default: 10)'),
+    },
+  }, (args, extra) => {
+    try {
+      const userId = getUserId(extra);
+      const result = searchService.globalSearch(userId, args);
+      return textResult(result);
+    } catch (err: any) {
+      return errorResult(err.message);
+    }
+  });
+
+  server.registerTool('contacts_needing_attention', {
+    description: 'Find contacts you haven\'t interacted with recently — the "who am I neglecting?" query. ' +
+      'Returns contacts sorted by staleness (longest since last interaction first). ' +
+      'Contacts with zero interactions are included and sorted first.',
+    inputSchema: {
+      days_since_last_interaction: z.number().optional()
+        .describe('Minimum days since last activity to be included (default: 30)'),
+      status: z.enum(['active', 'archived']).optional()
+        .describe('Contact status filter (default: active)'),
+      tag_name: z.string().optional()
+        .describe('Filter to contacts with this tag (e.g., "close friends")'),
+      is_favorite: z.boolean().optional()
+        .describe('Filter to favorites only'),
+      limit: z.number().min(1).max(100).optional()
+        .describe('Max results to return (default: 20)'),
+    },
+  }, (args, extra) => {
+    try {
+      const userId = getUserId(extra);
+      const result = contacts.getContactsNeedingAttention(userId, args);
+      return textResult(result);
+    } catch (err: any) {
+      return errorResult(err.message);
+    }
+  });
+
+  server.registerTool('upcoming_reminders', {
+    description: 'Find upcoming and overdue reminders across all contacts. ' +
+      'Returns reminders sorted by date (overdue first, then soonest upcoming).',
+    inputSchema: {
+      days_ahead: z.number().min(1).max(365).optional()
+        .describe('Look-ahead window in days from today (default: 14)'),
+      status: z.enum(['active', 'snoozed']).optional()
+        .describe('Filter by reminder status (default: active)'),
+      include_overdue: z.boolean().optional()
+        .describe('Include overdue reminders with reminder_date before today (default: true)'),
+    },
+  }, (args, extra) => {
+    try {
+      const userId = getUserId(extra);
+      const result = reminderService.getUpcomingReminders(userId, args);
+      return textResult(result);
+    } catch (err: any) {
+      return errorResult(err.message);
+    }
+  });
+
   // ─── Prompts ───────────────────────────────────────────────────
 
-  server.registerPrompt('daily-briefing', {
-    title: 'Daily Briefing',
-    description: 'Get your morning CRM overview: upcoming reminders, birthdays, pending tasks, unread notifications, and unsettled debts.',
-  }, (extra) => {
-    const userId = getUserId(extra);
-    const today = new Date().toISOString().slice(0, 10);
-    return {
-      messages: [{
-        role: 'user',
-        content: {
-          type: 'text',
-          text: `Give me my daily CRM briefing for today (${today}). Please:
+  registerPrompts(server, getUserId);
 
-1. Check for any **upcoming and overdue reminders** (use reminder_list with status "active")
-2. Look for any **birthdays today or in the next 7 days** (use contact_list and check birthday fields)
-3. Show **pending and in-progress tasks** (use task_list with status "pending", then "in_progress")
-4. Check for **unread notifications** (use notification_list with unread_only true)
-5. Show any **unsettled debts** (use debt_list with status "active")
-6. Show recent **CRM statistics** (use data_statistics)
+  // ─── Batch Operations ────────────────────────────────────────
 
-Present everything in a clean, organized summary. Highlight anything urgent (overdue items, today's birthdays). If everything is clear, let me know that too!`,
-        },
-      }],
-    };
-  });
-
-  server.registerPrompt('prepare-for-meeting', {
-    title: 'Prepare for Meeting',
-    description: 'Get a comprehensive dossier on a contact before meeting them: profile, recent activity, notes, relationships, food preferences, and pending items.',
-    argsSchema: {
-      contact_name: z.string().describe('Name of the contact to prepare for'),
+  server.registerTool('batch_create_contacts', {
+    description: 'Create multiple contacts in one call. Max 50 items per batch. Runs atomically — if any item fails, the entire batch is rolled back.',
+    inputSchema: {
+      contacts: z.array(z.object({
+        first_name: z.string().describe('First name (required)'),
+        last_name: z.string().optional().describe('Last name'),
+        nickname: z.string().optional().describe('Nickname'),
+        maiden_name: z.string().optional().describe('Maiden name'),
+        gender: z.string().optional().describe('Gender'),
+        pronouns: z.string().optional().describe('Pronouns (e.g. she/her, he/him, they/them)'),
+        avatar_url: z.string().optional().describe('Avatar URL'),
+        birthday_mode: z.enum(['full_date', 'month_day', 'approximate_age']).optional()
+          .describe('Birthday mode: full_date (YYYY-MM-DD), month_day (month + day only), or approximate_age (birth year estimate)'),
+        birthday_date: z.string().optional().describe('Full birthday date (YYYY-MM-DD), used with birthday_mode=full_date'),
+        birthday_month: z.number().optional().describe('Birthday month (1-12), used with birthday_mode=month_day'),
+        birthday_day: z.number().optional().describe('Birthday day (1-31), used with birthday_mode=month_day'),
+        birthday_year_approximate: z.number().optional().describe('Approximate birth year, used with birthday_mode=approximate_age'),
+        status: z.enum(['active', 'archived', 'deceased']).optional().describe('Contact status (default: active)'),
+        deceased_date: z.string().optional().describe('Date of death (YYYY-MM-DD)'),
+        is_favorite: z.boolean().optional().describe('Mark as favorite'),
+        met_at_date: z.string().optional().describe('Date you met this person (YYYY-MM-DD)'),
+        met_at_location: z.string().optional().describe('Where you met this person'),
+        met_through_contact_id: z.string().optional().describe('Contact ID of person who introduced you'),
+        met_description: z.string().optional().describe('Story of how you met'),
+        job_title: z.string().optional().describe('Job title'),
+        company: z.string().optional().describe('Company or organization'),
+        industry: z.string().optional().describe('Industry'),
+        work_notes: z.string().optional().describe('Notes about their work'),
+      })).describe('Array of contact creation inputs (max 50)'),
     },
   }, (args, extra) => {
-    const userId = getUserId(extra);
-    return {
-      messages: [{
-        role: 'user',
-        content: {
-          type: 'text',
-          text: `I'm preparing to meet with **${args.contact_name}**. Please compile a comprehensive dossier:
-
-1. **Find the contact** (use contact_search for "${args.contact_name}")
-2. **Full profile** (use contact_get with their ID — includes contact methods, addresses, food preferences, custom fields)
-3. **Recent timeline** (use contact_timeline to see recent activities, notes, life events)
-4. **Relationships** (use relationship_list to see who they're connected to)
-5. **Pinned/recent notes** (use note_list to see important notes)
-6. **Pending reminders** about them (use reminder_list filtered by their contact ID)
-7. **Pending tasks** related to them (use task_list filtered by their contact ID)
-8. **Gift history** (use gift_list filtered by their contact ID)
-9. **Debts** (use debt_summary for their contact ID)
-
-Organize this into a meeting prep brief with key talking points, things to remember, and any action items.`,
-        },
-      }],
-    };
+    try {
+      const userId = getUserId(extra);
+      const created = contacts.batchCreate(userId, args.contacts);
+      return textResult({ created, count: created.length });
+    } catch (err: any) {
+      return errorResult(err.message);
+    }
   });
 
-  server.registerPrompt('log-interaction', {
-    title: 'Log Interaction',
-    description: 'Quickly log an interaction from a natural language description. Parses who, what, when, and where into a structured activity.',
-    argsSchema: {
-      description: z.string().describe('Natural language description of the interaction (e.g. "Had coffee with Sarah and Mike on Tuesday at Blue Bottle, talked about their new house")'),
+  server.registerTool('batch_tag_contacts', {
+    description: 'Apply a tag to multiple contacts in one call. Max 50 contacts per batch. Creates the tag if it doesn\'t exist. Runs atomically — if any item fails, the entire batch is rolled back.',
+    inputSchema: {
+      tag_name: z.string().describe('Tag name to apply'),
+      contact_ids: z.array(z.string()).describe('Array of contact IDs to tag (max 50)'),
+      color: z.string().optional().describe('Tag color (only used if creating new tag)'),
     },
   }, (args, extra) => {
-    const userId = getUserId(extra);
-    return {
-      messages: [{
-        role: 'user',
-        content: {
-          type: 'text',
-          text: `Please log the following interaction in my CRM:
-
-"${args.description}"
-
-Steps:
-1. **Prime context** (use prime to load contacts so you can match names)
-2. **Parse the description** to identify:
-   - **Who** was involved (match to existing contacts by name)
-   - **What type** of interaction (phone_call, video_call, text_message, in_person, email, activity, other)
-   - **When** it happened (interpret relative dates like "yesterday", "last Tuesday", etc. relative to today)
-   - **Where** it took place (if mentioned)
-   - **Key details** for the description/notes
-3. **Create the activity** (use activity_create with the parsed details)
-4. **Optionally create a note** if there are specific details worth recording separately on one of the contacts
-5. **Ask if I want to set any follow-up reminders** based on what was discussed
-
-If any contact names don't match existing contacts, ask me if I want to create new contacts for them.`,
-        },
-      }],
-    };
+    try {
+      const userId = getUserId(extra);
+      const result = tags.batchTagContacts(userId, args.tag_name, args.contact_ids, args.color);
+      return textResult(result);
+    } catch (err: any) {
+      return errorResult(err.message);
+    }
   });
 
-  server.registerPrompt('add-new-contact', {
-    title: 'Add New Contact',
-    description: 'Intelligently onboard a new contact from freeform text — parses name, phone, email, social, birthday, work info, tags, relationships, and more.',
-    argsSchema: {
-      info: z.string().describe('Everything you know about the person (e.g. "Met Sarah Chen at the React conference, she\'s a senior engineer at Google, email sarah@example.com, birthday March 15, she\'s friends with Mike")'),
+  server.registerTool('batch_create_activities', {
+    description: 'Create multiple activities/interactions in one call. Max 50 items per batch. Runs atomically — if any item fails, the entire batch is rolled back.',
+    inputSchema: {
+      activities: z.array(z.object({
+        type: z.enum(['phone_call', 'video_call', 'text_message', 'in_person', 'email', 'activity', 'other'])
+          .describe('Type of interaction'),
+        title: z.string().optional().describe('Title (e.g. "Coffee at Blue Bottle")'),
+        description: z.string().optional().describe('Description or notes'),
+        occurred_at: z.string().describe('When it happened (ISO date/datetime)'),
+        duration_minutes: z.number().optional().describe('Duration in minutes'),
+        location: z.string().optional().describe('Where it happened'),
+        activity_type_id: z.string().optional().describe('Custom activity type ID'),
+        participant_contact_ids: z.array(z.string()).describe('Contact IDs of participants'),
+      })).describe('Array of activity creation inputs (max 50)'),
     },
   }, (args, extra) => {
-    const userId = getUserId(extra);
-    return {
-      messages: [{
-        role: 'user',
-        content: {
-          type: 'text',
-          text: `Please add a new contact to my CRM based on this information:
-
-"${args.info}"
-
-Steps:
-1. **Prime context** (use prime to load existing contacts and tags for matching)
-2. **Parse the information** to extract all structured data:
-   - Name (first, last, nickname)
-   - Contact methods (email, phone, social handles)
-   - Birthday (date, month/day, or approximate age)
-   - Work info (job title, company, industry)
-   - How we met (date, location, through whom, description)
-   - Any tags that apply
-   - Relationships to existing contacts
-3. **Create the contact** (use contact_create with all parsed fields)
-4. **Add contact methods** if any were mentioned (use contact_method_add)
-5. **Add address** if mentioned (use address_add)
-6. **Set food preferences** if mentioned (use food_preferences_upsert)
-7. **Add tags** if applicable (use contact_tag)
-8. **Create relationships** if they know existing contacts (use relationship_add)
-9. **Add any notes** with additional context that doesn't fit structured fields (use note_create)
-
-Present a summary of everything you created and ask if anything needs correction.`,
-        },
-      }],
-    };
-  });
-
-  server.registerPrompt('gift-ideas', {
-    title: 'Gift Ideas',
-    description: 'Brainstorm personalized gift ideas for a contact based on their preferences, interests, history, and upcoming occasions.',
-    argsSchema: {
-      contact_name: z.string().describe('Name of the contact to brainstorm gifts for'),
-    },
-  }, (args, extra) => {
-    const userId = getUserId(extra);
-    return {
-      messages: [{
-        role: 'user',
-        content: {
-          type: 'text',
-          text: `Help me brainstorm gift ideas for **${args.contact_name}**. Please:
-
-1. **Find the contact** (use contact_search for "${args.contact_name}")
-2. **Get their full profile** (use contact_get — includes food preferences, custom fields)
-3. **Check past gifts** (use gift_list filtered by their contact ID to see what I've already given/received)
-4. **Review their notes** (use note_list for any personal details, interests, wishlists)
-5. **Check recent life events** (use life_event_list — new job, moved, etc. might inspire ideas)
-6. **Check their relationships** (use relationship_list — could inform group gift ideas)
-
-Based on all this context, suggest **5-10 personalized gift ideas** organized by:
-- **Budget tiers** (under $25, $25-50, $50-100, $100+)
-- **Occasion** if relevant (birthday coming up, holiday, just because)
-
-For each idea, explain why it's a good fit based on what you know about them. Ask if I'd like to save any as gift ideas (using gift_create with status "idea").`,
-        },
-      }],
-    };
-  });
-
-  server.registerPrompt('relationship-summary', {
-    title: 'Relationship Summary',
-    description: 'Get a relationship health check for a contact: interaction frequency, last contact, communication patterns, and suggestions.',
-    argsSchema: {
-      contact_name: z.string().describe('Name of the contact to review'),
-    },
-  }, (args, extra) => {
-    const userId = getUserId(extra);
-    const today = new Date().toISOString().slice(0, 10);
-    return {
-      messages: [{
-        role: 'user',
-        content: {
-          type: 'text',
-          text: `Give me a relationship health check for **${args.contact_name}** (today is ${today}). Please:
-
-1. **Find the contact** (use contact_search for "${args.contact_name}")
-2. **Get their profile** (use contact_get for full details)
-3. **Review the full timeline** (use contact_timeline with a large per_page to see all interactions)
-4. **Check activities** (use activity_list filtered by their contact ID)
-5. **Check relationships** (use relationship_list to see their social connections in my network)
-6. **Check pending items** (use reminder_list and task_list filtered by their contact ID)
-7. **Check notes** (use note_list for context)
-
-Analyze and present:
-- **Last interaction**: When and what type
-- **Interaction frequency**: How often we connect, and the trend (increasing/decreasing)
-- **Communication patterns**: What types of interactions are most common
-- **Relationship strength**: Your assessment based on frequency, recency, and depth of interactions
-- **Key milestones**: Important life events and shared experiences
-- **Pending items**: Any open reminders, tasks, or unsettled debts
-- **Suggestions**: Specific, actionable ways to strengthen this relationship (e.g., "It's been 3 months since you last met in person — consider scheduling a coffee")`,
-        },
-      }],
-    };
-  });
-
-  server.registerPrompt('weekly-review', {
-    title: 'Weekly Review',
-    description: 'End-of-week reflection: activities logged, tasks completed, new contacts, and contacts who may need attention.',
-  }, (extra) => {
-    const userId = getUserId(extra);
-    const today = new Date();
-    const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const todayStr = today.toISOString().slice(0, 10);
-    return {
-      messages: [{
-        role: 'user',
-        content: {
-          type: 'text',
-          text: `Give me my weekly CRM review for the past week (${weekAgo} to ${todayStr}). Please:
-
-1. **Get CRM statistics** (use data_statistics for an overview)
-2. **Recent activities** (use activity_list with a large per_page and review which occurred this week)
-3. **Completed tasks** (use task_list with status "completed" and check which were completed this week)
-4. **New contacts** (use contact_list sorted by created_at desc and check which were added this week)
-5. **Still pending tasks** (use task_list with status "pending" — especially overdue ones)
-6. **Upcoming reminders** (use reminder_list with status "active" for next week)
-
-Summarize:
-- **This week's highlights**: Key interactions, tasks completed, new contacts added
-- **By the numbers**: How many activities logged, tasks completed, contacts added
-- **Needs attention**: Contacts you haven't interacted with recently but probably should (favorites, close relationships with no recent activity)
-- **Coming up next week**: Upcoming reminders, birthdays, and due tasks
-- **Suggestions**: Any patterns or opportunities (e.g., "You logged 5 phone calls but no in-person meetings this week")`,
-        },
-      }],
-    };
-  });
-
-  server.registerPrompt('find-connections', {
-    title: 'Find Connections',
-    description: 'Search your network for people matching a specific need, skill, industry, or topic.',
-    argsSchema: {
-      query: z.string().describe('What you\'re looking for (e.g. "who works in real estate", "who do I know at Google", "someone who can help with legal advice")'),
-    },
-  }, (args, extra) => {
-    const userId = getUserId(extra);
-    return {
-      messages: [{
-        role: 'user',
-        content: {
-          type: 'text',
-          text: `Help me find people in my network who match this: **${args.query}**
-
-Please search broadly:
-1. **Prime context** (use prime to load all contacts with their companies and tags)
-2. **Search contacts** by name, company, and job title (use contact_search with relevant keywords)
-3. **Search by tags** (use contact_list with tag_name filter for relevant tags)
-4. **Search by company** (use contact_list with company filter)
-5. For promising matches, **get full details** (use contact_get to check custom fields, notes, and work info)
-6. For top matches, **check notes** (use note_list — notes might mention relevant skills, interests, or expertise)
-
-Present results as:
-- **Strong matches**: People who clearly fit the criteria, with why they match
-- **Possible matches**: People who might be relevant based on partial information
-- **Connected through**: If any matches are related to other contacts (check relationship_list)
-
-For each match, include their name, company/role, and why they're relevant. Suggest how I might reach out (show their contact methods if available).`,
-        },
-      }],
-    };
+    try {
+      const userId = getUserId(extra);
+      const created = activityService.batchCreate(userId, args.activities);
+      return textResult({ created, count: created.length });
+    } catch (err: any) {
+      return errorResult(err.message);
+    }
   });
 
   return server;

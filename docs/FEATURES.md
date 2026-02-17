@@ -673,9 +673,12 @@ Each feature area maps to a set of MCP tools following consistent patterns. The 
 
 ### 18.1 Tool Naming Convention
 
-Tools follow the pattern: `{entity}_{action}`
+Tools follow two patterns:
 
-**Actions:** `list`, `get`, `create`, `update`, `delete`, `search`
+1. **`{entity}_{action}`** — for standalone operations (e.g., `contact_create`, `contact_list`)
+2. **`{entity}_manage`** — consolidated CRUD tools that use an `action` enum to dispatch between operations (e.g., `tag_manage` with `action: "create"`)
+
+The `*_manage` pattern reduces the total tool count by combining related operations into a single tool, reducing LLM context usage. Each manage tool accepts an `action` field that determines which operation to perform, with runtime validation of required fields per action.
 
 ### 18.2 Tool Inventory
 
@@ -687,79 +690,56 @@ Tools follow the pattern: `{entity}_{action}`
 | `contact_create` | Create a new contact with basic info |
 | `contact_update` | Update contact fields |
 | `contact_delete` | Soft-delete a contact |
-| `contact_search` | Full-text search across contacts |
+| `contact_restore` | Restore a soft-deleted contact |
+| `contact_merge` | Merge two duplicate contacts into one |
+| `contact_find_duplicates` | Detect potential duplicate contacts |
 | `contact_timeline` | Get the unified timeline for a contact |
-| **Contact Methods** | |
-| `contact_method_add` | Add an email, phone, social handle, etc. |
-| `contact_method_update` | Update a contact method |
-| `contact_method_remove` | Remove a contact method |
-| **Addresses** | |
-| `address_add` | Add an address to a contact |
-| `address_update` | Update an address |
-| `address_remove` | Remove an address |
+| **Contact Sub-entities (manage pattern)** | |
+| `contact_method_manage` | Add, update, or remove contact methods (email, phone, social, etc.) via `action` enum |
+| `address_manage` | Add, update, or remove physical addresses via `action` enum |
+| `custom_field_manage` | Add, update, or remove custom key-value fields via `action` enum |
 | **Relationships** | |
-| `relationship_add` | Create a relationship between two contacts |
-| `relationship_update` | Update relationship type or notes |
-| `relationship_remove` | Remove a relationship (removes both directions) |
-| `relationship_list` | List all relationships for a contact |
+| `relationship_manage` | Add, update, remove, or list relationships between contacts via `action` enum (`add`, `update`, `remove`, `list`) |
 | **Notes** | |
-| `note_list` | List notes for a contact |
-| `note_create` | Add a note to a contact |
-| `note_update` | Update a note |
-| `note_delete` | Soft-delete a note |
+| `note_manage` | Create, update, delete, or restore notes via `action` enum (`create`, `update`, `delete`, `restore`) |
+| `note_list` | List/search notes with pagination, filtering by contact, tag, pinned status |
 | **Activities & Interactions** | |
-| `activity_list` | List activities/interactions, optionally filtered by contact or type |
-| `activity_get` | Get full activity details |
-| `activity_create` | Record a new interaction |
-| `activity_update` | Update an activity record |
-| `activity_delete` | Soft-delete an activity |
-| `activity_type_list` | List available activity types |
-| `activity_type_create` | Create a custom activity type |
+| `activity_manage` | Create, get, update, delete, or restore activities via `action` enum (`create`, `get`, `update`, `delete`, `restore`) |
+| `activity_list` | List activities/interactions with filtering by contact, type, date range |
+| `activity_type_manage` | Create, update, delete, or list custom activity types via `action` enum (`list`, `create`, `update`, `delete`) |
 | **Life Events** | |
-| `life_event_list` | List life events for a contact |
-| `life_event_create` | Record a new life event |
-| `life_event_update` | Update a life event |
-| `life_event_delete` | Soft-delete a life event |
+| `life_event_manage` | Create, list, update, delete, or restore life events via `action` enum (`create`, `list`, `update`, `delete`, `restore`) |
 | **Reminders** | |
-| `reminder_list` | List reminders (supports filtering: upcoming, overdue, by contact) |
-| `reminder_create` | Create a new reminder |
-| `reminder_update` | Update a reminder |
-| `reminder_complete` | Mark a reminder as completed |
-| `reminder_snooze` | Snooze a reminder to a later date |
-| `reminder_delete` | Soft-delete a reminder |
+| `reminder_manage` | Create, list, update, complete, snooze, delete, or restore reminders via `action` enum (`create`, `list`, `update`, `complete`, `snooze`, `delete`, `restore`) |
 | **Gifts** | |
-| `gift_list` | List gifts for a contact |
-| `gift_create` | Record a new gift |
-| `gift_update` | Update a gift record |
-| `gift_delete` | Soft-delete a gift |
+| `gift_manage` | Create, update, delete, or restore gifts via `action` enum (`create`, `update`, `delete`, `restore`) |
+| `gift_list` | List gifts with filtering by contact, status, direction, occasion; includes gift tracker stats |
 | **Debts** | |
-| `debt_list` | List debts for a contact |
-| `debt_create` | Record a new debt |
-| `debt_update` | Update a debt |
-| `debt_settle` | Mark a debt as settled |
-| `debt_delete` | Soft-delete a debt |
-| `debt_summary` | Get net balance summary for a contact |
+| `debt_manage` | Create, list, update, settle, delete, restore, or summarize debts via `action` enum (`create`, `list`, `update`, `settle`, `delete`, `restore`, `summary`) |
 | **Tasks** | |
-| `task_list` | List tasks, optionally filtered by contact or status |
-| `task_create` | Create a new task |
-| `task_update` | Update a task |
-| `task_complete` | Mark a task as completed |
-| `task_delete` | Soft-delete a task |
+| `task_manage` | Create, list, update, complete, delete, or restore tasks via `action` enum (`create`, `list`, `update`, `complete`, `delete`, `restore`) |
 | **Tags** | |
-| `tag_list` | List all tags |
-| `tag_create` | Create a new tag |
-| `tag_update` | Update a tag |
-| `tag_delete` | Delete a tag |
-| `contact_tag` | Add a tag to a contact |
-| `contact_untag` | Remove a tag from a contact |
+| `tag_manage` | Create, update, delete, or list tags, plus tag/untag contacts via `action` enum (`list`, `create`, `update`, `delete`, `tag_contact`, `untag_contact`) |
+| **Food Preferences** | |
+| `food_preferences_get` | Get food preferences for a contact |
+| `food_preferences_upsert` | Create or replace food preferences for a contact |
 | **Notifications** | |
 | `notification_list` | List notifications (filterable: unread, by type, by contact) |
-| `notification_read` | Mark a notification as read |
-| `notification_read_all` | Mark all notifications as read |
 | `notification_create` | Create a custom notification |
+| `notification_read` | Mark a notification (or all) as read |
+| **Batch Operations** | |
+| `batch_create_contacts` | Create multiple contacts in a single transactional call (max 50) |
+| `batch_tag_contacts` | Apply a tag to multiple contacts in one call (max 50) |
+| `batch_create_activities` | Create multiple activities in a single transactional call (max 50) |
+| **Search & Queries** | |
+| `global_search` | Full-text search across all entity types |
+| `upcoming_birthdays` | List contacts with birthdays in the next N days |
+| `upcoming_reminders` | List reminders due in the next N days |
+| `contacts_needing_attention` | Find contacts you haven't interacted with recently |
 | **Data Management** | |
 | `data_export` | Export all data as JSON |
 | `data_statistics` | Get CRM statistics (total contacts, interactions, etc.) |
+| `prime` | Bootstrap context for the AI assistant (loads CRM overview on first connect) |
 
 ### 18.3 Tool Response Patterns
 
@@ -879,7 +859,7 @@ The following features are explicitly **out of scope** for the initial version b
 | **Multi-user** | Shared CRM for families or teams |
 | **Push notifications** | Proactive reminder delivery via email/OS notifications |
 | **Calendar integration** | Sync reminders and birthdays to external calendars |
-| **Contact merging** | Deduplicate and merge contact records |
-| **Bulk operations** | Batch tag, update, or delete contacts |
+| ~~**Contact merging**~~ | ~~Deduplicate and merge contact records~~ ✅ Implemented (`contact_merge`, `contact_find_duplicates`) |
+| ~~**Bulk operations**~~ | ~~Batch tag, update, or delete contacts~~ ✅ Implemented (`batch_create_contacts`, `batch_tag_contacts`, `batch_create_activities`) |
 | **Email verification** | Email verification on account creation |
 | **Password reset** | Email-based password reset flow |

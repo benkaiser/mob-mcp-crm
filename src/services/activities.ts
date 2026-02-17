@@ -49,6 +49,7 @@ export interface ListActivitiesOptions {
   type?: ActivityInteractionType;
   page?: number;
   per_page?: number;
+  include_deleted?: boolean;
 }
 
 export interface PaginatedResult<T> {
@@ -149,13 +150,34 @@ export class ActivityService {
     return result.changes > 0;
   }
 
+  restore(userId: string, activityId: string): Activity {
+    const row = this.db.prepare(
+      'SELECT * FROM activities WHERE id = ? AND user_id = ? AND deleted_at IS NOT NULL'
+    ).get(activityId, userId) as any;
+
+    if (!row) {
+      throw new Error('Activity not found or not deleted');
+    }
+
+    this.db.prepare(`
+      UPDATE activities SET deleted_at = NULL, updated_at = datetime('now')
+      WHERE id = ? AND user_id = ?
+    `).run(activityId, userId);
+
+    return this.get(userId, activityId)!;
+  }
+
   list(userId: string, options: ListActivitiesOptions = {}): PaginatedResult<Activity> {
     const page = options.page ?? 1;
     const perPage = options.per_page ?? 20;
     const offset = (page - 1) * perPage;
 
-    const conditions: string[] = ['a.user_id = ?', 'a.deleted_at IS NULL'];
+    const conditions: string[] = ['a.user_id = ?'];
     const params: any[] = [userId];
+
+    if (!options.include_deleted) {
+      conditions.push('a.deleted_at IS NULL');
+    }
 
     if (options.contact_id) {
       conditions.push('a.id IN (SELECT activity_id FROM activity_participants WHERE contact_id = ?)');
@@ -184,15 +206,136 @@ export class ActivityService {
     return { data, total: countResult.count, page, per_page: perPage };
   }
 
+  batchCreate(userId: string, inputs: CreateActivityInput[]): Activity[] {
+    if (inputs.length > 50) {
+      throw new Error('Batch size exceeds maximum of 50 items');
+    }
+
+    const results: Activity[] = [];
+
+    const transaction = this.db.transaction(() => {
+      for (let i = 0; i < inputs.length; i++) {
+        try {
+          const activity = this.create(userId, inputs[i]);
+          results.push(activity);
+        } catch (err: any) {
+          throw new Error(`Failed to create activity at index ${i}: ${err.message}`);
+        }
+      }
+    });
+
+    transaction();
+    return results;
+  }
+
   private getParticipants(activityId: string): string[] {
     const rows = this.db.prepare(
       'SELECT contact_id FROM activity_participants WHERE activity_id = ?'
     ).all(activityId) as any[];
     return rows.map((r) => r.contact_id);
   }
+
+  /**
+   * Get a cross-contact activity log with participant names.
+   */
+  getActivityLog(userId: string, options: {
+    type?: ActivityInteractionType;
+    days_back?: number;
+    since?: string;
+    contact_id?: string;
+    sort_order?: 'asc' | 'desc';
+    page?: number;
+    per_page?: number;
+  } = {}): {
+    data: Array<{
+      id: string;
+      type: string;
+      title: string | null;
+      description: string | null;
+      occurred_at: string;
+      duration_minutes: number | null;
+      location: string | null;
+      participants: Array<{ contact_id: string; contact_name: string }>;
+    }>;
+    total: number;
+    page: number;
+    per_page: number;
+  } {
+    const page = options.page ?? 1;
+    const perPage = options.per_page ?? 20;
+    const offset = (page - 1) * perPage;
+    const sortOrder = options.sort_order === 'asc' ? 'ASC' : 'DESC';
+
+    const conditions: string[] = ['a.user_id = ?', 'a.deleted_at IS NULL'];
+    const params: any[] = [userId];
+
+    // Date filter
+    if (options.since) {
+      conditions.push('a.occurred_at >= ?');
+      params.push(options.since);
+    } else {
+      const daysBack = options.days_back ?? 7;
+      const sinceDate = new Date(Date.now() - daysBack * 86400000).toISOString();
+      conditions.push('a.occurred_at >= ?');
+      params.push(sinceDate);
+    }
+
+    if (options.type) {
+      conditions.push('a.type = ?');
+      params.push(options.type);
+    }
+
+    if (options.contact_id) {
+      conditions.push('a.id IN (SELECT activity_id FROM activity_participants WHERE contact_id = ?)');
+      params.push(options.contact_id);
+    }
+
+    const whereClause = conditions.join(' AND ');
+
+    const countResult = this.db.prepare(
+      `SELECT COUNT(*) as count FROM activities a WHERE ${whereClause}`
+    ).get(...params) as any;
+
+    const rows = this.db.prepare(
+      `SELECT a.* FROM activities a WHERE ${whereClause} ORDER BY a.occurred_at ${sortOrder} LIMIT ? OFFSET ?`
+    ).all(...params, perPage, offset) as any[];
+
+    // Get participant names for each activity
+    const participantStmt = this.db.prepare(`
+      SELECT ap.contact_id, c.first_name, c.last_name
+      FROM activity_participants ap
+      JOIN contacts c ON ap.contact_id = c.id
+      WHERE ap.activity_id = ?
+    `);
+
+    const data = rows.map((row) => {
+      const participantRows = participantStmt.all(row.id) as any[];
+      return {
+        id: row.id,
+        type: row.type,
+        title: row.title,
+        description: row.description,
+        occurred_at: row.occurred_at,
+        duration_minutes: row.duration_minutes,
+        location: row.location,
+        participants: participantRows.map((p) => ({
+          contact_id: p.contact_id,
+          contact_name: [p.first_name, p.last_name].filter(Boolean).join(' '),
+        })),
+      };
+    });
+
+    return { data, total: countResult.count, page, per_page: perPage };
+  }
 }
 
 // ─── Activity Type Service ──────────────────────────────────────
+
+export interface UpdateActivityTypeInput {
+  name?: string;
+  category?: string;
+  icon?: string;
+}
 
 export class ActivityTypeService {
   constructor(private db: Database.Database) {}
@@ -211,5 +354,49 @@ export class ActivityTypeService {
     return this.db.prepare(
       'SELECT * FROM activity_types WHERE user_id = ? ORDER BY category, name'
     ).all(userId) as ActivityType[];
+  }
+
+  update(userId: string, typeId: string, input: UpdateActivityTypeInput): ActivityType | null {
+    const existing = this.db.prepare(
+      'SELECT * FROM activity_types WHERE id = ? AND user_id = ?'
+    ).get(typeId, userId) as ActivityType | undefined;
+    if (!existing) return null;
+
+    const fields: string[] = [];
+    const values: any[] = [];
+
+    if (input.name !== undefined) { fields.push('name = ?'); values.push(input.name); }
+    if (input.category !== undefined) { fields.push('category = ?'); values.push(input.category); }
+    if (input.icon !== undefined) { fields.push('icon = ?'); values.push(input.icon); }
+
+    if (fields.length > 0) {
+      values.push(typeId, userId);
+      this.db.prepare(
+        `UPDATE activity_types SET ${fields.join(', ')} WHERE id = ? AND user_id = ?`
+      ).run(...values);
+    }
+
+    return this.db.prepare('SELECT * FROM activity_types WHERE id = ?').get(typeId) as ActivityType;
+  }
+
+  delete(userId: string, typeId: string): { deleted: boolean; warning?: string } {
+    const existing = this.db.prepare(
+      'SELECT * FROM activity_types WHERE id = ? AND user_id = ?'
+    ).get(typeId, userId) as ActivityType | undefined;
+    if (!existing) return { deleted: false };
+
+    const usageCount = (this.db.prepare(
+      'SELECT COUNT(*) as count FROM activities WHERE activity_type_id = ? AND user_id = ?'
+    ).get(typeId, userId) as any).count;
+
+    this.db.prepare(
+      'DELETE FROM activity_types WHERE id = ? AND user_id = ?'
+    ).run(typeId, userId);
+
+    const result: { deleted: boolean; warning?: string } = { deleted: true };
+    if (usageCount > 0) {
+      result.warning = `${usageCount} activit${usageCount === 1 ? 'y was' : 'ies were'} using this type and ${usageCount === 1 ? 'has' : 'have'} been unlinked`;
+    }
+    return result;
   }
 }

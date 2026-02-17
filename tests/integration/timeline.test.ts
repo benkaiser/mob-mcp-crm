@@ -51,7 +51,7 @@ describe('TimelineService', () => {
   });
 
   it('should include life events in timeline', () => {
-    lifeEventService.create({
+    lifeEventService.create(userId, {
       contact_id: contactId,
       event_type: 'new_job',
       title: 'Started at Google',
@@ -66,7 +66,7 @@ describe('TimelineService', () => {
   });
 
   it('should include notes in timeline', () => {
-    noteService.create({
+    noteService.create(userId, {
       contact_id: contactId,
       body: 'Met at the conference',
       title: 'Conference Notes',
@@ -88,7 +88,7 @@ describe('TimelineService', () => {
       participant_contact_ids: [contactId],
     });
 
-    lifeEventService.create({
+    lifeEventService.create(userId, {
       contact_id: contactId,
       event_type: 'moved',
       title: 'Moved',
@@ -112,14 +112,14 @@ describe('TimelineService', () => {
       participant_contact_ids: [contactId],
     });
 
-    lifeEventService.create({
+    lifeEventService.create(userId, {
       contact_id: contactId,
       event_type: 'moved',
       title: 'Moved',
       occurred_at: '2024-08-01',
     });
 
-    noteService.create({
+    noteService.create(userId, {
       contact_id: contactId,
       body: 'A note',
     });
@@ -183,14 +183,14 @@ describe('TimelineService', () => {
   });
 
   it('should exclude deleted life events from timeline', () => {
-    const event = lifeEventService.create({
+    const event = lifeEventService.create(userId, {
       contact_id: contactId,
       event_type: 'moved',
       title: 'Deleted move',
       occurred_at: '2024-08-01',
     });
 
-    lifeEventService.softDelete(event.id);
+    lifeEventService.softDelete(userId, event.id);
 
     const result = timelineService.getTimeline(contactId);
     const lifeEventEntries = result.data.filter((e) => e.type === 'life_event');
@@ -198,12 +198,12 @@ describe('TimelineService', () => {
   });
 
   it('should exclude deleted notes from timeline', () => {
-    const note = noteService.create({
+    const note = noteService.create(userId, {
       contact_id: contactId,
       body: 'Deleted note',
     });
 
-    noteService.softDelete(note.id);
+    noteService.softDelete(userId, note.id);
 
     const result = timelineService.getTimeline(contactId);
     const noteEntries = result.data.filter((e) => e.type === 'note');
@@ -228,7 +228,7 @@ describe('TimelineService', () => {
   });
 
   it('should use "Note" as title fallback for untitled notes', () => {
-    noteService.create({
+    noteService.create(userId, {
       contact_id: contactId,
       body: 'Just a body',
     });
@@ -255,7 +255,7 @@ describe('TimelineService', () => {
   });
 
   it('should include is_pinned in note metadata', () => {
-    noteService.create({
+    noteService.create(userId, {
       contact_id: contactId,
       body: 'Pinned note',
       is_pinned: true,

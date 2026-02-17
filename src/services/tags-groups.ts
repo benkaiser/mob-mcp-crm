@@ -100,6 +100,36 @@ export class TagService {
   }
 
   /**
+   * Tag multiple contacts with the same tag in one call.
+   * Creates the tag if it doesn't exist.
+   */
+  batchTagContacts(userId: string, tagName: string, contactIds: string[], color?: string): { tag: Tag; tagged_contact_ids: string[] } {
+    if (contactIds.length > 50) {
+      throw new Error('Batch size exceeds maximum of 50 items');
+    }
+
+    const taggedIds: string[] = [];
+
+    const transaction = this.db.transaction(() => {
+      const tag = this.create(userId, tagName, color);
+
+      for (let i = 0; i < contactIds.length; i++) {
+        try {
+          this.tagContact(userId, contactIds[i], tagName, color);
+          taggedIds.push(contactIds[i]);
+        } catch (err: any) {
+          throw new Error(`Failed to tag contact at index ${i} (${contactIds[i]}): ${err.message}`);
+        }
+      }
+
+      return tag;
+    });
+
+    const tag = transaction();
+    return { tag, tagged_contact_ids: taggedIds };
+  }
+
+  /**
    * List all tags for a contact.
    */
   listByContact(contactId: string): Tag[] {

@@ -44,6 +44,7 @@ export interface ListTasksOptions {
   priority?: TaskPriority;
   page?: number;
   per_page?: number;
+  include_deleted?: boolean;
 }
 
 export interface PaginatedResult<T> {
@@ -119,13 +120,34 @@ export class TaskService {
     return result.changes > 0;
   }
 
+  restore(userId: string, id: string): Task {
+    const row = this.db.prepare(
+      'SELECT * FROM tasks WHERE id = ? AND user_id = ? AND deleted_at IS NOT NULL'
+    ).get(id, userId) as any;
+
+    if (!row) {
+      throw new Error('Task not found or not deleted');
+    }
+
+    this.db.prepare(`
+      UPDATE tasks SET deleted_at = NULL, updated_at = datetime('now')
+      WHERE id = ? AND user_id = ?
+    `).run(id, userId);
+
+    return this.getById(userId, id)!;
+  }
+
   list(userId: string, options: ListTasksOptions = {}): PaginatedResult<Task> {
     const page = options.page ?? 1;
     const perPage = options.per_page ?? 20;
     const offset = (page - 1) * perPage;
 
-    const conditions: string[] = ['user_id = ?', 'deleted_at IS NULL'];
+    const conditions: string[] = ['user_id = ?'];
     const params: any[] = [userId];
+
+    if (!options.include_deleted) {
+      conditions.push('deleted_at IS NULL');
+    }
 
     if (options.contact_id) {
       conditions.push('contact_id = ?');

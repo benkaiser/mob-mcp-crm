@@ -233,8 +233,8 @@ describe('MCP Auth Enforcement', () => {
       id: 2,
       method: 'tools/call',
       params: {
-        name: 'contact_search',
-        arguments: { query: 'Alice Only' },
+        name: 'contact_list',
+        arguments: { search: 'Alice Only' },
       },
     }, sessionB);
 
@@ -247,8 +247,8 @@ describe('MCP Auth Enforcement', () => {
 
   // ─── Well-Known Metadata Endpoints ──────────────────────
 
-  it('should serve OAuth protected resource metadata', async () => {
-    await startServer();
+  it('should serve OAuth protected resource metadata in persistent mode', async () => {
+    await startServer(false);
 
     const response = await fetch(
       `http://localhost:${port}/.well-known/oauth-protected-resource/mcp`
@@ -261,8 +261,8 @@ describe('MCP Auth Enforcement', () => {
     expect(metadata.authorization_servers.length).toBeGreaterThan(0);
   });
 
-  it('should serve OAuth authorization server metadata', async () => {
-    await startServer();
+  it('should serve OAuth authorization server metadata in persistent mode', async () => {
+    await startServer(false);
 
     const response = await fetch(
       `http://localhost:${port}/.well-known/oauth-authorization-server`
@@ -274,5 +274,19 @@ describe('MCP Auth Enforcement', () => {
     expect(metadata.authorization_endpoint).toBeDefined();
     expect(metadata.token_endpoint).toBeDefined();
     expect(metadata.response_types_supported).toContain('code');
+  });
+
+  it('should serve OAuth metadata even in forgetful mode for client compatibility', async () => {
+    await startServer(true);
+
+    const resourceResponse = await fetch(
+      `http://localhost:${port}/.well-known/oauth-protected-resource/mcp`
+    );
+    expect(resourceResponse.status).toBe(200);
+
+    const serverResponse = await fetch(
+      `http://localhost:${port}/.well-known/oauth-authorization-server`
+    );
+    expect(serverResponse.status).toBe(200);
   });
 });

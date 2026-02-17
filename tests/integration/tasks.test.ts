@@ -183,4 +183,52 @@ describe('TaskService', () => {
     const unlinked = service.update(userId, task.id, { contact_id: null });
     expect(unlinked!.contact_id).toBeNull();
   });
+
+  describe('restore', () => {
+    it('should restore a soft-deleted task', () => {
+      const task = service.create(userId, { title: 'Restorable task' });
+      service.softDelete(userId, task.id);
+
+      expect(service.get(userId, task.id)).toBeNull();
+
+      const restored = service.restore(userId, task.id);
+      expect(restored.id).toBe(task.id);
+      expect(restored.title).toBe('Restorable task');
+      expect(restored.deleted_at).toBeNull();
+
+      expect(service.get(userId, task.id)).not.toBeNull();
+    });
+
+    it('should throw error when restoring non-existent task', () => {
+      expect(() => service.restore(userId, 'nonexistent')).toThrow('Task not found or not deleted');
+    });
+
+    it('should throw error when restoring a task that is not deleted', () => {
+      const task = service.create(userId, { title: 'Active task' });
+      expect(() => service.restore(userId, task.id)).toThrow('Task not found or not deleted');
+    });
+
+    it('should not restore tasks belonging to other users', () => {
+      const otherUserId = createTestUser(db, { email: 'other@example.com' });
+      const otherService = new TaskService(db);
+      const task = otherService.create(otherUserId, { title: 'Other task' });
+      otherService.softDelete(otherUserId, task.id);
+
+      expect(() => service.restore(userId, task.id)).toThrow('Task not found or not deleted');
+    });
+  });
+
+  describe('list with include_deleted', () => {
+    it('should include soft-deleted tasks when include_deleted is true', () => {
+      const task = service.create(userId, { title: 'Deleted' });
+      service.create(userId, { title: 'Kept' });
+      service.softDelete(userId, task.id);
+
+      const withDeleted = service.list(userId, { include_deleted: true });
+      expect(withDeleted.total).toBe(2);
+
+      const withoutDeleted = service.list(userId);
+      expect(withoutDeleted.total).toBe(1);
+    });
+  });
 });

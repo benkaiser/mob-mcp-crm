@@ -231,6 +231,76 @@ describe('ActivityService', () => {
     expect(result.data[0].title).toBe('Newer');
     expect(result.data[1].title).toBe('Older');
   });
+
+  describe('restore', () => {
+    it('should restore a soft-deleted activity', () => {
+      const activity = service.create(userId, {
+        type: 'phone_call',
+        title: 'Restorable',
+        occurred_at: '2024-06-15T10:00:00Z',
+        participant_contact_ids: [contactA],
+      });
+      service.softDelete(userId, activity.id);
+
+      expect(service.get(userId, activity.id)).toBeNull();
+
+      const restored = service.restore(userId, activity.id);
+      expect(restored.id).toBe(activity.id);
+      expect(restored.title).toBe('Restorable');
+      expect(restored.deleted_at).toBeNull();
+
+      expect(service.get(userId, activity.id)).not.toBeNull();
+    });
+
+    it('should throw error when restoring non-existent activity', () => {
+      expect(() => service.restore(userId, 'nonexistent')).toThrow('Activity not found or not deleted');
+    });
+
+    it('should throw error when restoring an activity that is not deleted', () => {
+      const activity = service.create(userId, {
+        type: 'phone_call',
+        occurred_at: '2024-06-15T10:00:00Z',
+        participant_contact_ids: [contactA],
+      });
+      expect(() => service.restore(userId, activity.id)).toThrow('Activity not found or not deleted');
+    });
+
+    it('should not restore activities belonging to other users', () => {
+      const otherUserId = createTestUser(db, { email: 'other@example.com' });
+      const otherContact = createTestContact(db, otherUserId);
+      const otherService = new ActivityService(db);
+      const activity = otherService.create(otherUserId, {
+        type: 'phone_call',
+        occurred_at: '2024-06-15T10:00:00Z',
+        participant_contact_ids: [otherContact],
+      });
+      otherService.softDelete(otherUserId, activity.id);
+
+      expect(() => service.restore(userId, activity.id)).toThrow('Activity not found or not deleted');
+    });
+  });
+
+  describe('list with include_deleted', () => {
+    it('should include soft-deleted activities when include_deleted is true', () => {
+      const activity = service.create(userId, {
+        type: 'phone_call',
+        occurred_at: '2024-06-15T10:00:00Z',
+        participant_contact_ids: [contactA],
+      });
+      service.create(userId, {
+        type: 'email',
+        occurred_at: '2024-06-16T10:00:00Z',
+        participant_contact_ids: [contactA],
+      });
+      service.softDelete(userId, activity.id);
+
+      const withDeleted = service.list(userId, { include_deleted: true });
+      expect(withDeleted.total).toBe(2);
+
+      const withoutDeleted = service.list(userId);
+      expect(withoutDeleted.total).toBe(1);
+    });
+  });
 });
 
 describe('ActivityTypeService', () => {
@@ -271,5 +341,100 @@ describe('ActivityTypeService', () => {
     expect(type.name).toBe('Custom');
     expect(type.category).toBeNull();
     expect(type.icon).toBeNull();
+  });
+
+  describe('update', () => {
+    it('should update an activity type name', () => {
+      const type = service.create(userId, 'Old Name', 'Sports', '⚽');
+      const updated = service.update(userId, type.id, { name: 'New Name' });
+      expect(updated).not.toBeNull();
+      expect(updated!.name).toBe('New Name');
+      expect(updated!.category).toBe('Sports');
+      expect(updated!.icon).toBe('⚽');
+    });
+
+    it('should update an activity type category and icon', () => {
+      const type = service.create(userId, 'Tennis', 'Sports', '🎾');
+      const updated = service.update(userId, type.id, { category: 'Racket Sports', icon: '🏸' });
+      expect(updated).not.toBeNull();
+      expect(updated!.name).toBe('Tennis');
+      expect(updated!.category).toBe('Racket Sports');
+      expect(updated!.icon).toBe('🏸');
+    });
+
+    it('should return null when updating non-existent activity type', () => {
+      expect(service.update(userId, 'nonexistent', { name: 'test' })).toBeNull();
+    });
+
+    it('should not update activity types belonging to other users', () => {
+      const otherUserId = createTestUser(db, { email: 'other@example.com' });
+      const otherService = new ActivityTypeService(db);
+      const type = otherService.create(otherUserId, 'Other Type');
+
+      expect(service.update(userId, type.id, { name: 'Hijacked' })).toBeNull();
+    });
+  });
+
+  describe('delete', () => {
+    it('should delete an activity type', () => {
+      const type = service.create(userId, 'To Delete');
+      const result = service.delete(userId, type.id);
+      expect(result.deleted).toBe(true);
+      expect(result.warning).toBeUndefined();
+
+      const types = service.list(userId);
+      expect(types).toHaveLength(0);
+    });
+
+    it('should return deleted false for non-existent activity type', () => {
+      const result = service.delete(userId, 'nonexistent');
+      expect(result.deleted).toBe(false);
+    });
+
+    it('should not delete activity types belonging to other users', () => {
+      const otherUserId = createTestUser(db, { email: 'other@example.com' });
+      const otherService = new ActivityTypeService(db);
+      const type = otherService.create(otherUserId, 'Other Type');
+
+      const result = service.delete(userId, type.id);
+      expect(result.deleted).toBe(false);
+
+      const otherTypes = otherService.list(otherUserId);
+      expect(otherTypes).toHaveLength(1);
+    });
+
+    it('should return warning when activities use the deleted type', () => {
+      const type = service.create(userId, 'Used Type');
+      const contactId = createTestContact(db, userId, { firstName: 'Charlie' });
+      const activityService = new ActivityService(db);
+      activityService.create(userId, {
+        type: 'activity',
+        occurred_at: '2024-06-15T10:00:00Z',
+        activity_type_id: type.id,
+        participant_contact_ids: [contactId],
+      });
+
+      const result = service.delete(userId, type.id);
+      expect(result.deleted).toBe(true);
+      expect(result.warning).toBe('1 activity was using this type and has been unlinked');
+    });
+
+    it('should unlink activities when type is deleted (ON DELETE SET NULL)', () => {
+      const type = service.create(userId, 'Will Delete');
+      const contactId = createTestContact(db, userId, { firstName: 'Dana' });
+      const activityService = new ActivityService(db);
+      const activity = activityService.create(userId, {
+        type: 'activity',
+        occurred_at: '2024-06-15T10:00:00Z',
+        activity_type_id: type.id,
+        participant_contact_ids: [contactId],
+      });
+
+      service.delete(userId, type.id);
+
+      const fetched = activityService.get(userId, activity.id);
+      expect(fetched).not.toBeNull();
+      expect(fetched!.activity_type_id).toBeNull();
+    });
   });
 });

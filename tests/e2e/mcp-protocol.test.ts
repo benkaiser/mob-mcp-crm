@@ -152,8 +152,8 @@ describe('E2E MCP Protocol', () => {
     const toolNames = toolsData.result.tools.map((t: any) => t.name);
     expect(toolNames).toContain('contact_create');
     expect(toolNames).toContain('contact_list');
-    expect(toolNames).toContain('activity_create');
-    expect(toolNames).toContain('reminder_create');
+    expect(toolNames).toContain('activity_manage');
+    expect(toolNames).toContain('reminder_manage');
     expect(toolNames).toContain('data_export');
     expect(toolNames).toContain('data_statistics');
   });
@@ -297,8 +297,8 @@ describe('E2E MCP Protocol', () => {
       id: 2,
       method: 'tools/call',
       params: {
-        name: 'contact_search',
-        arguments: { query: 'Alice Only' },
+        name: 'contact_list',
+        arguments: { search: 'Alice Only' },
       },
     }, sessionB);
 
