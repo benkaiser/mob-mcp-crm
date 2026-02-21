@@ -159,6 +159,36 @@ export function calculateAge(contact: {
   return { age, approximate };
 }
 
+// ─── Helpers ────────────────────────────────────────────────────
+
+/**
+ * Auto-populate birthday_month and birthday_day from birthday_date when mode is full_date.
+ * This ensures getUpcomingBirthdays can find contacts regardless of whether month/day
+ * were explicitly provided.
+ */
+function normalizeBirthdayFields<T extends {
+  birthday_mode?: string | null;
+  birthday_date?: string | null;
+  birthday_month?: number | null;
+  birthday_day?: number | null;
+}>(input: T): T {
+  if (input.birthday_mode === 'full_date' && input.birthday_date) {
+    const parts = input.birthday_date.split('-');
+    if (parts.length >= 3) {
+      const month = parseInt(parts[1], 10);
+      const day = parseInt(parts[2], 10);
+      if (!isNaN(month) && !isNaN(day)) {
+        return {
+          ...input,
+          birthday_month: input.birthday_month ?? month,
+          birthday_day: input.birthday_day ?? day,
+        };
+      }
+    }
+  }
+  return input;
+}
+
 // ─── Service ────────────────────────────────────────────────────
 
 export class ContactService {
@@ -167,6 +197,9 @@ export class ContactService {
   create(userId: string, input: CreateContactInput): Contact {
     const id = generateId();
     const now = new Date().toISOString();
+
+    // Auto-populate birthday_month/birthday_day from birthday_date for full_date mode
+    const normalizedInput = normalizeBirthdayFields(input);
 
     this.db.prepare(`
       INSERT INTO contacts (
@@ -187,12 +220,12 @@ export class ContactService {
         ?, ?
       )
     `).run(
-      id, userId, input.first_name, input.last_name ?? null, input.nickname ?? null, input.maiden_name ?? null,
-      input.gender ?? null, input.pronouns ?? null, input.avatar_url ?? null,
-      input.birthday_mode ?? null, input.birthday_date ?? null, input.birthday_month ?? null, input.birthday_day ?? null, input.birthday_year_approximate ?? null,
-      input.status ?? 'active', input.deceased_date ?? null, input.is_favorite ? 1 : 0,
-      input.met_at_date ?? null, input.met_at_location ?? null, input.met_through_contact_id ?? null, input.met_description ?? null,
-      input.job_title ?? null, input.company ?? null, input.industry ?? null, input.work_notes ?? null,
+      id, userId, normalizedInput.first_name, normalizedInput.last_name ?? null, normalizedInput.nickname ?? null, normalizedInput.maiden_name ?? null,
+      normalizedInput.gender ?? null, normalizedInput.pronouns ?? null, normalizedInput.avatar_url ?? null,
+      normalizedInput.birthday_mode ?? null, normalizedInput.birthday_date ?? null, normalizedInput.birthday_month ?? null, normalizedInput.birthday_day ?? null, normalizedInput.birthday_year_approximate ?? null,
+      normalizedInput.status ?? 'active', normalizedInput.deceased_date ?? null, normalizedInput.is_favorite ? 1 : 0,
+      normalizedInput.met_at_date ?? null, normalizedInput.met_at_location ?? null, normalizedInput.met_through_contact_id ?? null, normalizedInput.met_description ?? null,
+      normalizedInput.job_title ?? null, normalizedInput.company ?? null, normalizedInput.industry ?? null, normalizedInput.work_notes ?? null,
       now, now,
     );
 
@@ -212,6 +245,25 @@ export class ContactService {
   update(userId: string, contactId: string, input: UpdateContactInput): Contact | null {
     const existing = this.get(userId, contactId);
     if (!existing) return null;
+
+    // Normalize birthday fields: auto-populate month/day from birthday_date if needed.
+    // Use the effective mode (from input or existing) and effective date (from input or existing)
+    // but only add auto-populated fields to normalizedInput (not the effective mode/date themselves).
+    const effectiveMode = input.birthday_mode ?? existing.birthday_mode ?? null;
+    const effectiveDate = 'birthday_date' in input ? input.birthday_date : existing.birthday_date;
+    const normalized = normalizeBirthdayFields({
+      birthday_mode: effectiveMode,
+      birthday_date: effectiveDate ?? null,
+      birthday_month: input.birthday_month ?? null,
+      birthday_day: input.birthday_day ?? null,
+    });
+    const normalizedInput: UpdateContactInput = { ...input };
+    if (!('birthday_month' in input) && normalized.birthday_month != null) {
+      normalizedInput.birthday_month = normalized.birthday_month;
+    }
+    if (!('birthday_day' in input) && normalized.birthday_day != null) {
+      normalizedInput.birthday_day = normalized.birthday_day;
+    }
 
     const fields: string[] = [];
     const values: any[] = [];
@@ -243,9 +295,9 @@ export class ContactService {
     };
 
     for (const [inputKey, dbColumn] of Object.entries(fieldMap)) {
-      if (inputKey in input) {
+      if (inputKey in normalizedInput) {
         fields.push(`${dbColumn} = ?`);
-        let value = (input as any)[inputKey];
+        let value = (normalizedInput as any)[inputKey];
         if (inputKey === 'is_favorite') {
           value = value ? 1 : 0;
         }

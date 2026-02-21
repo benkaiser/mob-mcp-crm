@@ -305,6 +305,28 @@ describe('ContactService.getUpcomingBirthdays', () => {
     expect(wide.data).toHaveLength(1);
   });
 
+  it('should find full_date contacts even when birthday_month/birthday_day are not explicitly provided', () => {
+    const now = new Date();
+    const futureDate = new Date(now);
+    futureDate.setDate(futureDate.getDate() + 10);
+
+    const m = String(futureDate.getMonth() + 1).padStart(2, '0');
+    const d = String(futureDate.getDate()).padStart(2, '0');
+
+    // Create contact with full_date mode but WITHOUT explicit birthday_month/birthday_day
+    service.create(userId, {
+      first_name: 'FullDateOnly',
+      birthday_mode: 'full_date',
+      birthday_date: `1990-${m}-${d}`,
+      // intentionally omitting birthday_month and birthday_day
+    });
+
+    const result = service.getUpcomingBirthdays(userId);
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0].contact_name).toBe('FullDateOnly');
+    expect(result.data[0].days_until).toBeLessThanOrEqual(30);
+  });
+
   it('should skip contacts without birthday info', () => {
     // Contact with no birthday
     service.create(userId, { first_name: 'NoBirthday' });
