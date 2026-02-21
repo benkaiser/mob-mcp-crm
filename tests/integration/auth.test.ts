@@ -342,4 +342,30 @@ describe('OAuthService', () => {
 
     expect(token).not.toBeNull();
   });
+
+  it('should persist tokens across service restarts (new OAuthService instance with same DB)', () => {
+    const code = oauth.createAuthorizationCode({
+      userId,
+      clientId: 'test-client',
+      codeChallenge,
+      codeChallengeMethod: 'S256',
+      redirectUri: 'http://localhost/callback',
+    });
+
+    const token = oauth.exchangeCode({
+      code,
+      codeVerifier,
+      clientId: 'test-client',
+      redirectUri: 'http://localhost/callback',
+    });
+
+    expect(token).not.toBeNull();
+
+    // Simulate a server restart by creating a new OAuthService with the same DB
+    const oauth2 = new OAuthService(db, accounts);
+
+    // Token should still be valid after "restart"
+    expect(oauth2.validateToken(token!.access_token)).toBe(userId);
+    expect(oauth2.getTokenRecord(token!.access_token)).not.toBeNull();
+  });
 });

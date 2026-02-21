@@ -47,7 +47,6 @@ const CODE_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
 
 export class OAuthService {
   private authCodes: Map<string, AuthorizationCode> = new Map();
-  private tokens: Map<string, TokenRecord> = new Map();
 
   constructor(
     private db: Database.Database,
@@ -114,15 +113,13 @@ export class OAuthService {
 
     // Generate access token
     const accessToken = randomBytes(32).toString('hex');
-    const expiresAt = Date.now() + TOKEN_EXPIRY_MS;
+    const createdAt = Date.now();
+    const expiresAt = createdAt + TOKEN_EXPIRY_MS;
 
-    this.tokens.set(accessToken, {
-      accessToken,
-      userId: authCode.userId,
-      clientId: authCode.clientId,
-      createdAt: Date.now(),
-      expiresAt,
-    });
+    this.db.prepare(`
+      INSERT INTO oauth_tokens (access_token, user_id, client_id, created_at, expires_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(accessToken, authCode.userId, authCode.clientId, createdAt, expiresAt);
 
     // Log authorization
     this.logAuthorization(authCode.userId, authCode.clientId, params.ipAddress, params.userAgent);
@@ -139,11 +136,15 @@ export class OAuthService {
    * Used by McpTokenVerifier to access clientId and expiresAt.
    */
   getTokenRecord(accessToken: string): TokenRecord | null {
-    const record = this.tokens.get(accessToken);
+    const record = this.db.prepare(`
+      SELECT access_token, user_id, client_id, created_at, expires_at
+      FROM oauth_tokens WHERE access_token = ?
+    `).get(accessToken) as { access_token: string; user_id: string; client_id: string; created_at: number; expires_at: number } | undefined;
+
     if (!record) return null;
 
-    if (Date.now() > record.expiresAt) {
-      this.tokens.delete(accessToken);
+    if (Date.now() > record.expires_at) {
+      this.db.prepare('DELETE FROM oauth_tokens WHERE access_token = ?').run(accessToken);
       return null;
     }
 
@@ -151,20 +152,30 @@ export class OAuthService {
     this.db.prepare(`
       UPDATE authorization_log SET last_used_at = datetime('now')
       WHERE user_id = ? AND client_id = ?
-    `).run(record.userId, record.clientId);
+    `).run(record.user_id, record.client_id);
 
-    return record;
+    return {
+      accessToken: record.access_token,
+      userId: record.user_id,
+      clientId: record.client_id,
+      createdAt: record.created_at,
+      expiresAt: record.expires_at,
+    };
   }
 
   /**
    * Validate an access token and return the user ID.
    */
   validateToken(accessToken: string): string | null {
-    const record = this.tokens.get(accessToken);
+    const record = this.db.prepare(`
+      SELECT access_token, user_id, client_id, expires_at
+      FROM oauth_tokens WHERE access_token = ?
+    `).get(accessToken) as { access_token: string; user_id: string; client_id: string; expires_at: number } | undefined;
+
     if (!record) return null;
 
-    if (Date.now() > record.expiresAt) {
-      this.tokens.delete(accessToken);
+    if (Date.now() > record.expires_at) {
+      this.db.prepare('DELETE FROM oauth_tokens WHERE access_token = ?').run(accessToken);
       return null;
     }
 
@@ -172,16 +183,17 @@ export class OAuthService {
     this.db.prepare(`
       UPDATE authorization_log SET last_used_at = datetime('now')
       WHERE user_id = ? AND client_id = ?
-    `).run(record.userId, record.clientId);
+    `).run(record.user_id, record.client_id);
 
-    return record.userId;
+    return record.user_id;
   }
 
   /**
    * Revoke an access token.
    */
   revokeToken(accessToken: string): boolean {
-    return this.tokens.delete(accessToken);
+    const result = this.db.prepare('DELETE FROM oauth_tokens WHERE access_token = ?').run(accessToken);
+    return result.changes > 0;
   }
 
   /**
@@ -205,8 +217,6 @@ export class OAuthService {
       if (now > record.expiresAt) this.authCodes.delete(code);
     }
 
-    for (const [token, record] of this.tokens) {
-      if (now > record.expiresAt) this.tokens.delete(token);
-    }
+    this.db.prepare('DELETE FROM oauth_tokens WHERE expires_at < ?').run(now);
   }
 }
