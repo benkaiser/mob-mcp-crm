@@ -42,7 +42,7 @@ export function verifyPkce(codeVerifier: string, codeChallenge: string, method: 
 
 // ─── OAuth Service ──────────────────────────────────────────────
 
-const TOKEN_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
+const TOKEN_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const CODE_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
 
 export class OAuthService {
