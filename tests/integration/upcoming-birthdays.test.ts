@@ -305,6 +305,64 @@ describe('ContactService.getUpcomingBirthdays', () => {
     expect(wide.data).toHaveLength(1);
   });
 
+  it('should find full_date contacts even when birthday_month/birthday_day are not explicitly provided', () => {
+    const now = new Date();
+    const futureDate = new Date(now);
+    futureDate.setDate(futureDate.getDate() + 10);
+
+    const m = String(futureDate.getMonth() + 1).padStart(2, '0');
+    const d = String(futureDate.getDate()).padStart(2, '0');
+
+    // Create contact with full_date mode but WITHOUT explicit birthday_month/birthday_day
+    service.create(userId, {
+      first_name: 'FullDateOnly',
+      birthday_mode: 'full_date',
+      birthday_date: `1990-${m}-${d}`,
+      // intentionally omitting birthday_month and birthday_day
+    });
+
+    const result = service.getUpcomingBirthdays(userId);
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0].contact_name).toBe('FullDateOnly');
+    expect(result.data[0].days_until).toBeLessThanOrEqual(30);
+  });
+
+  it('should find pre-existing full_date contacts after migration 005 backfill', () => {
+    const now = new Date();
+    const futureDate = new Date(now);
+    futureDate.setDate(futureDate.getDate() + 10);
+
+    const m = String(futureDate.getMonth() + 1).padStart(2, '0');
+    const d = String(futureDate.getDate()).padStart(2, '0');
+
+    // Simulate a contact that existed before the fix: birthday_date set but month/day NULL
+    const id = Math.random().toString(36).substring(2, 10);
+    db.prepare(`
+      INSERT INTO contacts (id, user_id, first_name, birthday_mode, birthday_date, birthday_month, birthday_day, status, is_favorite, created_at, updated_at)
+      VALUES (?, ?, 'LegacyContact', 'full_date', ?, NULL, NULL, 'active', 0, datetime('now'), datetime('now'))
+    `).run(id, userId, `1990-${m}-${d}`);
+
+    // Before the migration-equivalent UPDATE, the contact should be invisible
+    const before = service.getUpcomingBirthdays(userId);
+    expect(before.data).toHaveLength(0);
+
+    // Run migration 005 backfill manually (simulates what the migration does on existing DBs)
+    db.prepare(`
+      UPDATE contacts
+      SET
+        birthday_month = CAST(SUBSTR(birthday_date, 6, 2) AS INTEGER),
+        birthday_day   = CAST(SUBSTR(birthday_date, 9, 2) AS INTEGER)
+      WHERE birthday_mode = 'full_date'
+        AND birthday_date IS NOT NULL
+        AND (birthday_month IS NULL OR birthday_day IS NULL)
+    `).run();
+
+    // After backfill the contact should now appear
+    const after = service.getUpcomingBirthdays(userId);
+    expect(after.data).toHaveLength(1);
+    expect(after.data[0].contact_name).toBe('LegacyContact');
+  });
+
   it('should skip contacts without birthday info', () => {
     // Contact with no birthday
     service.create(userId, { first_name: 'NoBirthday' });
