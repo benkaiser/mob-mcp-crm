@@ -1677,8 +1677,8 @@ export function createMcpServer(db: Database.Database): McpServer {
       }
       return textResult('Push notification management was declined.');
     } catch (err: any) {
-      // Client doesn't support URL elicitation — return the URL as text
-      console.error('URL elicitation failed:', err?.message || err);
+      // Client doesn't support URL elicitation or handler not registered — return the URL as text
+      console.warn('URL elicitation unavailable, falling back to text:', err?.message || err);
       return textResult({
         message: 'Open the following URL in your browser to manage push notification subscriptions:',
         url,
