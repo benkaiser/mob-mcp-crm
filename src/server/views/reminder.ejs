@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <%- include('_head', { title: 'Reminder — Mob CRM' }) %>
+  <style>
+    body { background: #f5f5f5; }
+    .navbar { background: #1e293b; color: #fff; padding: 0.8rem 1.5rem; display: flex; justify-content: space-between; align-items: center; }
+    .navbar h1 { font-size: 1.2rem; }
+    .navbar .user-info { display: flex; align-items: center; gap: 1rem; font-size: 0.9rem; }
+    .navbar a { color: #93c5fd; text-decoration: none; font-size: 0.9rem; }
+    .navbar a:hover { text-decoration: underline; }
+    .container { max-width: 720px; margin: 2rem auto; padding: 0 1rem; }
+    .card { background: #fff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); padding: 2rem; margin-bottom: 1.5rem; }
+    h2 { font-size: 1.4rem; margin-bottom: 0.5rem; color: #1e293b; }
+    p { margin-bottom: 1rem; color: #666; }
+    .badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
+    .badge-overdue { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+    .badge-active { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+    .badge-completed { background: #f5f5f5; color: #666; border: 1px solid #ddd; }
+    .badge-snoozed { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
+    .detail { margin-bottom: 0.8rem; }
+    .detail-label { font-size: 0.8rem; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.2rem; }
+    .detail-value { font-size: 1rem; color: #333; }
+    .actions { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid #eee; }
+    .actions form { margin: 0; }
+    button.success { background: #16a34a; }
+    button.success:hover { background: #15803d; }
+    button.info { background: #2563eb; }
+    button.info:hover { background: #1d4ed8; }
+    button.secondary { background: #6b7280; }
+    button.secondary:hover { background: #4b5563; }
+    button.danger { background: #dc2626; }
+    button.danger:hover { background: #b91c1c; }
+    .success-msg { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; border-radius: 6px; padding: 0.8rem 1rem; margin-bottom: 1.5rem; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <%- include('_navbar', { userName, showDashboardLink: true }) %>
+  <div class="container">
+    <% if (success) { %>
+    <div class="success-msg"><%= success %></div>
+    <% } %>
+
+    <div class="card">
+      <div style="display:flex; align-items:center; gap:0.8rem; margin-bottom:1rem;">
+        <h2 style="margin:0;"><%= reminder.title %></h2>
+        <% if (reminder.status === 'completed') { %>
+          <span class="badge badge-completed">Completed</span>
+        <% } else if (reminder.status === 'snoozed') { %>
+          <span class="badge badge-snoozed">Snoozed</span>
+        <% } else if (isOverdue) { %>
+          <span class="badge badge-overdue">Overdue</span>
+        <% } else { %>
+          <span class="badge badge-active">Active</span>
+        <% } %>
+      </div>
+
+      <div class="detail">
+        <div class="detail-label">Contact</div>
+        <div class="detail-value"><%= contactName %></div>
+      </div>
+
+      <div class="detail">
+        <div class="detail-label">Date</div>
+        <div class="detail-value"><%= reminder.reminder_date %></div>
+      </div>
+
+      <% if (reminder.frequency !== 'one_time') { %>
+      <div class="detail">
+        <div class="detail-label">Repeats</div>
+        <div class="detail-value"><%= reminder.frequency.replace('_', ' ') %></div>
+      </div>
+      <% } %>
+
+      <% if (reminder.description) { %>
+      <div class="detail">
+        <div class="detail-label">Description</div>
+        <div class="detail-value"><%= reminder.description %></div>
+      </div>
+      <% } %>
+
+      <% if (reminder.status === 'active' || reminder.status === 'snoozed') { %>
+      <div class="actions">
+        <form method="POST" action="/web/reminder/<%= reminder.id %>/complete">
+          <button type="submit" class="success">Mark Complete</button>
+        </form>
+
+        <form method="POST" action="/web/reminder/<%= reminder.id %>/snooze">
+          <input type="hidden" name="days" value="1">
+          <button type="submit" class="info">Snooze 1 Day</button>
+        </form>
+
+        <form method="POST" action="/web/reminder/<%= reminder.id %>/snooze">
+          <input type="hidden" name="days" value="7">
+          <button type="submit" class="info">Snooze 1 Week</button>
+        </form>
+
+        <form method="POST" action="/web/reminder/<%= reminder.id %>/dismiss">
+          <button type="submit" class="secondary">Dismiss</button>
+        </form>
+      </div>
+      <% } %>
+    </div>
+  </div>
+</body>
+</html>

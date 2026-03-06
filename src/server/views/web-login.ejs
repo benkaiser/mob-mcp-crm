@@ -1,7 +1,10 @@
 <%
+const redirectValue = (typeof redirect !== 'undefined' && redirect) ? redirect : '';
+const escapedRedirect = redirectValue.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
 const content = `
   ${ error ? '<div class="error">' + error + '</div>' : '' }
   <form method="POST" action="/web/login">
+    <input type="hidden" name="redirect" value="${escapedRedirect}">
     <label for="email">Email</label>
     <input type="email" id="email" name="email" required autofocus>
     <label for="password">Password</label>

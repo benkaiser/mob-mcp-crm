@@ -16,6 +16,7 @@ import { OAuthService } from '../auth/oauth.js';
 import { McpTokenVerifier } from '../auth/mcp-token-verifier.js';
 import { importMonicaExport } from '../services/monica-import.js';
 import { generateId } from '../utils.js';
+import { ReminderService } from '../services/reminders.js';
 import { ForgetfulTemplate } from '../db/forgetful-template.js';
 import { UserSettingsService } from '../services/settings.js';
 import { PushNotificationService } from '../services/push-notifications.js';
@@ -115,14 +116,14 @@ export function createServer(config: ServerConfig): {
   function requireWebSession(req: express.Request, res: express.Response, next: express.NextFunction): void {
     const sessionToken = parseCookie(req.headers.cookie ?? '', 'mob_session');
     if (!sessionToken) {
-      res.redirect('/web/login');
+      res.redirect(`/web/login?redirect=${encodeURIComponent(req.originalUrl)}`);
       return;
     }
     const session = webSessions.get(sessionToken);
     if (!session) {
       // Expired/invalid session — clear cookie and redirect
       res.setHeader('Set-Cookie', 'mob_session=; Path=/; HttpOnly; Max-Age=0');
-      res.redirect('/web/login');
+      res.redirect(`/web/login?redirect=${encodeURIComponent(req.originalUrl)}`);
       return;
     }
     // Attach user info to request for downstream use
@@ -367,26 +368,30 @@ export function createServer(config: ServerConfig): {
       res.redirect('/web/dashboard');
       return;
     }
-    res.render('web-login', { error: undefined });
+    res.render('web-login', { error: undefined, redirect: req.query.redirect || '' });
   });
 
   app.post('/web/login', async (req, res) => {
     const { email, password } = req.body;
+    const redirect = req.body.redirect || '';
+    // Validate redirect is a relative path to prevent open redirects
+    const safeRedirect = (typeof redirect === 'string' && redirect.startsWith('/') && !redirect.startsWith('//')) ? redirect : '/web/dashboard';
+
     if (!email || !password) {
-      res.status(400).render('web-login', { error: 'Email and password are required' });
+      res.status(400).render('web-login', { error: 'Email and password are required', redirect });
       return;
     }
 
     const user = await accountService.login(email, password);
     if (!user) {
-      res.status(401).render('web-login', { error: 'Invalid email or password' });
+      res.status(401).render('web-login', { error: 'Invalid email or password', redirect });
       return;
     }
 
     const token = randomUUID();
     webSessions.set(token, { userId: user.id, userName: user.name, email: user.email });
     res.setHeader('Set-Cookie', `mob_session=${token}; Path=/; HttpOnly; SameSite=Lax`);
-    res.redirect('/web/dashboard');
+    res.redirect(safeRedirect);
   });
 
   app.get('/web/logout', (req, res) => {
@@ -521,6 +526,63 @@ export function createServer(config: ServerConfig): {
     const user = (req as any).webUser as { userId: string };
     const subscriptions = pushService.getSubscriptions(user.userId);
     res.json({ count: subscriptions.length });
+  });
+
+  // ─── Reminder Detail Page ──────────────────────────────────
+  const reminderService = new ReminderService(db);
+
+  app.get('/web/reminder/:id', requireWebSession, (req, res) => {
+    const user = (req as any).webUser as { userId: string; userName: string };
+    const reminder = reminderService.get(user.userId, req.params.id);
+    if (!reminder) {
+      res.status(404).send('Reminder not found');
+      return;
+    }
+
+    const contact = db.prepare('SELECT first_name, last_name FROM contacts WHERE id = ?').get(reminder.contact_id) as { first_name: string; last_name: string | null } | undefined;
+    const contactName = contact ? [contact.first_name, contact.last_name].filter(Boolean).join(' ') : 'Unknown';
+    const today = new Date().toISOString().split('T')[0];
+    const isOverdue = reminder.status === 'active' && reminder.reminder_date < today;
+
+    res.render('reminder', {
+      userName: user.userName,
+      reminder,
+      contactName,
+      isOverdue,
+      success: req.query.success || undefined,
+    });
+  });
+
+  app.post('/web/reminder/:id/complete', requireWebSession, (req, res) => {
+    const user = (req as any).webUser as { userId: string };
+    const result = reminderService.complete(user.userId, req.params.id);
+    if (!result) {
+      res.status(404).send('Reminder not found');
+      return;
+    }
+    res.redirect(`/web/reminder/${req.params.id}?success=${encodeURIComponent('Reminder marked as complete.')}`);
+  });
+
+  app.post('/web/reminder/:id/snooze', requireWebSession, (req, res) => {
+    const user = (req as any).webUser as { userId: string };
+    const days = parseInt(req.body.days) || 1;
+    const newDate = new Date(Date.now() + days * 86400000).toISOString().split('T')[0];
+    const result = reminderService.snooze(user.userId, req.params.id, newDate);
+    if (!result) {
+      res.status(404).send('Reminder not found');
+      return;
+    }
+    res.redirect(`/web/reminder/${req.params.id}?success=${encodeURIComponent(`Reminder snoozed until ${newDate}.`)}`);
+  });
+
+  app.post('/web/reminder/:id/dismiss', requireWebSession, (req, res) => {
+    const user = (req as any).webUser as { userId: string };
+    const success = reminderService.softDelete(user.userId, req.params.id);
+    if (!success) {
+      res.status(404).send('Reminder not found');
+      return;
+    }
+    res.redirect(`/web/reminder/${req.params.id}?success=${encodeURIComponent('Reminder dismissed.')}`);
   });
 
   // ─── Monica Import ────────────────────────────────────────
@@ -782,7 +844,7 @@ export function createServer(config: ServerConfig): {
                   user.id,
                   title,
                   body,
-                  '/web/dashboard'
+                  `/web/reminder/${reminder.id}`
                 );
               } catch {
                 // Push send failure is non-fatal
