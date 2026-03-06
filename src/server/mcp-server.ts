@@ -1661,17 +1661,29 @@ export function createMcpServer(db: Database.Database): McpServer {
     const token = accountServiceForMcp.createAutoLoginToken(userId);
     const baseUrl = (db.prepare("SELECT value FROM server_config WHERE key = 'base_url'").get() as any)?.value || 'http://localhost:3000';
     const url = `${baseUrl}/web/notifications?token=${token}`;
-    const elicitationId = randomUUID();
 
-    // Fire-and-forget: don't block the tool response waiting for the user to interact
-    server.server.elicitInput({
-      mode: 'url',
-      message: 'Open this link to manage your push notification subscriptions. The link expires in 1 hour.',
-      url,
-      elicitationId,
-    }).catch(() => { /* client may not support elicitation */ });
+    // Try URL elicitation if client supports it, otherwise fall back to text
+    try {
+      const elicitationId = randomUUID();
+      const result = await server.server.elicitInput({
+        mode: 'url',
+        message: 'Open this link to manage your push notification subscriptions. The link expires in 1 hour.',
+        url,
+        elicitationId,
+      });
 
-    return textResult('Opening push notification management page. The link expires in 1 hour.');
+      if (result.action === 'accept') {
+        return textResult('Push notification management page opened. You can configure your subscriptions there.');
+      }
+      return textResult('Push notification management was declined.');
+    } catch {
+      // Client doesn't support URL elicitation — return the URL as text
+      return textResult({
+        message: 'Open the following URL in your browser to manage push notification subscriptions:',
+        url,
+        note: 'This link expires in 1 hour.',
+      });
+    }
   });
 
   return server;
