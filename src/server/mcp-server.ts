@@ -1663,17 +1663,15 @@ export function createMcpServer(db: Database.Database): McpServer {
     const url = `${baseUrl}/web/notifications?token=${token}`;
     const elicitationId = randomUUID();
 
-    const result = await server.server.elicitInput({
+    // Fire-and-forget: don't block the tool response waiting for the user to interact
+    server.server.elicitInput({
       mode: 'url',
       message: 'Open this link to manage your push notification subscriptions. The link expires in 1 hour.',
       url,
       elicitationId,
-    });
+    }).catch(() => { /* client may not support elicitation */ });
 
-    if (result.action === 'accept') {
-      return textResult('Push notification management page opened. You can configure your subscriptions there.');
-    }
-    return textResult('Push notification management was declined.');
+    return textResult('Opening push notification management page. The link expires in 1 hour.');
   });
 
   return server;

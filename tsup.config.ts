@@ -12,5 +12,6 @@ export default defineConfig({
   splitting: false,
   onSuccess: async () => {
     cpSync('src/server/views', 'dist/views', { recursive: true });
+    cpSync('src/server/service-worker.js', 'dist/service-worker.js');
   },
 });
