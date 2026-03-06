@@ -573,6 +573,13 @@ export function createServer(config: ServerConfig): {
   });
 
   // ─── MCP Streamable HTTP: POST ─────────────────────────────
+  // Disable nginx proxy buffering for all MCP endpoints so SSE streams
+  // (including server-to-client requests like elicitation) are forwarded immediately.
+  app.use('/mcp', (_req, res, next) => {
+    res.setHeader('X-Accel-Buffering', 'no');
+    next();
+  });
+
   app.post('/mcp', mcpAuth, async (req, res) => {
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
