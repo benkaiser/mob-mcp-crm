@@ -596,7 +596,9 @@ export function createServer(config: ServerConfig): {
     }
 
     // New session — only allowed for initialization requests
-    if (!sessionId && isInitializeRequest(req.body)) {
+    if (isInitializeRequest(req.body)) {
+      // If client sent an old session ID (e.g. after server restart), ignore it
+      // and create a fresh session.
       // Determine which DB to use for this MCP session
       const mcpDb = config.forgetful
         ? (req as any)._forgetfulSession?.db
@@ -631,10 +633,12 @@ export function createServer(config: ServerConfig): {
       return;
     }
 
-    // Invalid request
-    res.status(400).json({
+    // Invalid request — non-init request without valid session
+    // Return 404 for stale session IDs so clients know to re-initialize
+    const status = sessionId ? 404 : 400;
+    res.status(status).json({
       jsonrpc: '2.0',
-      error: { code: -32000, message: 'Bad Request: No valid session or not an initialization request' },
+      error: { code: -32000, message: sessionId ? 'Not Found: Session expired or unknown' : 'Bad Request: Not an initialization request' },
       id: null,
     });
   });
@@ -645,9 +649,9 @@ export function createServer(config: ServerConfig): {
     if (sessionId && transports[sessionId]) {
       await transports[sessionId].handleRequest(req, res);
     } else {
-      res.status(400).json({
+      res.status(404).json({
         jsonrpc: '2.0',
-        error: { code: -32000, message: 'Bad Request: Invalid or missing session ID' },
+        error: { code: -32000, message: 'Not Found: Session expired or unknown' },
         id: null,
       });
     }
@@ -659,9 +663,9 @@ export function createServer(config: ServerConfig): {
     if (sessionId && transports[sessionId]) {
       await transports[sessionId].handleRequest(req, res);
     } else {
-      res.status(400).json({
+      res.status(404).json({
         jsonrpc: '2.0',
-        error: { code: -32000, message: 'Bad Request: Invalid or missing session ID' },
+        error: { code: -32000, message: 'Not Found: Session expired or unknown' },
         id: null,
       });
     }
