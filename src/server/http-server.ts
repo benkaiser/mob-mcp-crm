@@ -728,6 +728,74 @@ export function createServer(config: ServerConfig): {
     };
 
     birthdaySchedulerInterval = setInterval(runBirthdayScheduler, 15 * 60 * 1000);
+
+    // Reminder push notification scheduler (every 15 minutes)
+    const runReminderScheduler = async () => {
+      try {
+        const users = db.prepare('SELECT id FROM users').all() as { id: string }[];
+        for (const user of users) {
+          const settings = settingsService.get(user.id);
+          const now = new Date();
+
+          // Convert current time to user's timezone
+          const userTime = new Intl.DateTimeFormat('en-US', {
+            timeZone: settings.timezone,
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+          }).format(now);
+
+          // Use the same reminder time window as birthdays
+          const [currentHour, currentMin] = userTime.split(':').map(Number);
+          const [reminderHour, reminderMin] = settings.birthday_reminder_time.split(':').map(Number);
+          const currentMins = currentHour * 60 + currentMin;
+          const reminderMins = reminderHour * 60 + reminderMin;
+
+          if (currentMins >= reminderMins && currentMins < reminderMins + 15) {
+            // Get today's date in user's timezone
+            const userToday = new Intl.DateTimeFormat('en-CA', {
+              timeZone: settings.timezone,
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+            }).format(now); // en-CA gives YYYY-MM-DD format
+
+            // Find active reminders due today or overdue
+            const dueReminders = db.prepare(`
+              SELECT r.*, c.first_name, c.last_name
+              FROM reminders r
+              JOIN contacts c ON r.contact_id = c.id
+              WHERE r.deleted_at IS NULL AND c.deleted_at IS NULL
+                AND c.user_id = ?
+                AND r.status = 'active'
+                AND r.reminder_date <= ?
+            `).all(user.id, userToday) as any[];
+
+            for (const reminder of dueReminders) {
+              const contactName = [reminder.first_name, reminder.last_name].filter(Boolean).join(' ');
+              const isOverdue = reminder.reminder_date < userToday;
+              const title = isOverdue ? `Overdue: ${reminder.title}` : `Reminder: ${reminder.title}`;
+              const body = contactName + (reminder.description ? ` — ${reminder.description}` : '');
+
+              try {
+                await pushService.sendPushNotification(
+                  user.id,
+                  title,
+                  body,
+                  '/web/dashboard'
+                );
+              } catch {
+                // Push send failure is non-fatal
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Reminder scheduler error:', err);
+      }
+    };
+
+    setInterval(runReminderScheduler, 15 * 60 * 1000);
   }
 
   return {
