@@ -575,8 +575,14 @@ export function createServer(config: ServerConfig): {
   // ─── MCP Streamable HTTP: POST ─────────────────────────────
   // Disable nginx proxy buffering for all MCP endpoints so SSE streams
   // (including server-to-client requests like elicitation) are forwarded immediately.
+  // We intercept writeHead because the SDK's transport fully takes over the response,
+  // overwriting any headers set beforehand.
   app.use('/mcp', (_req, res, next) => {
-    res.setHeader('X-Accel-Buffering', 'no');
+    const origWriteHead = res.writeHead.bind(res);
+    res.writeHead = function (statusCode: number, ...args: any[]) {
+      res.setHeader('X-Accel-Buffering', 'no');
+      return origWriteHead(statusCode, ...args);
+    } as any;
     next();
   });
 
