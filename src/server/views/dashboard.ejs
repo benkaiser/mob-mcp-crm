@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <%- include('_head', { title: 'Dashboard — Mob CRM' }) %>
+  <style>
+    body { background: #f5f5f5; }
+    .navbar { background: #1e293b; color: #fff; padding: 0.8rem 1.5rem; display: flex; justify-content: space-between; align-items: center; }
+    .navbar h1 { font-size: 1.2rem; }
+    .navbar .user-info { display: flex; align-items: center; gap: 1rem; font-size: 0.9rem; }
+    .navbar a { color: #93c5fd; text-decoration: none; font-size: 0.9rem; }
+    .navbar a:hover { text-decoration: underline; }
+    .container { max-width: 720px; margin: 2rem auto; padding: 0 1rem; }
+    .welcome { margin-bottom: 1.5rem; }
+    .welcome h2 { font-size: 1.6rem; color: #1e293b; margin-bottom: 0.3rem; }
+    .welcome p { color: #666; }
+    .card { background: #fff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); padding: 1.5rem 2rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 1rem; text-decoration: none; color: inherit; transition: box-shadow 0.15s; }
+    .card:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.12); }
+    .card-icon { font-size: 2rem; flex-shrink: 0; }
+    .card-body h3 { font-size: 1.1rem; color: #1e293b; margin-bottom: 0.2rem; }
+    .card-body p { color: #666; font-size: 0.9rem; margin: 0; }
+  </style>
+</head>
+<body>
+  <%- include('_navbar', { userName, showDashboardLink: false }) %>
+  <div class="container">
+    <% if (error) { %><div class="error" style="background:#fef2f2;color:#dc2626;border:1px solid #fecaca;border-radius:6px;padding:0.8rem 1rem;margin-bottom:1.5rem;font-size:0.9rem;"><%= error %></div><% } %>
+    <% if (success) { %><div class="success" style="background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;border-radius:6px;padding:0.8rem 1rem;margin-bottom:1.5rem;font-size:0.9rem;"><%= success %></div><% } %>
+
+    <div class="welcome">
+      <h2>Welcome, <%= userName %></h2>
+      <p>Manage your Mob CRM settings and data.</p>
+    </div>
+
+    <a href="/web/notifications" class="card">
+      <div class="card-icon">&#x1F514;</div>
+      <div class="card-body">
+        <h3>Push Notifications</h3>
+        <p>Enable browser push notifications for birthday reminders and alerts.</p>
+      </div>
+    </a>
+
+    <a href="/web/import" class="card">
+      <div class="card-icon">&#x1F4E5;</div>
+      <div class="card-body">
+        <h3>Import from Monica CRM</h3>
+        <p>Upload a Monica SQL export to import contacts, notes, activities, and more.</p>
+      </div>
+    </a>
+  </div>
+</body>
+</html>

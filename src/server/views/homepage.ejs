@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <%- include('_head', { title: 'Mob — AI-First Personal CRM' }) %>
+  <style>
+    body { max-width: 720px; margin: 0 auto; padding: 2rem 1rem; }
+    h1 { font-size: 2.5rem; margin-bottom: 0.5rem; }
+    h2 { font-size: 1.4rem; margin-top: 2rem; margin-bottom: 0.5rem; color: #555; }
+    p { margin-bottom: 1rem; }
+    .tagline { font-size: 1.2rem; color: #666; margin-bottom: 2rem; }
+    .origin { font-size: 0.9rem; color: #888; font-style: italic; margin-bottom: 2rem; }
+    code { background: #f4f4f4; padding: 0.15em 0.4em; border-radius: 3px; font-size: 0.9em; }
+    pre { background: #f4f4f4; padding: 1rem; border-radius: 6px; overflow-x: auto; margin-bottom: 1rem; }
+    pre code { background: none; padding: 0; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; }
+    th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #eee; }
+    th { color: #555; font-weight: 600; }
+    .examples { list-style: none; }
+    .examples li { padding: 0.5rem 0; border-bottom: 1px solid #f0f0f0; }
+    .examples li::before { content: '\uD83D\uDCAC '; }
+    a { color: #2563eb; }
+    .guest-banner { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; padding: 1.2rem 1.5rem; margin-top: 2rem; margin-bottom: 0.5rem; }
+    .guest-banner h2 { margin-top: 0; color: #1d4ed8; }
+    .guest-banner p { margin-bottom: 0.7rem; }
+    .guest-banner ul { margin: 0.5rem 0 0 1.2rem; }
+    .guest-banner li { margin-bottom: 0.3rem; font-size: 0.95rem; }
+    .guest-banner code { background: #dbeafe; }
+  </style>
+</head>
+<body>
+  <h1>&#x1F998; Mob</h1>
+  <p class="tagline">An AI-first Personal CRM</p>
+  <p class="origin">"Mob" is the name for a group of kangaroos.</p>
+
+  <p>Mob is a personal CRM you interact with entirely through natural language via an AI assistant. No forms, no dashboards — just talk about your relationships and Mob keeps track.</p>
+
+  <% if (forgetful) { %>
+  <div class="guest-banner">
+    <h2>Guest Mode</h2>
+    <p>This server is running in <strong>guest mode</strong> for testing and demos. No account or login is required.</p>
+    <ul>
+      <li>Each MCP session gets its own isolated database pre-loaded with sample data</li>
+      <li>You are signed in as <strong>Bluey Heeler</strong> with 20 contacts from the Heeler family and friends</li>
+      <li>All data is temporary and will be lost when the session ends or the server restarts</li>
+      <li>Just point your MCP client at <code><%= serverUrl %>/mcp</code> and start chatting</li>
+    </ul>
+  </div>
+  <% } %>
+
+  <h2>How to Connect</h2>
+  <table>
+    <tr><th>Transport</th><td>Streamable HTTP</td></tr>
+    <tr><th>Server URL</th><td><code><%= serverUrl %>/mcp</code></td></tr>
+    <% if (forgetful) { %>
+    <tr><th>Auth</th><td>None required (Guest Mode)</td></tr>
+    <% } else { %>
+    <tr><th>Auth</th><td>OAuth 2.0 with PKCE</td></tr>
+    <% } %>
+  </table>
+
+  <p>Recommended client: <a href="https://github.com/benkaiser/joey-mcp-client">Joey MCP Client</a></p>
+
+  <h2>Example Interactions</h2>
+  <% if (forgetful) { %>
+  <ul class="examples">
+    <li>Who are my favourite contacts?</li>
+    <li>When is Bingo's birthday?</li>
+    <li>Log that I played Keepy Uppy with Bandit and Bingo at home</li>
+    <li>What's Muffin's food preferences?</li>
+    <li>Remind me to plan a playdate with Mackenzie next week</li>
+    <li>Show me my family contacts</li>
+    <li>Add a gift idea for Bingo: a new Floppy bunny plush for her birthday</li>
+    <li>Who haven't I talked to in a while?</li>
+  </ul>
+  <% } else { %>
+  <ul class="examples">
+    <li>Add a new contact: Sarah Chen, she works at Google as a senior engineer</li>
+    <li>Log that I had coffee with Mike yesterday at Blue Bottle</li>
+    <li>When is Tom's birthday?</li>
+    <li>Remind me to call Lisa next Tuesday</li>
+    <li>Who haven't I talked to in a while?</li>
+  </ul>
+
+  <h2>Web Dashboard</h2>
+  <p><a href="/web/login">Sign in to the web dashboard</a> to import your Monica CRM data.</p>
+  <% } %>
+</body>
+</html>

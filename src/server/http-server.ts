@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import express from 'express';
 import multer from 'multer';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -15,6 +17,9 @@ import { McpTokenVerifier } from '../auth/mcp-token-verifier.js';
 import { importMonicaExport } from '../services/monica-import.js';
 import { generateId } from '../utils.js';
 import { ForgetfulTemplate } from '../db/forgetful-template.js';
+import { UserSettingsService } from '../services/settings.js';
+import { PushNotificationService } from '../services/push-notifications.js';
+import { NotificationService } from '../services/notifications.js';
 
 export interface ServerConfig {
   port: number;
@@ -88,6 +93,12 @@ export function createServer(config: ServerConfig): {
   const mcpAuth = config.forgetful ? forgetfulMcpAuth : bearerAuth;
 
   const app = express();
+
+  // Set up EJS view engine
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  app.set('view engine', 'ejs');
+  app.set('views', path.join(__dirname, 'views'));
+
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
@@ -121,7 +132,7 @@ export function createServer(config: ServerConfig): {
 
   // ─── Homepage ──────────────────────────────────────────────
   app.get('/', (_req, res) => {
-    res.send(getHomepageHtml(serverUrl, config.forgetful));
+    res.render('homepage', { serverUrl, forgetful: config.forgetful });
   });
 
   // ─── Health Check ──────────────────────────────────────────
@@ -149,7 +160,7 @@ export function createServer(config: ServerConfig): {
     // If this is a form post from the browser registration page, handle it separately
     const isFormPost = req.headers['content-type']?.includes('application/x-www-form-urlencoded');
     if (isFormPost) {
-      const { name, email, password } = req.body;
+      const { name, email, password, timezone } = req.body;
       const client_id = req.query.client_id as string;
       const code_challenge = req.query.code_challenge as string;
       const code_challenge_method = req.query.code_challenge_method as string;
@@ -158,12 +169,12 @@ export function createServer(config: ServerConfig): {
 
       if (!name || !email || !password) {
         const originalUrl = req.originalUrl;
-        res.status(400).send(getRegisterPageHtml(originalUrl, 'Full name, email, and password are required'));
+        res.status(400).render('register', { registerUrl: originalUrl, loginUrl: getLoginUrlFromRegister(originalUrl), error: 'Full name, email, and password are required' });
         return;
       }
 
       try {
-        const user = await accountService.createAccount({ name, email, password });
+        const user = await accountService.createAccount({ name, email, password, timezone });
 
         // If we're in an OAuth flow, issue code and redirect
         if (client_id && redirect_uri) {
@@ -188,9 +199,9 @@ export function createServer(config: ServerConfig): {
       } catch (err: any) {
         console.error('Registration error:', err);
         if (err.message.includes('already exists')) {
-          res.status(409).send(getRegisterPageHtml(req.originalUrl, 'An account with that email already exists'));
+          res.status(409).render('register', { registerUrl: req.originalUrl, loginUrl: getLoginUrlFromRegister(req.originalUrl), error: 'An account with that email already exists' });
         } else {
-          res.status(500).send(getRegisterPageHtml(req.originalUrl, 'Something went wrong. Please try again.'));
+          res.status(500).render('register', { registerUrl: req.originalUrl, loginUrl: getLoginUrlFromRegister(req.originalUrl), error: 'Something went wrong. Please try again.' });
         }
       }
       return;
@@ -222,7 +233,7 @@ export function createServer(config: ServerConfig): {
       res.redirect('/');
       return;
     }
-    res.send(getRegisterPageHtml(_req.originalUrl));
+    res.render('register', { registerUrl: _req.originalUrl, loginUrl: getLoginUrlFromRegister(_req.originalUrl), error: undefined, success: undefined });
   });
 
   // ─── OAuth 2.0 PKCE Endpoints ─────────────────────────────
@@ -244,7 +255,7 @@ export function createServer(config: ServerConfig): {
     }
 
     // Persistent mode — show login form
-    res.send(getLoginPageHtml(req.originalUrl));
+    res.render('login', { authorizeUrl: req.originalUrl, registerUrl: req.originalUrl.replace('/auth/authorize', '/auth/register'), error: undefined });
   });
 
   // Authorization endpoint — POST: accepts login credentials + PKCE params
@@ -280,7 +291,7 @@ export function createServer(config: ServerConfig): {
       // If this came from the login form, re-render with error
       if (isFormPost) {
         const originalUrl = `/auth/authorize?client_id=${encodeURIComponent(client_id)}&code_challenge=${encodeURIComponent(code_challenge)}&code_challenge_method=${encodeURIComponent(code_challenge_method || 'S256')}&redirect_uri=${encodeURIComponent(redirect_uri || '')}&state=${encodeURIComponent(state || '')}`;
-        res.status(401).send(getLoginPageHtml(originalUrl, 'Invalid email or password'));
+        res.status(401).render('login', { authorizeUrl: originalUrl, registerUrl: originalUrl.replace('/auth/authorize', '/auth/register'), error: 'Invalid email or password' });
         return;
       }
       res.status(401).json({ error: 'Invalid email or password' });
@@ -356,19 +367,19 @@ export function createServer(config: ServerConfig): {
       res.redirect('/web/dashboard');
       return;
     }
-    res.send(getWebLoginPageHtml());
+    res.render('web-login', { error: undefined });
   });
 
   app.post('/web/login', async (req, res) => {
     const { email, password } = req.body;
     if (!email || !password) {
-      res.status(400).send(getWebLoginPageHtml('Email and password are required'));
+      res.status(400).render('web-login', { error: 'Email and password are required' });
       return;
     }
 
     const user = await accountService.login(email, password);
     if (!user) {
-      res.status(401).send(getWebLoginPageHtml('Invalid email or password'));
+      res.status(401).render('web-login', { error: 'Invalid email or password' });
       return;
     }
 
@@ -391,23 +402,146 @@ export function createServer(config: ServerConfig): {
 
   app.get('/web/dashboard', requireWebSession, (req, res) => {
     const user = (req as any).webUser as { userId: string; userName: string; email: string };
-    res.send(getDashboardHtml(user.userName));
+    res.render('dashboard', { userName: user.userName, error: undefined, success: undefined });
+  });
+
+  // ─── Push Notification Services ─────────────────────────────
+  const pushService = new PushNotificationService(db);
+  const settingsService = new UserSettingsService(db);
+
+  // Store base URL in server_config for MCP tools to reference
+  db.prepare("INSERT OR REPLACE INTO server_config (key, value) VALUES ('base_url', ?)").run(serverUrl);
+
+  // Initialize VAPID keys (only in persistent mode)
+  if (!config.forgetful) {
+    try {
+      pushService.initVapid('noreply@mob-crm.local');
+    } catch {
+      // web-push may not be available in all environments
+    }
+  }
+
+  // ─── Service Worker ────────────────────────────────────────
+
+  app.get('/service-worker.js', (_req, res) => {
+    res.setHeader('Content-Type', 'application/javascript');
+    res.sendFile(path.join(__dirname, 'service-worker.js'));
+  });
+
+  // ─── VAPID Public Key Endpoint ─────────────────────────────
+  app.get('/api/vapid-public-key', (_req, res) => {
+    try {
+      const key = pushService.getVapidPublicKey();
+      res.json({ publicKey: key });
+    } catch {
+      res.status(500).json({ error: 'Push notifications not configured' });
+    }
+  });
+
+  // ─── Auto-Login ────────────────────────────────────────────
+  app.get('/web/auto-login', (req, res) => {
+    const token = req.query.token as string;
+    if (!token) {
+      res.status(400).send('Missing token');
+      return;
+    }
+
+    const userId = accountService.consumeAutoLoginToken(token);
+    if (!userId) {
+      res.status(401).send('Invalid or expired token');
+      return;
+    }
+
+    const user = accountService.getPublicUser(userId);
+    if (!user) {
+      res.status(404).send('User not found');
+      return;
+    }
+
+    const sessionToken = randomUUID();
+    webSessions.set(sessionToken, { userId: user.id, userName: user.name, email: user.email });
+    res.setHeader('Set-Cookie', `mob_session=${sessionToken}; Path=/; HttpOnly; SameSite=Lax`);
+    res.redirect(req.query.redirect as string || '/web/dashboard');
+  });
+
+  // ─── Push Notification Management Page ─────────────────────
+  app.get('/web/notifications', (req, res) => {
+    const token = req.query.token as string;
+
+    // If token provided, auto-login first
+    if (token) {
+      const userId = accountService.consumeAutoLoginToken(token);
+      if (userId) {
+        const user = accountService.getPublicUser(userId);
+        if (user) {
+          const sessionToken = randomUUID();
+          webSessions.set(sessionToken, { userId: user.id, userName: user.name, email: user.email });
+          res.setHeader('Set-Cookie', `mob_session=${sessionToken}; Path=/; HttpOnly; SameSite=Lax`);
+          res.redirect('/web/notifications');
+          return;
+        }
+      }
+    }
+
+    // Check session
+    const sessionToken = parseCookie(req.headers.cookie ?? '', 'mob_session');
+    if (!sessionToken || !webSessions.get(sessionToken)) {
+      res.redirect('/web/login');
+      return;
+    }
+
+    const session = webSessions.get(sessionToken)!;
+    res.render('notifications', { userName: session.userName });
+  });
+
+  // ─── Push Subscription API ─────────────────────────────────
+  app.post('/api/push/subscribe', express.json(), requireWebSession, (req, res) => {
+    const user = (req as any).webUser as { userId: string };
+    const { subscription } = req.body;
+    if (!subscription || !subscription.endpoint || !subscription.keys) {
+      res.status(400).json({ error: 'Invalid subscription' });
+      return;
+    }
+    const result = pushService.subscribe(user.userId, subscription);
+    res.json({ success: true, id: result.id });
+  });
+
+  app.post('/api/push/unsubscribe', express.json(), requireWebSession, (req, res) => {
+    const user = (req as any).webUser as { userId: string };
+    const { endpoint } = req.body;
+    if (!endpoint) {
+      res.status(400).json({ error: 'endpoint is required' });
+      return;
+    }
+    pushService.unsubscribe(user.userId, endpoint);
+    res.json({ success: true });
+  });
+
+  app.get('/api/push/subscriptions', requireWebSession, (req, res) => {
+    const user = (req as any).webUser as { userId: string };
+    const subscriptions = pushService.getSubscriptions(user.userId);
+    res.json({ count: subscriptions.length });
   });
 
   // ─── Monica Import ────────────────────────────────────────
+
+  app.get('/web/import', requireWebSession, (req, res) => {
+    const user = (req as any).webUser as { userId: string; userName: string; email: string };
+    res.render('import', { userName: user.userName, error: undefined, success: undefined });
+  });
 
   app.post('/web/import/monica', requireWebSession, upload.single('sqlfile'), (req, res) => {
     const user = (req as any).webUser as { userId: string; userName: string; email: string };
 
     if (!req.file) {
-      res.status(400).send(getDashboardHtml(user.userName, 'No file uploaded. Please select a SQL file.'));
+      res.status(400).render('import', { userName: user.userName, error: 'No file uploaded. Please select a SQL file.', success: undefined });
       return;
     }
 
     const sqlContent = req.file.buffer.toString('utf-8');
 
     if (!sqlContent.includes('INSERT') || sqlContent.length < 100) {
-      res.status(400).send(getDashboardHtml(user.userName, 'The file does not appear to be a valid Monica SQL export.'));
+      res.status(400).render('import', { userName: user.userName, error: 'The file does not appear to be a valid Monica SQL export.', success: undefined });
       return;
     }
 
@@ -432,9 +566,9 @@ export function createServer(config: ServerConfig): {
         ? ` (${result.errors.length} warnings: ${result.errors.slice(0, 3).join('; ')}${result.errors.length > 3 ? '...' : ''})`
         : '';
 
-      res.send(getDashboardHtml(user.userName, undefined, `Import complete! Imported: ${summary}.${errorSummary}`));
+      res.render('import', { userName: user.userName, error: undefined, success: `Import complete! Imported: ${summary}.${errorSummary}` });
     } catch (err: any) {
-      res.status(500).send(getDashboardHtml(user.userName, `Import failed: ${err.message}`));
+      res.status(500).render('import', { userName: user.userName, error: `Import failed: ${err.message}`, success: undefined });
     }
   });
 
@@ -524,7 +658,60 @@ export function createServer(config: ServerConfig): {
   let httpServer: ReturnType<typeof app.listen>;
 
   // Clean up expired tokens periodically
-  const cleanupInterval = setInterval(() => oauthService.cleanup(), 5 * 60 * 1000);
+  const cleanupInterval = setInterval(() => {
+    oauthService.cleanup();
+    accountService.cleanupAutoLoginTokens();
+  }, 5 * 60 * 1000);
+
+  // Birthday reminder scheduler (every 15 minutes, persistent mode only)
+  let birthdaySchedulerInterval: ReturnType<typeof setInterval> | null = null;
+  if (!config.forgetful) {
+    const notificationService = new NotificationService(db);
+
+    const runBirthdayScheduler = async () => {
+      try {
+        const users = db.prepare('SELECT id FROM users').all() as { id: string }[];
+        for (const user of users) {
+          const settings = settingsService.get(user.id);
+          const now = new Date();
+
+          // Convert current time to user's timezone
+          const userTime = new Intl.DateTimeFormat('en-US', {
+            timeZone: settings.timezone,
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+          }).format(now);
+
+          // Check if current time (HH:MM) matches their reminder time (within 15-minute window)
+          const [currentHour, currentMin] = userTime.split(':').map(Number);
+          const [reminderHour, reminderMin] = settings.birthday_reminder_time.split(':').map(Number);
+          const currentMins = currentHour * 60 + currentMin;
+          const reminderMins = reminderHour * 60 + reminderMin;
+
+          if (currentMins >= reminderMins && currentMins < reminderMins + 15) {
+            const notifications = notificationService.generateBirthdayNotifications(user.id);
+            for (const notification of notifications) {
+              try {
+                await pushService.sendPushNotification(
+                  user.id,
+                  notification.title,
+                  notification.body || '',
+                  '/web/dashboard'
+                );
+              } catch {
+                // Push send failure is non-fatal
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Birthday scheduler error:', err);
+      }
+    };
+
+    birthdaySchedulerInterval = setInterval(runBirthdayScheduler, 15 * 60 * 1000);
+  }
 
   return {
     start: () => {
@@ -545,6 +732,7 @@ export function createServer(config: ServerConfig): {
     },
     stop: () => {
       clearInterval(cleanupInterval);
+      if (birthdaySchedulerInterval) clearInterval(birthdaySchedulerInterval);
       // Close all active transports
       for (const [sid, transport] of Object.entries(transports)) {
         transport.close();
@@ -568,320 +756,14 @@ export function createServer(config: ServerConfig): {
   };
 }
 
-function getLoginPageHtml(authorizeUrl: string, error?: string): string {
-  // Build register URL preserving the OAuth query params
-  const registerUrl = authorizeUrl.replace('/auth/authorize', '/auth/register');
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sign In — Mob CRM</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: #f5f5f5; }
-    .card { background: #fff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.1); padding: 2rem; width: 100%; max-width: 400px; }
-    h1 { font-size: 1.8rem; margin-bottom: 0.5rem; text-align: center; }
-    .subtitle { text-align: center; color: #666; margin-bottom: 1.5rem; }
-    label { display: block; font-weight: 600; margin-bottom: 0.3rem; font-size: 0.9rem; }
-    input[type="email"], input[type="password"] { width: 100%; padding: 0.6rem 0.8rem; border: 1px solid #ddd; border-radius: 6px; font-size: 1rem; margin-bottom: 1rem; }
-    input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
-    button { width: 100%; padding: 0.7rem; background: #2563eb; color: #fff; border: none; border-radius: 6px; font-size: 1rem; font-weight: 600; cursor: pointer; }
-    button:hover { background: #1d4ed8; }
-    .error { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; border-radius: 6px; padding: 0.6rem 0.8rem; margin-bottom: 1rem; font-size: 0.9rem; }
-    .alt-link { text-align: center; margin-top: 1rem; font-size: 0.9rem; color: #666; }
-    .alt-link a { color: #2563eb; text-decoration: none; }
-    .alt-link a:hover { text-decoration: underline; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <h1>🦘 Mob</h1>
-    <p class="subtitle">Sign in to your CRM</p>
-    ${error ? `<div class="error">${error}</div>` : ''}
-    <form method="POST" action="${authorizeUrl}">
-      <label for="email">Email</label>
-      <input type="email" id="email" name="email" required autofocus>
-      <label for="password">Password</label>
-      <input type="password" id="password" name="password" required>
-      <button type="submit">Sign In</button>
-    </form>
-    <p class="alt-link">Don't have an account? <a href="${registerUrl}">Create one</a></p>
-  </div>
-</body>
-</html>`;
-}
-
-function getRegisterPageHtml(registerUrl: string, error?: string, success?: string): string {
-  // Build login URL: if coming from web flow, link back to /web/login; otherwise use OAuth authorize
-  const isWebFlow = registerUrl.includes('from=web');
-  const loginUrl = isWebFlow ? '/web/login' : registerUrl.replace('/auth/register', '/auth/authorize');
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Create Account — Mob CRM</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: #f5f5f5; }
-    .card { background: #fff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.1); padding: 2rem; width: 100%; max-width: 400px; }
-    h1 { font-size: 1.8rem; margin-bottom: 0.5rem; text-align: center; }
-    .subtitle { text-align: center; color: #666; margin-bottom: 1.5rem; }
-    label { display: block; font-weight: 600; margin-bottom: 0.3rem; font-size: 0.9rem; }
-    input[type="text"], input[type="email"], input[type="password"] { width: 100%; padding: 0.6rem 0.8rem; border: 1px solid #ddd; border-radius: 6px; font-size: 1rem; margin-bottom: 1rem; }
-    input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
-    button { width: 100%; padding: 0.7rem; background: #2563eb; color: #fff; border: none; border-radius: 6px; font-size: 1rem; font-weight: 600; cursor: pointer; }
-    button:hover { background: #1d4ed8; }
-    .error { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; border-radius: 6px; padding: 0.6rem 0.8rem; margin-bottom: 1rem; font-size: 0.9rem; }
-    .success { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; border-radius: 6px; padding: 0.6rem 0.8rem; margin-bottom: 1rem; font-size: 0.9rem; }
-    .alt-link { text-align: center; margin-top: 1rem; font-size: 0.9rem; color: #666; }
-    .alt-link a { color: #2563eb; text-decoration: none; }
-    .alt-link a:hover { text-decoration: underline; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <h1>🦘 Mob</h1>
-    <p class="subtitle">Create your account</p>
-    ${error ? `<div class="error">${error}</div>` : ''}
-    ${success ? `<div class="success">${success}</div>` : ''}
-    <form method="POST" action="${registerUrl}">
-      <label for="name">Full Name</label>
-      <input type="text" id="name" name="name" required autofocus>
-      <label for="email">Email</label>
-      <input type="email" id="email" name="email" required>
-      <label for="password">Password</label>
-      <input type="password" id="password" name="password" required minlength="6">
-      <button type="submit">Create Account</button>
-    </form>
-    <p class="alt-link">Already have an account? <a href="${loginUrl}">Sign in</a></p>
-  </div>
-</body>
-</html>`;
-}
-
-function getHomepageHtml(serverUrl: string, forgetful: boolean): string {
-  const mcpUrl = `${serverUrl}/mcp`;
-
-  const authRow = forgetful
-    ? '<tr><th>Auth</th><td>None required (Guest Mode)</td></tr>'
-    : '<tr><th>Auth</th><td>OAuth 2.0 with PKCE</td></tr>';
-
-  const guestModeSection = forgetful ? `
-  <div class="guest-banner">
-    <h2>Guest Mode</h2>
-    <p>This server is running in <strong>guest mode</strong> for testing and demos. No account or login is required.</p>
-    <ul>
-      <li>Each MCP session gets its own isolated database pre-loaded with sample data</li>
-      <li>You are signed in as <strong>Bluey Heeler</strong> with 20 contacts from the Heeler family and friends</li>
-      <li>All data is temporary and will be lost when the session ends or the server restarts</li>
-      <li>Just point your MCP client at <code>${mcpUrl}</code> and start chatting</li>
-    </ul>
-  </div>` : '';
-
-  const dashboardSection = forgetful ? '' : `
-  <h2>Web Dashboard</h2>
-  <p><a href="/web/login">Sign in to the web dashboard</a> to import your Monica CRM data.</p>`;
-
-  const examples = forgetful ? `
-  <ul class="examples">
-    <li>Who are my favourite contacts?</li>
-    <li>When is Bingo's birthday?</li>
-    <li>Log that I played Keepy Uppy with Bandit and Bingo at home</li>
-    <li>What's Muffin's food preferences?</li>
-    <li>Remind me to plan a playdate with Mackenzie next week</li>
-    <li>Show me my family contacts</li>
-    <li>Add a gift idea for Bingo: a new Floppy bunny plush for her birthday</li>
-    <li>Who haven't I talked to in a while?</li>
-  </ul>` : `
-  <ul class="examples">
-    <li>Add a new contact: Sarah Chen, she works at Google as a senior engineer</li>
-    <li>Log that I had coffee with Mike yesterday at Blue Bottle</li>
-    <li>When is Tom's birthday?</li>
-    <li>Remind me to call Lisa next Tuesday</li>
-    <li>Who haven't I talked to in a while?</li>
-  </ul>`;
-
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mob — AI-First Personal CRM</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 720px; margin: 0 auto; padding: 2rem 1rem; }
-    h1 { font-size: 2.5rem; margin-bottom: 0.5rem; }
-    h2 { font-size: 1.4rem; margin-top: 2rem; margin-bottom: 0.5rem; color: #555; }
-    p { margin-bottom: 1rem; }
-    .tagline { font-size: 1.2rem; color: #666; margin-bottom: 2rem; }
-    .origin { font-size: 0.9rem; color: #888; font-style: italic; margin-bottom: 2rem; }
-    code { background: #f4f4f4; padding: 0.15em 0.4em; border-radius: 3px; font-size: 0.9em; }
-    pre { background: #f4f4f4; padding: 1rem; border-radius: 6px; overflow-x: auto; margin-bottom: 1rem; }
-    pre code { background: none; padding: 0; }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; }
-    th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #eee; }
-    th { color: #555; font-weight: 600; }
-    .examples { list-style: none; }
-    .examples li { padding: 0.5rem 0; border-bottom: 1px solid #f0f0f0; }
-    .examples li::before { content: '\uD83D\uDCAC '; }
-    a { color: #2563eb; }
-    .guest-banner { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; padding: 1.2rem 1.5rem; margin-top: 2rem; margin-bottom: 0.5rem; }
-    .guest-banner h2 { margin-top: 0; color: #1d4ed8; }
-    .guest-banner p { margin-bottom: 0.7rem; }
-    .guest-banner ul { margin: 0.5rem 0 0 1.2rem; }
-    .guest-banner li { margin-bottom: 0.3rem; font-size: 0.95rem; }
-    .guest-banner code { background: #dbeafe; }
-  </style>
-</head>
-<body>
-  <h1>\uD83E\uDD98 Mob</h1>
-  <p class="tagline">An AI-first Personal CRM</p>
-  <p class="origin">"Mob" is the name for a group of kangaroos.</p>
-
-  <p>Mob is a personal CRM you interact with entirely through natural language via an AI assistant. No forms, no dashboards — just talk about your relationships and Mob keeps track.</p>
-  ${guestModeSection}
-
-  <h2>How to Connect</h2>
-  <table>
-    <tr><th>Transport</th><td>Streamable HTTP</td></tr>
-    <tr><th>Server URL</th><td><code>${mcpUrl}</code></td></tr>
-    ${authRow}
-  </table>
-
-  <p>Recommended client: <a href="https://github.com/benkaiser/joey-mcp-client">Joey MCP Client</a></p>
-
-  <h2>Example Interactions</h2>
-  ${examples}
-  ${dashboardSection}
-</body>
-</html>`;
-}
-
-// ─── Web Login Page ─────────────────────────────────────────────
-
-function getWebLoginPageHtml(error?: string): string {
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sign In — Mob CRM</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: #f5f5f5; }
-    .card { background: #fff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.1); padding: 2rem; width: 100%; max-width: 400px; }
-    h1 { font-size: 1.8rem; margin-bottom: 0.5rem; text-align: center; }
-    .subtitle { text-align: center; color: #666; margin-bottom: 1.5rem; }
-    label { display: block; font-weight: 600; margin-bottom: 0.3rem; font-size: 0.9rem; }
-    input[type="email"], input[type="password"] { width: 100%; padding: 0.6rem 0.8rem; border: 1px solid #ddd; border-radius: 6px; font-size: 1rem; margin-bottom: 1rem; }
-    input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
-    button { width: 100%; padding: 0.7rem; background: #2563eb; color: #fff; border: none; border-radius: 6px; font-size: 1rem; font-weight: 600; cursor: pointer; }
-    button:hover { background: #1d4ed8; }
-    .error { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; border-radius: 6px; padding: 0.6rem 0.8rem; margin-bottom: 1rem; font-size: 0.9rem; }
-    .alt-link { text-align: center; margin-top: 1rem; font-size: 0.9rem; color: #666; }
-    .alt-link a { color: #2563eb; text-decoration: none; }
-    .alt-link a:hover { text-decoration: underline; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <h1>🦘 Mob</h1>
-    <p class="subtitle">Sign in to the dashboard</p>
-    ${error ? `<div class="error">${error}</div>` : ''}
-    <form method="POST" action="/web/login">
-      <label for="email">Email</label>
-      <input type="email" id="email" name="email" required autofocus>
-      <label for="password">Password</label>
-      <input type="password" id="password" name="password" required>
-      <button type="submit">Sign In</button>
-    </form>
-    <p class="alt-link">Don't have an account? <a href="/auth/register?from=web">Create one</a></p>
-  </div>
-</body>
-</html>`;
-}
-
-// ─── Dashboard Page ─────────────────────────────────────────────
-
-function getDashboardHtml(userName: string, error?: string, success?: string): string {
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Dashboard — Mob CRM</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; background: #f5f5f5; }
-    .navbar { background: #1e293b; color: #fff; padding: 0.8rem 1.5rem; display: flex; justify-content: space-between; align-items: center; }
-    .navbar h1 { font-size: 1.2rem; }
-    .navbar .user-info { display: flex; align-items: center; gap: 1rem; font-size: 0.9rem; }
-    .navbar a { color: #93c5fd; text-decoration: none; font-size: 0.9rem; }
-    .navbar a:hover { text-decoration: underline; }
-    .container { max-width: 720px; margin: 2rem auto; padding: 0 1rem; }
-    .card { background: #fff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); padding: 2rem; margin-bottom: 1.5rem; }
-    h2 { font-size: 1.4rem; margin-bottom: 0.5rem; color: #1e293b; }
-    p { margin-bottom: 1rem; color: #666; }
-    .warning { background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 0.8rem 1rem; margin-bottom: 1.5rem; font-size: 0.9rem; color: #92400e; }
-    .warning strong { color: #78350f; }
-    label { display: block; font-weight: 600; margin-bottom: 0.5rem; font-size: 0.9rem; }
-    input[type="file"] { display: block; width: 100%; padding: 0.6rem; border: 2px dashed #ddd; border-radius: 6px; font-size: 0.9rem; margin-bottom: 1rem; cursor: pointer; background: #fafafa; }
-    input[type="file"]:hover { border-color: #2563eb; background: #eff6ff; }
-    button { padding: 0.7rem 1.5rem; background: #2563eb; color: #fff; border: none; border-radius: 6px; font-size: 1rem; font-weight: 600; cursor: pointer; }
-    button:hover { background: #1d4ed8; }
-    button.danger { background: #dc2626; }
-    button.danger:hover { background: #b91c1c; }
-    .error { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; border-radius: 6px; padding: 0.8rem 1rem; margin-bottom: 1.5rem; font-size: 0.9rem; }
-    .success { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; border-radius: 6px; padding: 0.8rem 1rem; margin-bottom: 1.5rem; font-size: 0.9rem; }
-    .help-text { font-size: 0.85rem; color: #888; margin-top: 0.5rem; }
-  </style>
-</head>
-<body>
-  <div class="navbar">
-    <h1>🦘 Mob CRM</h1>
-    <div class="user-info">
-      <span>${escapeHtml(userName)}</span>
-      <a href="/web/logout">Sign Out</a>
-    </div>
-  </div>
-  <div class="container">
-    ${error ? `<div class="error">${escapeHtml(error)}</div>` : ''}
-    ${success ? `<div class="success">${escapeHtml(success)}</div>` : ''}
-
-    <div class="card">
-      <h2>Import from Monica CRM</h2>
-      <p>Upload your Monica CRM SQL export file to import your contacts, notes, activities, tags, relationships, and more.</p>
-
-      <div class="warning">
-        <strong>Warning:</strong> Importing will <strong>replace all your existing contacts and data</strong> in Mob CRM. This action cannot be undone.
-      </div>
-
-      <form method="POST" action="/web/import/monica" enctype="multipart/form-data">
-        <label for="sqlfile">Monica SQL Export File</label>
-        <input type="file" id="sqlfile" name="sqlfile" accept=".sql,.txt" required>
-        <p class="help-text">Export your data from Monica CRM (Settings &rarr; Export) and upload the .sql file here.</p>
-        <button type="submit" class="danger">Import &amp; Replace Data</button>
-      </form>
-    </div>
-  </div>
-</body>
-</html>`;
-}
-
 // ─── Helpers ────────────────────────────────────────────────────
+
+function getLoginUrlFromRegister(registerUrl: string): string {
+  const isWebFlow = registerUrl.includes('from=web');
+  return isWebFlow ? '/web/login' : registerUrl.replace('/auth/register', '/auth/authorize');
+}
 
 function parseCookie(cookieHeader: string, name: string): string | null {
   const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`));
   return match ? decodeURIComponent(match[1]) : null;
-}
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
 }

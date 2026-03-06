@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { generateId } from '../utils.js';
+import { UserSettingsService } from './settings.js';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -106,10 +107,27 @@ export class NotificationService {
   }
 
   /**
-   * Generate birthday notifications for contacts with birthdays within the given days.
+   * Generate birthday notifications for contacts with birthdays within the configured offsets.
+   * Uses user settings for reminder offsets if available, falls back to daysAhead parameter.
    */
-  generateBirthdayNotifications(userId: string, daysAhead = 7): Notification[] {
+  generateBirthdayNotifications(userId: string, daysAhead?: number): Notification[] {
     const generated: Notification[] = [];
+
+    // Load user settings for offsets
+    let offsets: number[];
+    if (daysAhead !== undefined) {
+      // Legacy: use daysAhead as a single window
+      offsets = Array.from({ length: daysAhead + 1 }, (_, i) => i);
+    } else {
+      try {
+        const settingsService = new UserSettingsService(this.db);
+        const settings = settingsService.get(userId);
+        offsets = settings.birthday_reminder_offsets;
+      } catch {
+        offsets = [0, 7, 30];
+      }
+    }
+
     const today = new Date();
 
     // Get contacts with birthday info
@@ -135,17 +153,18 @@ export class NotificationService {
 
       if (bMonth === null || bDay === null) continue;
 
-      // Check if birthday is within daysAhead
+      // Check if birthday matches any offset
       const birthdayThisYear = new Date(today.getFullYear(), bMonth - 1, bDay);
       const diffDays = Math.floor((birthdayThisYear.getTime() - today.getTime()) / 86400000);
 
-      if (diffDays >= 0 && diffDays <= daysAhead) {
-        // Check if notification already exists for this year
+      if (offsets.includes(diffDays)) {
+        // Check if notification already exists for this contact + offset this year
         const existing = this.db.prepare(`
           SELECT id FROM notifications
           WHERE user_id = ? AND type = 'birthday' AND contact_id = ?
             AND created_at >= date('now', 'start of year')
-        `).get(userId, contact.id);
+            AND title LIKE ?
+        `).get(userId, contact.id, diffDays === 0 ? '%today%' : `%${diffDays} day%`);
 
         if (!existing) {
           const name = contact.first_name + (contact.last_name ? ' ' + contact.last_name : '');

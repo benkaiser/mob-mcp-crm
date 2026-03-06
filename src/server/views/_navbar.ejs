@@ -1,0 +1,10 @@
+<div class="navbar">
+  <h1>&#x1F998; Mob CRM</h1>
+  <div class="user-info">
+    <span><%= userName %></span>
+    <% if (typeof showDashboardLink !== 'undefined' && showDashboardLink) { %>
+    <a href="/web/dashboard">Dashboard</a>
+    <% } %>
+    <a href="/web/logout">Sign Out</a>
+  </div>
+</div>

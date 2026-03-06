@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <%- include('_head', { title: 'Push Notifications — Mob CRM' }) %>
+  <style>
+    body { background: #f5f5f5; }
+    .navbar { background: #1e293b; color: #fff; padding: 0.8rem 1.5rem; display: flex; justify-content: space-between; align-items: center; }
+    .navbar h1 { font-size: 1.2rem; }
+    .navbar .user-info { display: flex; align-items: center; gap: 1rem; font-size: 0.9rem; }
+    .navbar a { color: #93c5fd; text-decoration: none; font-size: 0.9rem; }
+    .container { max-width: 720px; margin: 2rem auto; padding: 0 1rem; }
+    .card { background: #fff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); padding: 2rem; margin-bottom: 1.5rem; }
+    h2 { font-size: 1.4rem; margin-bottom: 0.5rem; color: #1e293b; }
+    p { margin-bottom: 1rem; color: #666; }
+    button:disabled { background: #94a3b8; cursor: not-allowed; }
+    button.danger { background: #dc2626; }
+    button.danger:hover { background: #b91c1c; }
+    .status { padding: 0.8rem 1rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.9rem; }
+    .status.success { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+    .status.error { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+    .status.info { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
+    #status { display: none; }
+    #device-count { display: none; margin-top: 1rem; font-size: 0.9rem; color: #666; }
+  </style>
+</head>
+<body>
+  <%- include('_navbar', { userName, showDashboardLink: true }) %>
+  <div class="container">
+    <div class="card">
+      <h2>Push Notifications</h2>
+      <p>Enable browser push notifications to receive birthday reminders and other alerts even when the app is not open.</p>
+
+      <div id="status"></div>
+
+      <div id="unsupported" style="display:none;">
+        <div class="status error">Push notifications are not supported in this browser.</div>
+      </div>
+
+      <div id="controls" style="display:none;">
+        <button id="subscribeBtn" onclick="subscribePush()">Enable on This Device</button>
+        <button id="unsubscribeBtn" class="danger" style="display:none;" onclick="unsubscribePush()">Disable on This Device</button>
+      </div>
+
+      <div id="device-count"></div>
+    </div>
+  </div>
+  <script>
+    const statusEl = document.getElementById('status');
+    const controlsEl = document.getElementById('controls');
+    const subscribeBtn = document.getElementById('subscribeBtn');
+    const unsubscribeBtn = document.getElementById('unsubscribeBtn');
+    const deviceCountEl = document.getElementById('device-count');
+
+    function showStatus(msg, type) {
+      statusEl.style.display = 'block';
+      statusEl.className = 'status ' + type;
+      statusEl.textContent = msg;
+    }
+
+    async function updateDeviceCount() {
+      try {
+        const res = await fetch('/api/push/subscriptions');
+        const data = await res.json();
+        if (data.count > 0) {
+          deviceCountEl.style.display = 'block';
+          deviceCountEl.textContent = data.count === 1
+            ? '1 device registered for push notifications.'
+            : data.count + ' devices registered for push notifications.';
+        } else {
+          deviceCountEl.style.display = 'block';
+          deviceCountEl.textContent = 'No devices registered for push notifications.';
+        }
+      } catch (err) {
+        // Non-critical, just hide count
+        deviceCountEl.style.display = 'none';
+      }
+    }
+
+    async function init() {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+        document.getElementById('unsupported').style.display = 'block';
+        return;
+      }
+
+      // Push API requires HTTPS (localhost is NOT exempt, unlike service workers)
+      if (location.protocol !== 'https:' && location.hostname !== '127.0.0.1') {
+        document.getElementById('unsupported').style.display = 'block';
+        document.querySelector('#unsupported .status').textContent =
+          'Push notifications require HTTPS. Access this page over HTTPS to enable them.';
+        await updateDeviceCount();
+        return;
+      }
+
+      controlsEl.style.display = 'block';
+
+      try {
+        await navigator.serviceWorker.register('/service-worker.js');
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        if (sub) {
+          subscribeBtn.style.display = 'none';
+          unsubscribeBtn.style.display = 'inline-block';
+          showStatus('Push notifications are enabled on this device.', 'success');
+        }
+      } catch (err) {
+        showStatus('Error: ' + err.message, 'error');
+      }
+
+      await updateDeviceCount();
+    }
+
+    function withTimeout(promise, ms, msg) {
+      return Promise.race([
+        promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error(msg)), ms))
+      ]);
+    }
+
+    async function subscribePush() {
+      try {
+        subscribeBtn.disabled = true;
+        subscribeBtn.textContent = 'Enabling…';
+
+        showStatus('Fetching server key…', 'info');
+        const res = await fetch('/api/vapid-public-key');
+        if (!res.ok) {
+          throw new Error('Failed to fetch VAPID key (server returned ' + res.status + ')');
+        }
+        const { publicKey } = await res.json();
+        if (!publicKey) {
+          throw new Error('Push notifications are not configured on this server.');
+        }
+
+        showStatus('Preparing service worker…', 'info');
+        const reg = await withTimeout(
+          navigator.serviceWorker.ready,
+          10000,
+          'Service worker failed to activate. Try refreshing the page.'
+        );
+
+        showStatus('Subscribing to push notifications…', 'info');
+        const sub = await withTimeout(
+          reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(publicKey),
+          }),
+          15000,
+          'Push subscription timed out. Check that notifications are allowed for this site.'
+        );
+
+        showStatus('Saving subscription…', 'info');
+        const subRes = await fetch('/api/push/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ subscription: sub.toJSON() }),
+        });
+
+        if (!subRes.ok) {
+          throw new Error('Server rejected subscription (status ' + subRes.status + ')');
+        }
+        const subData = await subRes.json();
+
+        subscribeBtn.style.display = 'none';
+        unsubscribeBtn.style.display = 'inline-block';
+
+        if (subData.success) {
+          showStatus('Push notifications enabled on this device!', 'success');
+        } else {
+          showStatus('Push notifications enabled on this device.', 'success');
+        }
+
+        await updateDeviceCount();
+      } catch (err) {
+        showStatus('Failed to enable: ' + err.message, 'error');
+        subscribeBtn.disabled = false;
+        subscribeBtn.textContent = 'Enable on This Device';
+      }
+    }
+
+    async function unsubscribePush() {
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        if (sub) {
+          await fetch('/api/push/unsubscribe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ endpoint: sub.endpoint }),
+          });
+          await sub.unsubscribe();
+        }
+        unsubscribeBtn.style.display = 'none';
+        subscribeBtn.style.display = 'inline-block';
+        subscribeBtn.disabled = false;
+        subscribeBtn.textContent = 'Enable on This Device';
+        showStatus('Push notifications disabled on this device.', 'info');
+
+        await updateDeviceCount();
+      } catch (err) {
+        showStatus('Failed to disable: ' + err.message, 'error');
+      }
+    }
+
+    function urlBase64ToUint8Array(base64String) {
+      const padding = '='.repeat((4 - base64String.length % 4) % 4);
+      const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+      const rawData = atob(base64);
+      const outputArray = new Uint8Array(rawData.length);
+      for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+      }
+      return outputArray;
+    }
+
+    init();
+  </script>
+</body>
+</html>

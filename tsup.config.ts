@@ -1,4 +1,5 @@
 import { defineConfig } from 'tsup';
+import { cpSync } from 'node:fs';
 
 export default defineConfig({
   entry: ['src/index.ts'],
@@ -9,4 +10,7 @@ export default defineConfig({
   sourcemap: true,
   dts: true,
   splitting: false,
+  onSuccess: async () => {
+    cpSync('src/server/views', 'dist/views', { recursive: true });
+  },
 });

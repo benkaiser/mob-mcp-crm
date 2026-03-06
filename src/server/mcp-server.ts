@@ -1,4 +1,5 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type Database from 'better-sqlite3';
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
@@ -20,6 +21,8 @@ import { DebtService } from '../services/debts.js';
 import { TaskService } from '../services/tasks.js';
 import { DataExportService } from '../services/data-export.js';
 import { SearchService } from '../services/search.js';
+import { UserSettingsService } from '../services/settings.js';
+import { AccountService } from '../auth/accounts.js';
 import { registerPrompts } from './prompts.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────
@@ -1612,6 +1615,65 @@ export function createMcpServer(db: Database.Database): McpServer {
     } catch (err: any) {
       return errorResult(err.message);
     }
+  });
+
+  // ─── Settings Tools ──────────────────────────────────────────
+
+  const settingsService = new UserSettingsService(db);
+  const accountServiceForMcp = new AccountService(db);
+
+  server.registerTool('manage_settings', {
+    description: 'View or update your personal settings (timezone, birthday reminder preferences).\n' +
+      '• action="get": View current settings\n' +
+      '• action="update": Update settings. Optional fields: timezone (IANA timezone like "America/New_York"), ' +
+      'birthday_reminder_offsets (array of day offsets like [0,7,30] where 0=day-of, 7=week-before), ' +
+      'birthday_reminder_time (HH:MM 24-hour format for when to send reminders)',
+    inputSchema: {
+      action: z.enum(['get', 'update']).describe('Action to perform'),
+      timezone: z.string().optional().describe('IANA timezone (e.g. "America/New_York", "Europe/London")'),
+      birthday_reminder_offsets: z.array(z.number()).optional()
+        .describe('Array of day offsets for birthday reminders (e.g. [0,7,30] = day-of, 1 week before, 1 month before)'),
+      birthday_reminder_time: z.string().optional()
+        .describe('Time of day for birthday reminders in HH:MM 24-hour format (e.g. "09:00")'),
+    },
+  }, (args, extra) => {
+    try {
+      const userId = getUserId(extra);
+      if (args.action === 'get') {
+        const settings = settingsService.get(userId);
+        return textResult(settings);
+      } else {
+        const { action, ...changes } = args;
+        const settings = settingsService.update(userId, changes);
+        return textResult(settings);
+      }
+    } catch (err: any) {
+      return errorResult(err.message);
+    }
+  });
+
+  server.registerTool('manage_push_notifications', {
+    description: 'Open a page to manage push notification subscriptions in your browser. ' +
+      'Enables/disables web push notifications for birthday reminders and other alerts.',
+    inputSchema: {},
+  }, async (_args, extra) => {
+    const userId = getUserId(extra);
+    const token = accountServiceForMcp.createAutoLoginToken(userId);
+    const baseUrl = (db.prepare("SELECT value FROM server_config WHERE key = 'base_url'").get() as any)?.value || 'http://localhost:3000';
+    const url = `${baseUrl}/web/notifications?token=${token}`;
+    const elicitationId = randomUUID();
+
+    const result = await server.server.elicitInput({
+      mode: 'url',
+      message: 'Open this link to manage your push notification subscriptions. The link expires in 1 hour.',
+      url,
+      elicitationId,
+    });
+
+    if (result.action === 'accept') {
+      return textResult('Push notification management page opened. You can configure your subscriptions there.');
+    }
+    return textResult('Push notification management was declined.');
   });
 
   return server;
