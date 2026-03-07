@@ -351,7 +351,7 @@ export function createServer(config: ServerConfig): {
 
   // ─── Web Login ──────────────────────────────────────────────
 
-  app.get('/web/login', (_req, res) => {
+  app.get('/web/login', (req, res) => {
     if (config.forgetful) {
       // Auto-login in forgetful mode
       const tempId = generateId();
