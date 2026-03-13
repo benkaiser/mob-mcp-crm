@@ -153,9 +153,12 @@ export class NotificationService {
 
       if (bMonth === null || bDay === null) continue;
 
-      // Check if birthday matches any offset
+      // Check if birthday matches any offset.
+      // Normalize today to midnight so that same-day (0-day) birthdays are detected
+      // regardless of the current time of day.
+      const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
       const birthdayThisYear = new Date(today.getFullYear(), bMonth - 1, bDay);
-      const diffDays = Math.floor((birthdayThisYear.getTime() - today.getTime()) / 86400000);
+      const diffDays = Math.round((birthdayThisYear.getTime() - todayMidnight.getTime()) / 86400000);
 
       if (offsets.includes(diffDays)) {
         // Check if notification already exists for this contact + offset this year

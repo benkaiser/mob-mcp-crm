@@ -143,4 +143,40 @@ describe('NotificationService', () => {
     expect(notification.source_type).toBeNull();
     expect(notification.source_id).toBeNull();
   });
+
+  describe('generateBirthdayNotifications', () => {
+    it('should generate a notification for a birthday that is today (0 days)', () => {
+      const now = new Date();
+      const month = now.getMonth() + 1;
+      const day = now.getDate();
+
+      // Insert a contact whose birthday is today
+      db.prepare(`
+        INSERT INTO contacts (id, user_id, first_name, birthday_mode, birthday_month, birthday_day, status, is_favorite, created_at, updated_at)
+        VALUES ('today-contact', ?, 'TodayBirthday', 'month_day', ?, ?, 'active', 0, datetime('now'), datetime('now'))
+      `).run(userId, month, day);
+
+      const notifications = service.generateBirthdayNotifications(userId);
+      const todayNotif = notifications.find(n => n.contact_id === 'today-contact');
+      expect(todayNotif).toBeDefined();
+      expect(todayNotif!.title).toContain('today');
+    });
+
+    it('should not generate a duplicate notification for the same birthday in the same year', () => {
+      const now = new Date();
+      const month = now.getMonth() + 1;
+      const day = now.getDate();
+
+      db.prepare(`
+        INSERT INTO contacts (id, user_id, first_name, birthday_mode, birthday_month, birthday_day, status, is_favorite, created_at, updated_at)
+        VALUES ('dup-contact', ?, 'DupBirthday', 'month_day', ?, ?, 'active', 0, datetime('now'), datetime('now'))
+      `).run(userId, month, day);
+
+      const first = service.generateBirthdayNotifications(userId);
+      expect(first.filter(n => n.contact_id === 'dup-contact')).toHaveLength(1);
+
+      const second = service.generateBirthdayNotifications(userId);
+      expect(second.filter(n => n.contact_id === 'dup-contact')).toHaveLength(0);
+    });
+  });
 });
