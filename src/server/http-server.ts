@@ -769,7 +769,7 @@ export function createServer(config: ServerConfig): {
           const reminderMins = reminderHour * 60 + reminderMin;
 
           if (currentMins >= reminderMins && currentMins < reminderMins + 15) {
-            const notifications = notificationService.generateBirthdayNotifications(user.id);
+            const notifications = notificationService.generateBirthdayNotifications(user.id, undefined, settings.timezone);
             for (const notification of notifications) {
               try {
                 await pushService.sendPushNotification(

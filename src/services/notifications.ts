@@ -110,7 +110,7 @@ export class NotificationService {
    * Generate birthday notifications for contacts with birthdays within the configured offsets.
    * Uses user settings for reminder offsets if available, falls back to daysAhead parameter.
    */
-  generateBirthdayNotifications(userId: string, daysAhead?: number): Notification[] {
+  generateBirthdayNotifications(userId: string, daysAhead?: number, timezone?: string): Notification[] {
     const generated: Notification[] = [];
 
     // Load user settings for offsets
@@ -128,7 +128,14 @@ export class NotificationService {
       }
     }
 
-    const today = new Date();
+    // Compute today in the user's timezone to avoid off-by-one errors
+    // when the server runs in UTC and the user is in a positive-offset timezone
+    const now = new Date();
+    const userDateStr = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone || 'UTC',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(now);
+    const [todayYear, todayMonth, todayDay] = userDateStr.split('-').map(Number);
 
     // Get contacts with birthday info
     const contacts = this.db.prepare(`
@@ -143,9 +150,9 @@ export class NotificationService {
       let bDay: number | null = null;
 
       if (contact.birthday_mode === 'full_date' && contact.birthday_date) {
-        const d = new Date(contact.birthday_date);
-        bMonth = d.getMonth() + 1;
-        bDay = d.getDate();
+        const parts = contact.birthday_date.split('-');
+        bMonth = parseInt(parts[1], 10);
+        bDay = parseInt(parts[2], 10);
       } else if (contact.birthday_mode === 'month_day') {
         bMonth = contact.birthday_month;
         bDay = contact.birthday_day;
@@ -154,11 +161,10 @@ export class NotificationService {
       if (bMonth === null || bDay === null) continue;
 
       // Check if birthday matches any offset.
-      // Normalize today to midnight so that same-day (0-day) birthdays are detected
-      // regardless of the current time of day.
-      const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-      const birthdayThisYear = new Date(today.getFullYear(), bMonth - 1, bDay);
-      const diffDays = Math.round((birthdayThisYear.getTime() - todayMidnight.getTime()) / 86400000);
+      // Use timezone-aware today values computed above.
+      const todayDayOfYear = new Date(todayYear, todayMonth - 1, todayDay).getTime();
+      const birthdayThisYear = new Date(todayYear, bMonth - 1, bDay).getTime();
+      const diffDays = Math.round((birthdayThisYear - todayDayOfYear) / 86400000);
 
       if (offsets.includes(diffDays)) {
         // Check if notification already exists for this contact + offset this year

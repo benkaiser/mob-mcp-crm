@@ -100,6 +100,7 @@ export function createMcpServer(db: Database.Database): McpServer {
   const taskService = new TaskService(db);
   const dataExportService = new DataExportService(db);
   const searchService = new SearchService(db);
+  const settingsService = new UserSettingsService(db);
 
   // ─── Contact Tools ────────────────────────────────────────────
 
@@ -1455,7 +1456,8 @@ export function createMcpServer(db: Database.Database): McpServer {
   }, (args, extra) => {
     try {
       const userId = getUserId(extra);
-      const result = contacts.getUpcomingBirthdays(userId, args);
+      const settings = settingsService.get(userId);
+      const result = contacts.getUpcomingBirthdays(userId, { ...args, timezone: settings.timezone });
       return textResult(result);
     } catch (err: any) {
       return errorResult(err.message);
@@ -1619,7 +1621,6 @@ export function createMcpServer(db: Database.Database): McpServer {
 
   // ─── Settings Tools ──────────────────────────────────────────
 
-  const settingsService = new UserSettingsService(db);
   const accountServiceForMcp = new AccountService(db);
 
   server.registerTool('manage_settings', {

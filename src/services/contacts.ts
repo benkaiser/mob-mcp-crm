@@ -568,6 +568,7 @@ export class ContactService {
   getUpcomingBirthdays(userId: string, options: {
     days_ahead?: number;
     month?: number;
+    timezone?: string;
   } = {}): {
     data: Array<{
       contact_id: string;
@@ -581,10 +582,14 @@ export class ContactService {
     }>;
     total: number;
   } {
+    // Compute today in the user's timezone to avoid off-by-one errors
+    // when the server runs in UTC and the user is in a positive-offset timezone
     const now = new Date();
-    const todayMonth = now.getMonth() + 1; // 1-based
-    const todayDay = now.getDate();
-    const todayYear = now.getFullYear();
+    const userDateStr = new Intl.DateTimeFormat('en-CA', {
+      timeZone: options.timezone || 'UTC',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(now);
+    const [todayYear, todayMonth, todayDay] = userDateStr.split('-').map(Number);
 
     // Get all contacts with birthday info
     const rows = this.db.prepare(`
@@ -616,10 +621,10 @@ export class ContactService {
       // Calculate days until next birthday
       let nextBirthday = new Date(todayYear, bMonth - 1, bDay);
       // If this year's birthday has passed, use next year
-      if (nextBirthday < new Date(todayYear, now.getMonth(), todayDay)) {
+      if (nextBirthday < new Date(todayYear, todayMonth - 1, todayDay)) {
         nextBirthday = new Date(todayYear + 1, bMonth - 1, bDay);
       }
-      const diffMs = nextBirthday.getTime() - new Date(todayYear, now.getMonth(), todayDay).getTime();
+      const diffMs = nextBirthday.getTime() - new Date(todayYear, todayMonth - 1, todayDay).getTime();
       const daysUntil = Math.round(diffMs / 86400000);
       const isToday = daysUntil === 0;
 
