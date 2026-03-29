@@ -772,15 +772,40 @@ export function createServer(config: ServerConfig): {
             const notifications = notificationService.generateBirthdayNotifications(user.id, undefined, settings.timezone);
             for (const notification of notifications) {
               try {
-                await pushService.sendPushNotification(
-                  user.id,
+                const result = await pushService.sendPushNotification(
+                  notification.user_id,
                   notification.title,
                   notification.body || '',
                   '/web/dashboard'
                 );
-              } catch {
-                // Push send failure is non-fatal
+                notificationService.recordPushResult(notification.id, result.sent > 0);
+                if (result.sent === 0 && result.failed > 0) {
+                  console.error(`Push delivery failed for notification ${notification.id} ("${notification.title}"): ${result.failed} subscription(s) failed`);
+                }
+              } catch (err) {
+                notificationService.recordPushResult(notification.id, false);
+                console.error(`Push send error for notification ${notification.id}:`, err);
               }
+            }
+          }
+
+          // Retry failed pushes (runs every tick, not just during reminder window)
+          const retries = notificationService.getPendingPushRetries(user.id);
+          for (const notification of retries) {
+            try {
+              const result = await pushService.sendPushNotification(
+                notification.user_id,
+                notification.title,
+                notification.body || '',
+                '/web/dashboard'
+              );
+              notificationService.recordPushResult(notification.id, result.sent > 0);
+              if (result.sent === 0 && result.failed > 0) {
+                console.error(`Push retry failed for notification ${notification.id} ("${notification.title}"): ${result.failed} subscription(s) failed`);
+              }
+            } catch (err) {
+              notificationService.recordPushResult(notification.id, false);
+              console.error(`Push retry error for notification ${notification.id}:`, err);
             }
           }
         }

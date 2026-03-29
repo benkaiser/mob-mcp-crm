@@ -154,6 +154,8 @@ export class PushNotificationService {
         // Remove expired/invalid subscriptions (410 Gone or 404)
         if (err.statusCode === 410 || err.statusCode === 404) {
           this.db.prepare('DELETE FROM push_subscriptions WHERE id = ?').run(sub.id);
+        } else {
+          console.error(`Push notification failed for subscription ${sub.id} (status: ${err.statusCode}):`, err.message);
         }
       }
     }

@@ -191,6 +191,34 @@ export class NotificationService {
     return generated;
   }
 
+  /**
+   * Record the result of a push notification delivery attempt.
+   * Increments push_attempts and sets push_sent = 1 on success.
+   */
+  recordPushResult(notificationId: string, sent: boolean): void {
+    this.db.prepare(`
+      UPDATE notifications
+      SET push_attempts = push_attempts + 1, push_sent = ?
+      WHERE id = ?
+    `).run(sent ? 1 : 0, notificationId);
+  }
+
+  /**
+   * Get notifications that failed push delivery and are eligible for retry.
+   * Returns notifications where push was attempted but not sent, within the last 48 hours,
+   * and below the max attempt threshold.
+   */
+  getPendingPushRetries(userId: string, maxAttempts: number = 3): Notification[] {
+    const rows = this.db.prepare(`
+      SELECT * FROM notifications
+      WHERE user_id = ? AND push_sent = 0 AND push_attempts > 0 AND push_attempts < ?
+        AND created_at >= datetime('now', '-48 hours')
+      ORDER BY created_at ASC
+    `).all(userId, maxAttempts) as any[];
+
+    return rows.map((r) => this.mapRow(r));
+  }
+
   private getById(id: string): Notification | null {
     const row = this.db.prepare('SELECT * FROM notifications WHERE id = ?').get(id) as any;
     if (!row) return null;
