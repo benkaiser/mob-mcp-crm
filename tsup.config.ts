@@ -13,5 +13,7 @@ export default defineConfig({
   onSuccess: async () => {
     cpSync('src/server/views', 'dist/views', { recursive: true });
     cpSync('src/server/service-worker.js', 'dist/service-worker.js');
+    cpSync('src/server/favicon.svg', 'dist/favicon.svg');
+    cpSync('src/server/favicon-192.png', 'dist/favicon-192.png');
   },
 });
