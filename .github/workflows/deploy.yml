@@ -27,8 +27,8 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.DOKKU_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H kaiserapps.com >> ~/.ssh/known_hosts
+          ssh-keyscan -H kaiser.lol >> ~/.ssh/known_hosts
 
       - name: Push to Dokku
         run: |
-          GIT_SSH_COMMAND="ssh -i ~/.ssh/deploy_key" git push dokku@kaiserapps.com:${{ matrix.app }} HEAD:refs/heads/master --force
+          GIT_SSH_COMMAND="ssh -i ~/.ssh/deploy_key" git push dokku@kaiser.lol:${{ matrix.app }} HEAD:refs/heads/master --force
