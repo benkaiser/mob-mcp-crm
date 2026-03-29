@@ -618,13 +618,15 @@ export class ContactService {
       const bMonth = row.birthday_month;
       const bDay = row.birthday_day;
 
-      // Calculate days until next birthday
-      let nextBirthday = new Date(todayYear, bMonth - 1, bDay);
+      // Calculate days until next birthday using Date.UTC to avoid server-timezone
+      // DST transitions affecting the day arithmetic.
+      const todayMs = Date.UTC(todayYear, todayMonth - 1, todayDay);
+      let nextBirthdayMs = Date.UTC(todayYear, bMonth - 1, bDay);
       // If this year's birthday has passed, use next year
-      if (nextBirthday < new Date(todayYear, todayMonth - 1, todayDay)) {
-        nextBirthday = new Date(todayYear + 1, bMonth - 1, bDay);
+      if (nextBirthdayMs < todayMs) {
+        nextBirthdayMs = Date.UTC(todayYear + 1, bMonth - 1, bDay);
       }
-      const diffMs = nextBirthday.getTime() - new Date(todayYear, todayMonth - 1, todayDay).getTime();
+      const diffMs = nextBirthdayMs - todayMs;
       const daysUntil = Math.round(diffMs / 86400000);
       const isToday = daysUntil === 0;
 
@@ -642,10 +644,10 @@ export class ContactService {
       let ageTurning: number | null = null;
       if (row.birthday_mode === 'full_date' && row.birthday_date) {
         const birthYear = parseInt(row.birthday_date.split('-')[0], 10);
-        const birthdayYear = isToday ? todayYear : nextBirthday.getFullYear();
+        const birthdayYear = isToday ? todayYear : new Date(nextBirthdayMs).getUTCFullYear();
         ageTurning = birthdayYear - birthYear;
       } else if (row.birthday_mode === 'approximate_age' && row.birthday_year_approximate) {
-        const birthdayYear = isToday ? todayYear : nextBirthday.getFullYear();
+        const birthdayYear = isToday ? todayYear : new Date(nextBirthdayMs).getUTCFullYear();
         ageTurning = birthdayYear - row.birthday_year_approximate;
       }
 

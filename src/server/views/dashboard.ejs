@@ -47,5 +47,19 @@
       </div>
     </a>
   </div>
+  <script>
+    // Auto-detect and save the browser timezone so birthday reminders fire on
+    // the correct local date (e.g. UTC+10 users see day-of reminders on the day).
+    try {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (tz) {
+        fetch('/api/timezone', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ timezone: tz }),
+        }).catch(() => {});
+      }
+    } catch (e) {}
+  </script>
 </body>
 </html>
