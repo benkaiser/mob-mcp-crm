@@ -414,6 +414,26 @@ export function createServer(config: ServerConfig): {
   const pushService = new PushNotificationService(db);
   const settingsService = new UserSettingsService(db);
 
+  // ─── Timezone Auto-Detection ───────────────────────────────
+
+  // Receives the browser's detected timezone and saves it to user settings.
+  // This ensures birthday reminders use the correct local date for UTC+X users.
+  app.post('/api/timezone', requireWebSession, (req, res) => {
+    const user = (req as any).webUser as { userId: string };
+    const { timezone } = req.body;
+    if (typeof timezone !== 'string' || !timezone) {
+      res.status(400).json({ error: 'timezone required' });
+      return;
+    }
+    try {
+      settingsService.update(user.userId, { timezone });
+      res.json({ ok: true });
+    } catch {
+      // Invalid timezone string — ignore silently
+      res.json({ ok: false });
+    }
+  });
+
   // Store base URL in server_config for MCP tools to reference
   db.prepare("INSERT OR REPLACE INTO server_config (key, value) VALUES ('base_url', ?)").run(serverUrl);
 
@@ -765,12 +785,23 @@ export function createServer(config: ServerConfig): {
   if (!config.forgetful) {
     const notificationService = new NotificationService(db);
 
+    // Guard against concurrent executions if a run takes longer than the interval.
+    let birthdaySchedulerRunning = false;
+
     const runBirthdayScheduler = async () => {
+      if (birthdaySchedulerRunning) return;
+      birthdaySchedulerRunning = true;
       try {
         const users = db.prepare('SELECT id FROM users').all() as { id: string }[];
         for (const user of users) {
           const settings = settingsService.get(user.id);
           const now = new Date();
+
+          // Always generate birthday notifications regardless of time window.
+          // Dedup inside generateBirthdayNotifications prevents duplicate DB entries.
+          // This ensures "day of" notifications exist in the DB even if the server
+          // started or restarted after the push window had already passed for the day.
+          const newNotifications = notificationService.generateBirthdayNotifications(user.id, undefined, settings.timezone);
 
           // Convert current time to user's timezone
           const userTime = new Intl.DateTimeFormat('en-US', {
@@ -787,8 +818,11 @@ export function createServer(config: ServerConfig): {
           const reminderMins = reminderHour * 60 + reminderMin;
 
           if (currentMins >= reminderMins && currentMins < reminderMins + 15) {
-            const notifications = notificationService.generateBirthdayNotifications(user.id, undefined, settings.timezone);
-            for (const notification of notifications) {
+            const pushedIds = new Set<string>();
+
+            // Push newly generated notifications
+            for (const notification of newNotifications) {
+              pushedIds.add(notification.id);
               try {
                 const result = await pushService.sendPushNotification(
                   notification.user_id,
@@ -803,6 +837,50 @@ export function createServer(config: ServerConfig): {
               } catch (err) {
                 notificationService.recordPushResult(notification.id, false);
                 console.error(`Push send error for notification ${notification.id}:`, err);
+              }
+            }
+
+            // Also push any "day-of" birthday notifications that already existed in the
+            // DB before this window opened (e.g., server generates notifications on startup
+            // before the push window fires). Use source_id to identify day-of (offset=0)
+            // notifications robustly, with a title fallback for older notifications that
+            // predate the source_id encoding.
+            const userDateStr = new Intl.DateTimeFormat('en-CA', {
+              timeZone: settings.timezone,
+              year: 'numeric', month: '2-digit', day: '2-digit',
+            }).format(now);
+            const [yearStr, monthStr, dayStr] = userDateStr.split('-');
+            const todayYear = parseInt(yearStr, 10);
+            const todayMonth = parseInt(monthStr, 10);
+            const todayDay = parseInt(dayStr, 10);
+
+            const catchUpNotifs = db.prepare(`
+              SELECT n.id, n.title, n.body
+              FROM notifications n
+              JOIN contacts c ON n.contact_id = c.id
+              WHERE n.user_id = ? AND n.type = 'birthday' AND n.is_read = 0
+                AND (
+                  n.source_id = ?
+                  OR (n.source_id IS NULL AND n.title LIKE '%today%')
+                )
+                AND c.birthday_month = ?
+                AND c.birthday_day = ?
+                AND c.deleted_at IS NULL
+                AND n.created_at >= date('now', 'start of year')
+            `).all(user.id, `birthday-${todayYear}-0`, todayMonth, todayDay) as { id: string; title: string; body: string | null }[];
+
+            for (const notification of catchUpNotifs) {
+              if (!pushedIds.has(notification.id)) {
+                try {
+                  await pushService.sendPushNotification(
+                    user.id,
+                    notification.title,
+                    notification.body || '',
+                    '/web/dashboard'
+                  );
+                } catch {
+                  // Push send failure is non-fatal
+                }
               }
             }
           }
@@ -829,9 +907,15 @@ export function createServer(config: ServerConfig): {
         }
       } catch (err) {
         console.error('Birthday scheduler error:', err);
+      } finally {
+        birthdaySchedulerRunning = false;
       }
     };
 
+    // Run once immediately on startup so that if the server restarts during or just
+    // before the reminder window, the notifications are generated and pushed without
+    // waiting for the first setInterval tick (which fires 15 minutes after startup).
+    void runBirthdayScheduler();
     birthdaySchedulerInterval = setInterval(runBirthdayScheduler, 15 * 60 * 1000);
 
     // Reminder push notification scheduler (every 15 minutes)

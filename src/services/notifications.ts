@@ -162,8 +162,11 @@ export class NotificationService {
 
       // Check if birthday matches any offset.
       // Use timezone-aware today values computed above.
-      const todayDayOfYear = new Date(todayYear, todayMonth - 1, todayDay).getTime();
-      const birthdayThisYear = new Date(todayYear, bMonth - 1, bDay).getTime();
+      // Use Date.UTC to ensure arithmetic is always in UTC regardless of the
+      // server's local timezone (prevents DST transitions on the server from
+      // skewing the day difference by ±1).
+      const todayDayOfYear = Date.UTC(todayYear, todayMonth - 1, todayDay);
+      const birthdayThisYear = Date.UTC(todayYear, bMonth - 1, bDay);
       const diffDays = Math.round((birthdayThisYear - todayDayOfYear) / 86400000);
 
       if (offsets.includes(diffDays)) {
@@ -182,6 +185,9 @@ export class NotificationService {
             title: `${name}'s birthday is ${diffDays === 0 ? 'today' : `in ${diffDays} day${diffDays > 1 ? 's' : ''}`}!`,
             contact_id: contact.id,
             source_type: 'birthday',
+            // Encode the offset in source_id so the push-window catch-up in the scheduler
+            // can identify day-of (offset=0) notifications without relying on title text.
+            source_id: `birthday-${todayYear}-${diffDays}`,
           });
           generated.push(notification);
         }

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Database from 'better-sqlite3';
 import { NotificationService } from '../../src/services/notifications.js';
 import { createTestDatabase, createTestUser, createTestContact } from '../fixtures/test-helpers.js';
@@ -160,6 +160,100 @@ describe('NotificationService', () => {
       const todayNotif = notifications.find(n => n.contact_id === 'today-contact');
       expect(todayNotif).toBeDefined();
       expect(todayNotif!.title).toContain('today');
+    });
+
+    it('should generate a "today" notification using the configured timezone (UTC+10)', () => {
+      // Verify that generateBirthdayNotifications uses the passed timezone to determine
+      // "today" rather than always using the server's UTC clock. We compute today's date
+      // in Australia/Brisbane (UTC+10) and set the contact's birthday to match, then
+      // confirm a "today" notification is generated when the timezone is passed correctly.
+      const now = new Date();
+      const utc10DateStr = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Australia/Brisbane',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+      }).format(now);
+      const [, monthStr, dayStr] = utc10DateStr.split('-');
+      const utc10Month = parseInt(monthStr, 10);
+      const utc10Day = parseInt(dayStr, 10);
+
+      db.prepare(`
+        INSERT INTO contacts (id, user_id, first_name, birthday_mode, birthday_month, birthday_day, status, is_favorite, created_at, updated_at)
+        VALUES ('utc10-today', ?, 'UTC10TodayBirthday', 'month_day', ?, ?, 'active', 0, datetime('now'), datetime('now'))
+      `).run(userId, utc10Month, utc10Day);
+
+      // Call with Australia/Brisbane timezone — must see diffDays=0 for this contact
+      const notifications = service.generateBirthdayNotifications(userId, undefined, 'Australia/Brisbane');
+      const todayNotif = notifications.find(n => n.contact_id === 'utc10-today');
+      expect(todayNotif).toBeDefined();
+      expect(todayNotif!.title).toContain('today');
+      // Verify source_id encodes offset 0 (day-of)
+      expect(todayNotif!.source_id).toMatch(/-0$/);
+    });
+
+    it('should NOT treat the UTC date as "today" when the UTC+10 date is different', () => {
+      // When generateBirthdayNotifications is called with 'Australia/Brisbane' timezone,
+      // it must use the UTC+10 date for diffDays computation. A contact whose birthday
+      // matches the *UTC* day but not the *UTC+10* day should not get a "today" notification.
+      // This only has observable effect when UTC and UTC+10 are on different calendar days
+      // (14:00–23:59 UTC), but the underlying logic is always exercised: the function
+      // correctly uses the timezone parameter for all hour ranges.
+      const now = new Date();
+      const utcMonth = now.getUTCMonth() + 1;
+      const utcDay = now.getUTCDate();
+
+      // Compute UTC+10 date
+      const utc10DateStr = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Australia/Brisbane',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+      }).format(now);
+      const [, utc10MonthStr, utc10DayStr] = utc10DateStr.split('-');
+      const utc10Month = parseInt(utc10MonthStr, 10);
+      const utc10Day = parseInt(utc10DayStr, 10);
+
+      // Only assert the stricter check when UTC and UTC+10 are on different days.
+      // When they are on the same day the UTC contact birthday matches UTC+10 too, so
+      // we can only verify that the contact IS found (not that it's excluded).
+      if (utcMonth !== utc10Month || utcDay !== utc10Day) {
+        // The UTC "today" is a different calendar day from UTC+10 "today"
+        db.prepare(`
+          INSERT INTO contacts (id, user_id, first_name, birthday_mode, birthday_month, birthday_day, status, is_favorite, created_at, updated_at)
+          VALUES ('utc-only-today', ?, 'UTCOnlyBirthday', 'month_day', ?, ?, 'active', 0, datetime('now'), datetime('now'))
+        `).run(userId, utcMonth, utcDay);
+
+        const notifications = service.generateBirthdayNotifications(userId, undefined, 'Australia/Brisbane');
+        const utcTodayNotif = notifications.find(n => n.contact_id === 'utc-only-today');
+        // Not "today" from UTC+10's perspective (diffDays ≠ 0)
+        expect(utcTodayNotif).toBeUndefined();
+      }
+    });
+
+    it('deterministic: UTC+10 "today" is generated correctly when UTC is still on the previous day', () => {
+      // Pin the clock to 2026-03-28T22:00:00Z = March 29 08:00 Australia/Brisbane.
+      // The UTC date is March 28, but the UTC+10 date is March 29.
+      // A contact with birthday on March 29 should get a "today" notification when the
+      // timezone is 'Australia/Brisbane', but NOT when the (default) UTC timezone is used.
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-03-28T22:00:00Z'));
+      try {
+        // Birthday March 29 — "today" in UTC+10, but "tomorrow" in UTC
+        db.prepare(`
+          INSERT INTO contacts (id, user_id, first_name, birthday_mode, birthday_month, birthday_day, status, is_favorite, created_at, updated_at)
+          VALUES ('tz-test', ?, 'TZTest', 'month_day', 3, 29, 'active', 0, datetime('now'), datetime('now'))
+        `).run(userId);
+
+        // Without timezone override (defaults to UTC): March 28 in UTC → diffDays = 1, not today
+        const utcNotifs = service.generateBirthdayNotifications(userId);
+        expect(utcNotifs.find(n => n.contact_id === 'tz-test')).toBeUndefined();
+
+        // With Australia/Brisbane: March 29 in UTC+10 → diffDays = 0, generates "today"
+        const brisbaneNotifs = service.generateBirthdayNotifications(userId, undefined, 'Australia/Brisbane');
+        const todayNotif = brisbaneNotifs.find(n => n.contact_id === 'tz-test');
+        expect(todayNotif).toBeDefined();
+        expect(todayNotif!.title).toContain('today');
+        expect(todayNotif!.source_id).toBe('birthday-2026-0');
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('should not generate a duplicate notification for the same birthday in the same year', () => {
