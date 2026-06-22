@@ -29,7 +29,8 @@ describe('HTTP Server', () => {
     const response = await injectRequest(server.app, 'GET', '/');
     expect(response.status).toBe(200);
     expect(response.body).toContain('Mob');
-    expect(response.body).toContain('AI-First Personal CRM');
+    expect(response.body).toContain('personal CRM');
+    expect(response.body).toContain('Talk to it (MCP)');
   });
 
   it('should respond to health check', async () => {
