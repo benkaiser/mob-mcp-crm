@@ -12,9 +12,8 @@ import { mkdtempSync } from 'node:fs';
  *   - self-hosted (port 3100): default mode, unlimited plan. Used by the bulk of
  *     the feature specs (auth, contacts, sub-entities, timeline, search,
  *     duplicates, import, export, settings, navigation).
- *   - hosted     (port 3101): MOB_HOSTED=true, free-tier plan gating active
- *     (11-contact cap, API tokens + webhooks blocked). Used by the plan-gating
- *     specs.
+ *   - hosted     (port 3101): MOB_HOSTED=true, beta free plan active with
+ *     all features enabled and no contact cap. Used by the hosted beta specs.
  *
  * Each server gets its own throwaway MOB_DATA_DIR so test runs never touch real
  * data and start from a clean database every run.

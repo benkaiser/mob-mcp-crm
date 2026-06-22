@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import http from 'node:http';
+import { createHash } from 'node:crypto';
 import type { Express } from 'express';
 import { createServer } from '../../src/server/http-server.js';
 import type { ServerConfig } from '../../src/server/http-server.js';
@@ -47,6 +48,8 @@ function cookieFrom(headers: http.IncomingHttpHeaders, name: string): string | u
 }
 
 const persistentConfig: ServerConfig = { port: 0, dataDir: ':memory:', forgetful: false, baseUrl: 'http://localhost:0' };
+const verifier = 'test-verifier-that-is-long-enough';
+const challenge = createHash('sha256').update(verifier).digest('base64url');
 
 describe('Unified auth bridge (web <-> MCP)', () => {
   let server: ReturnType<typeof createServer> | null = null;
@@ -57,7 +60,7 @@ describe('Unified auth bridge (web <-> MCP)', () => {
     await accounts.createAccount({ name: 'Bandit Heeler', email: 'bandit@heeler.family', password: 'wackadoo123' });
   }
 
-  it('web session can mint an MCP authorization code without re-entering the password', async () => {
+  it('web session requires explicit consent before minting an MCP authorization code', async () => {
     server = createServer(persistentConfig);
     await makeUser(server);
 
@@ -68,18 +71,17 @@ describe('Unified auth bridge (web <-> MCP)', () => {
     const session = cookieFrom(login.headers, 'mob_session');
     expect(session).toBeDefined();
 
-    // Hit /auth/authorize with ONLY the session cookie (no email/password).
+    // JSON callers with a web session still need the browser consent step.
     const authz = await inject(server.app, 'POST', '/auth/authorize', {
       headers: { Cookie: `mob_session=${session}` },
-      body: { client_id: 'test-client', code_challenge: 'abc123', redirect_uri: 'http://localhost/cb' },
+      body: { client_id: 'test-client', code_challenge: challenge, code_challenge_method: 'S256', redirect_uri: 'http://localhost/cb' },
     });
-    expect(authz.status).toBe(200);
+    expect(authz.status).toBe(403);
     const body = JSON.parse(authz.body);
-    expect(body.code).toBeDefined();
-    expect(typeof body.code).toBe('string');
+    expect(body.error).toBe('authorization_confirmation_required');
   });
 
-  it('browser OAuth login also establishes a web session cookie', async () => {
+  it('browser OAuth login establishes a web session and then redirects after consent', async () => {
     server = createServer(persistentConfig);
     await makeUser(server);
 
@@ -88,22 +90,57 @@ describe('Unified auth bridge (web <-> MCP)', () => {
         email: 'bandit@heeler.family',
         password: 'wackadoo123',
         client_id: 'test-client',
-        code_challenge: 'abc123',
-        redirect_uri: 'http://localhost/cb',
+        code_challenge: challenge,
+        code_challenge_method: 'S256',
+        redirect_uri: 'joey://mcp-oauth/callback',
       },
     });
-    // Redirect back to client with code...
-    expect(authz.status).toBe(302);
-    expect(authz.headers.location).toContain('code=');
-    // ...and a web session cookie is set on the same browser.
-    expect(cookieFrom(authz.headers, 'mob_session')).toBeDefined();
+    expect(authz.status).toBe(200);
+    expect(authz.body).toContain('Confirm MCP client access');
+    expect(authz.body).toContain('joey://mcp-oauth/callback');
+    const session = cookieFrom(authz.headers, 'mob_session');
+    expect(session).toBeDefined();
+
+    const consent = await inject(server.app, 'POST', '/auth/authorize', {
+      headers: { Cookie: `mob_session=${session}` },
+      form: {
+        confirm_authorize: '1',
+        client_id: 'test-client',
+        code_challenge: challenge,
+        code_challenge_method: 'S256',
+        redirect_uri: 'joey://mcp-oauth/callback',
+        state: 'state-123',
+      },
+    });
+    expect(consent.status).toBe(302);
+    expect(consent.headers.location).toMatch(/^joey:\/\/mcp-oauth\/callback\?code=/);
+    expect(consent.headers.location).toContain('state=state-123');
   });
 
   it('requires credentials when no web session is present', async () => {
     server = createServer(persistentConfig);
     const authz = await inject(server.app, 'POST', '/auth/authorize', {
-      body: { client_id: 'test-client', code_challenge: 'abc123', redirect_uri: 'http://localhost/cb' },
+      body: { client_id: 'test-client', code_challenge: challenge, code_challenge_method: 'S256', redirect_uri: 'http://localhost/cb' },
     });
     expect(authz.status).toBe(400);
+  });
+
+  it('allows arbitrary absolute redirect URIs but shows them for consent', async () => {
+    server = createServer(persistentConfig);
+    await makeUser(server);
+
+    const authz = await inject(server.app, 'POST', '/auth/authorize', {
+      form: {
+        email: 'bandit@heeler.family',
+        password: 'wackadoo123',
+        client_id: 'desktop-client',
+        code_challenge: challenge,
+        code_challenge_method: 'S256',
+        redirect_uri: 'com.example.mob-client://oauth/callback',
+      },
+    });
+
+    expect(authz.status).toBe(200);
+    expect(authz.body).toContain('com.example.mob-client://oauth/callback');
   });
 });

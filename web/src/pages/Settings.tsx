@@ -18,7 +18,7 @@ export function Settings() {
   const me = user.value;
   if (!me) return null;
   const ent = me.entitlements;
-  const showUsage = me.hosted && me.plan === 'free' && ent.contact_cap > 0;
+  const showUsage = me.hosted && me.plan === 'free' && ent.contact_cap != null && ent.contact_cap > 0;
 
   return (
     <div class="stack">
@@ -44,6 +44,7 @@ export function Settings() {
             {me.usage.contacts}
             {showUsage ? ` / ${ent.contact_cap}` : ''}
             {showUsage && <span class="muted"> (free plan cap)</span>}
+            {!showUsage && me.hosted && me.plan === 'free' && <span class="muted"> (beta: uncapped)</span>}
           </dd>
           <dt>Public API</dt><dd>{ent.public_api ? <Badge tone="success">enabled</Badge> : <Badge>unavailable</Badge>}</dd>
           <dt>Webhooks</dt><dd>{ent.webhooks ? <Badge tone="success">enabled</Badge> : <Badge>unavailable</Badge>}</dd>
@@ -58,7 +59,7 @@ export function Settings() {
   );
 }
 
-/** Shown in place of management UI when a feature is gated off. */
+/** Shown in place of management UI if feature gating is reintroduced after beta. */
 function UpgradeNotice({ feature }: { feature: string }) {
   return (
     <div class="callout callout--warning">

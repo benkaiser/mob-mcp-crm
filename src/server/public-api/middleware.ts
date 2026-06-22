@@ -62,8 +62,8 @@ export function bearerAuth(tokenService: ApiTokenService): RequestHandler {
 
 /**
  * Require the `public_api` feature for the authed user. No-op when self-hosted
- * (PlanService treats everyone as unlimited). In hosted-free mode this forwards
- * the thrown FeatureNotAvailableError (403) to the error handler.
+ * During beta all plans include this feature. The middleware remains so
+ * post-beta entitlement changes can be enforced centrally.
  */
 export function requirePublicApi(planService: PlanService): RequestHandler {
   return (req, _res, next) => {

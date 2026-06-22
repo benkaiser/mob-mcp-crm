@@ -217,7 +217,7 @@ export function createServer(config: ServerConfig): {
       authorization_endpoint: `${serverUrl}/auth/authorize`,
       token_endpoint: `${serverUrl}/auth/token`,
       response_types_supported: ['code'],
-      code_challenge_methods_supported: ['S256', 'plain'],
+      code_challenge_methods_supported: ['S256'],
     },
     resourceServerUrl: new URL(`${serverUrl}/mcp`),
   }));
@@ -236,9 +236,18 @@ export function createServer(config: ServerConfig): {
       const redirect_uri = req.query.redirect_uri as string;
       const state = req.query.state as string;
 
-      if (!name || !email || !password) {
-        const originalUrl = req.originalUrl;
-        res.status(400).render('register', { registerUrl: originalUrl, loginUrl: getLoginUrlFromRegister(originalUrl), error: 'Full name, email, and password are required' });
+        const isOAuthRegistration = Boolean(client_id || redirect_uri || code_challenge || code_challenge_method);
+        const oauthError = isOAuthRegistration
+          ? validateOAuthRequest({ client_id, code_challenge, code_challenge_method, redirect_uri })
+          : null;
+        if (oauthError) {
+          res.status(400).render('register', { registerUrl: req.originalUrl, loginUrl: getLoginUrlFromRegister(req.originalUrl), error: oauthError });
+          return;
+        }
+
+        if (!name || !email || !password) {
+          const originalUrl = req.originalUrl;
+          res.status(400).render('register', { registerUrl: originalUrl, loginUrl: getLoginUrlFromRegister(originalUrl), error: 'Full name, email, and password are required' });
         return;
       }
 
@@ -246,18 +255,17 @@ export function createServer(config: ServerConfig): {
         const user = await accountService.createAccount({ name, email, password, timezone, plan: config.hosted ? 'free' : 'unlimited' });
 
         // If we're in an OAuth flow, issue code and redirect
-        if (client_id && redirect_uri) {
-          const code = oauthService.createAuthorizationCode({
-            userId: user.id,
+        if (isOAuthRegistration) {
+          const token = setWebSession({ userId: user.id, userName: user.name, email: user.email }, req);
+          res.setHeader('Set-Cookie', sessionCookie(token));
+          renderOAuthConsent(res, {
+            authorizeUrl: '/auth/authorize',
             clientId: client_id,
-            codeChallenge: code_challenge || 'none',
-            codeChallengeMethod: code_challenge_method || 'S256',
+            codeChallenge: code_challenge,
+            codeChallengeMethod: code_challenge_method,
             redirectUri: redirect_uri,
+            state,
           });
-          const redirectUrl = new URL(redirect_uri);
-          redirectUrl.searchParams.set('code', code);
-          if (state) redirectUrl.searchParams.set('state', state);
-          res.redirect(redirectUrl.toString());
         } else {
           // Not in OAuth flow — auto-login and redirect to the SPA
           const token = setWebSession({ userId: user.id, userName: user.name, email: user.email }, req);
@@ -322,8 +330,40 @@ export function createServer(config: ServerConfig): {
       return;
     }
 
+    const oauthError = validateOAuthRequest({ client_id, code_challenge, code_challenge_method, redirect_uri });
+    if (oauthError) {
+      res.status(400).render('login', {
+        authorizeUrl: req.originalUrl,
+        registerUrl: req.originalUrl.replace('/auth/authorize', '/auth/register'),
+        clientId: client_id,
+        redirectUri: redirect_uri,
+        error: oauthError,
+      });
+      return;
+    }
+
+    const bridgeToken = parseCookie(req.headers.cookie ?? '', 'mob_session');
+    const bridgeSession = getWebSession(bridgeToken);
+    if (bridgeSession) {
+      renderOAuthConsent(res, {
+        authorizeUrl: '/auth/authorize',
+        clientId: client_id,
+        codeChallenge: code_challenge,
+        codeChallengeMethod: code_challenge_method,
+        redirectUri: redirect_uri,
+        state,
+      });
+      return;
+    }
+
     // Persistent mode — show login form
-    res.render('login', { authorizeUrl: req.originalUrl, registerUrl: req.originalUrl.replace('/auth/authorize', '/auth/register'), error: undefined });
+    res.render('login', {
+      authorizeUrl: req.originalUrl,
+      registerUrl: req.originalUrl.replace('/auth/authorize', '/auth/register'),
+      clientId: client_id,
+      redirectUri: redirect_uri,
+      error: undefined,
+    });
   });
 
   // Authorization endpoint — POST: accepts login credentials + PKCE params
@@ -337,6 +377,7 @@ export function createServer(config: ServerConfig): {
     const code_challenge_method = req.body.code_challenge_method || req.query.code_challenge_method as string;
     const redirect_uri = req.body.redirect_uri || req.query.redirect_uri as string;
     const state = req.body.state || req.query.state as string;
+    const confirmed = req.body.confirm_authorize === '1';
 
     // In forgetful mode, no OAuth is needed for MCP — reject API auth requests
     if (config.forgetful) {
@@ -344,9 +385,19 @@ export function createServer(config: ServerConfig): {
       return;
     }
 
-    // Persistent mode — require client params
-    if (!client_id || !code_challenge) {
-      res.status(400).json({ error: 'client_id and code_challenge are required' });
+    const oauthError = validateOAuthRequest({ client_id, code_challenge, code_challenge_method, redirect_uri });
+    if (oauthError) {
+      if (isFormPost) {
+        res.status(400).render('login', {
+          authorizeUrl: req.originalUrl,
+          registerUrl: req.originalUrl.replace('/auth/authorize', '/auth/register'),
+          clientId: client_id,
+          redirectUri: redirect_uri,
+          error: oauthError,
+        });
+        return;
+      }
+      res.status(400).json({ error: 'invalid_request', error_description: oauthError });
       return;
     }
 
@@ -357,12 +408,30 @@ export function createServer(config: ServerConfig): {
     const bridgeToken = parseCookie(req.headers.cookie ?? '', 'mob_session');
     const bridgeSession = getWebSession(bridgeToken);
     if (bridgeSession) {
+      if (!confirmed) {
+        if (isFormPost) {
+          renderOAuthConsent(res, {
+            authorizeUrl: '/auth/authorize',
+            clientId: client_id,
+            codeChallenge: code_challenge,
+            codeChallengeMethod: code_challenge_method,
+            redirectUri: redirect_uri,
+            state,
+          });
+        } else {
+          res.status(403).json({
+            error: 'authorization_confirmation_required',
+            error_description: 'User confirmation is required before redirecting to this OAuth client',
+          });
+        }
+        return;
+      }
       const code = oauthService.createAuthorizationCode({
         userId: bridgeSession.userId,
         clientId: client_id,
         codeChallenge: code_challenge,
-        codeChallengeMethod: code_challenge_method || 'S256',
-        redirectUri: redirect_uri || 'http://localhost',
+        codeChallengeMethod: code_challenge_method,
+        redirectUri: redirect_uri,
       });
       if (isFormPost && redirect_uri) {
         const redirectUrl = new URL(redirect_uri);
@@ -370,7 +439,7 @@ export function createServer(config: ServerConfig): {
         if (state) redirectUrl.searchParams.set('state', state);
         res.redirect(redirectUrl.toString());
       } else {
-        res.json({ code, redirect_uri: redirect_uri || 'http://localhost' });
+        res.json({ code, redirect_uri });
       }
       return;
     }
@@ -386,20 +455,12 @@ export function createServer(config: ServerConfig): {
       // If this came from the login form, re-render with error
       if (isFormPost) {
         const originalUrl = `/auth/authorize?client_id=${encodeURIComponent(client_id)}&code_challenge=${encodeURIComponent(code_challenge)}&code_challenge_method=${encodeURIComponent(code_challenge_method || 'S256')}&redirect_uri=${encodeURIComponent(redirect_uri || '')}&state=${encodeURIComponent(state || '')}`;
-        res.status(401).render('login', { authorizeUrl: originalUrl, registerUrl: originalUrl.replace('/auth/authorize', '/auth/register'), error: 'Invalid email or password' });
+        res.status(401).render('login', { authorizeUrl: originalUrl, registerUrl: originalUrl.replace('/auth/authorize', '/auth/register'), clientId: client_id, redirectUri: redirect_uri, error: 'Invalid email or password' });
         return;
       }
       res.status(401).json({ error: 'Invalid email or password' });
       return;
     }
-
-    const code = oauthService.createAuthorizationCode({
-      userId: user.id,
-      clientId: client_id,
-      codeChallenge: code_challenge,
-      codeChallengeMethod: code_challenge_method || 'S256',
-      redirectUri: redirect_uri || 'http://localhost',
-    });
 
     // Form posts (browser login) get a redirect; JSON API calls get JSON
     if (isFormPost && redirect_uri) {
@@ -407,14 +468,36 @@ export function createServer(config: ServerConfig): {
       // the same browser is logged into the web app (one identity, both heads).
       const webToken = setWebSession({ userId: user.id, userName: user.name, email: user.email }, req);
       res.setHeader('Set-Cookie', sessionCookie(webToken));
-      const redirectUrl = new URL(redirect_uri);
-      redirectUrl.searchParams.set('code', code);
-      if (state) redirectUrl.searchParams.set('state', state);
-      res.redirect(redirectUrl.toString());
+      renderOAuthConsent(res, {
+        authorizeUrl: '/auth/authorize',
+        clientId: client_id,
+        codeChallenge: code_challenge,
+        codeChallengeMethod: code_challenge_method,
+        redirectUri: redirect_uri,
+        state,
+      });
     } else {
-      res.json({ code, redirect_uri: redirect_uri || 'http://localhost' });
+      const code = oauthService.createAuthorizationCode({
+        userId: user.id,
+        clientId: client_id,
+        codeChallenge: code_challenge,
+        codeChallengeMethod: code_challenge_method,
+        redirectUri: redirect_uri,
+      });
+      res.json({ code, redirect_uri });
     }
   });
+
+  function renderOAuthConsent(res: express.Response, params: {
+    authorizeUrl: string;
+    clientId: string;
+    codeChallenge: string;
+    codeChallengeMethod: string;
+    redirectUri: string;
+    state?: string;
+  }): void {
+    res.render('oauth-consent', params);
+  }
 
   // Token endpoint — exchange auth code for access token
   app.post('/auth/token', (req, res) => {
@@ -434,7 +517,7 @@ export function createServer(config: ServerConfig): {
       code,
       codeVerifier: code_verifier || '',
       clientId: client_id,
-      redirectUri: redirect_uri || 'http://localhost',
+      redirectUri: redirect_uri || '',
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
     });
@@ -695,7 +778,8 @@ export function createServer(config: ServerConfig): {
 
   app.get('/web/reminder/:id', requireWebSession, (req, res) => {
     const user = (req as any).webUser as { userId: string; userName: string };
-    const reminder = reminderService.get(user.userId, req.params.id);
+    const reminderId = param(req.params.id);
+    const reminder = reminderService.get(user.userId, reminderId);
     if (!reminder) {
       res.status(404).send('Reminder not found');
       return;
@@ -717,34 +801,37 @@ export function createServer(config: ServerConfig): {
 
   app.post('/web/reminder/:id/complete', requireWebSession, (req, res) => {
     const user = (req as any).webUser as { userId: string };
-    const result = reminderService.complete(user.userId, req.params.id);
+    const reminderId = param(req.params.id);
+    const result = reminderService.complete(user.userId, reminderId);
     if (!result) {
       res.status(404).send('Reminder not found');
       return;
     }
-    res.redirect(`/web/reminder/${req.params.id}?success=${encodeURIComponent('Reminder marked as complete.')}`);
+    res.redirect(`/web/reminder/${reminderId}?success=${encodeURIComponent('Reminder marked as complete.')}`);
   });
 
   app.post('/web/reminder/:id/snooze', requireWebSession, (req, res) => {
     const user = (req as any).webUser as { userId: string };
     const days = parseInt(req.body.days) || 1;
     const newDate = new Date(Date.now() + days * 86400000).toISOString().split('T')[0];
-    const result = reminderService.snooze(user.userId, req.params.id, newDate);
+    const reminderId = param(req.params.id);
+    const result = reminderService.snooze(user.userId, reminderId, newDate);
     if (!result) {
       res.status(404).send('Reminder not found');
       return;
     }
-    res.redirect(`/web/reminder/${req.params.id}?success=${encodeURIComponent(`Reminder snoozed until ${newDate}.`)}`);
+    res.redirect(`/web/reminder/${reminderId}?success=${encodeURIComponent(`Reminder snoozed until ${newDate}.`)}`);
   });
 
   app.post('/web/reminder/:id/dismiss', requireWebSession, (req, res) => {
     const user = (req as any).webUser as { userId: string };
-    const success = reminderService.softDelete(user.userId, req.params.id);
+    const reminderId = param(req.params.id);
+    const success = reminderService.softDelete(user.userId, reminderId);
     if (!success) {
       res.status(404).send('Reminder not found');
       return;
     }
-    res.redirect(`/web/reminder/${req.params.id}?success=${encodeURIComponent('Reminder dismissed.')}`);
+    res.redirect(`/web/reminder/${reminderId}?success=${encodeURIComponent('Reminder dismissed.')}`);
   });
 
   // ─── Monica Import (retired) ──────────────────────────────
@@ -1090,4 +1177,31 @@ function getLoginUrlFromRegister(registerUrl: string): string {
 function parseCookie(cookieHeader: string, name: string): string | null {
   const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`));
   return match ? decodeURIComponent(match[1]) : null;
+}
+
+function param(value: unknown): string {
+  return Array.isArray(value) ? value[0] : String(value ?? '');
+}
+
+function validateOAuthRequest(params: {
+  client_id?: string;
+  code_challenge?: string;
+  code_challenge_method?: string;
+  redirect_uri?: string;
+}): string | null {
+  if (!params.client_id) return 'client_id is required';
+  if (!params.redirect_uri) return 'redirect_uri is required';
+  if (!params.code_challenge) return 'code_challenge is required';
+  if (params.code_challenge_method !== 'S256') return 'Only S256 PKCE is supported';
+  if (!isValidOAuthRedirectUri(params.redirect_uri)) return 'redirect_uri must be a valid absolute URI';
+  return null;
+}
+
+function isValidOAuthRedirectUri(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return Boolean(url.protocol && url.protocol !== ':');
+  } catch {
+    return false;
+  }
 }

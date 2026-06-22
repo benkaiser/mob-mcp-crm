@@ -159,18 +159,13 @@ describe('Contacts internal API (/web/api/contacts)', () => {
     expect(body.data.some((x: { first_name: string }) => x.first_name === 'Muffin')).toBe(false);
   });
 
-  it('enforces the contact quota in hosted free mode', async () => {
+  it('does not enforce the contact quota in hosted free mode during beta', async () => {
     server = createServer(hosted);
     const c = await makeClient(server, 'free@test.dev', 'free');
-    // Signup already created 1 self-contact. Free cap = 11 → add up to 10 more.
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 15; i++) {
       const r = await c.mutate('POST', '/web/api/contacts', { first_name: `C${i}` });
       expect(r.status).toBe(201);
     }
-    // 12th contact (11 + self = over cap) → 402
-    const over = await c.mutate('POST', '/web/api/contacts', { first_name: 'Overflow' });
-    expect(over.status).toBe(402);
-    expect(JSON.parse(over.body).error.code).toBe('quota_exceeded');
   });
 
   it('does NOT enforce the quota in self-hosted mode', async () => {

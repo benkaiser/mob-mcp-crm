@@ -1,5 +1,7 @@
 import Database from 'better-sqlite3';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { lookup } from 'node:dns/promises';
+import { isIP } from 'node:net';
 import { generateId } from '../utils.js';
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -64,6 +66,16 @@ export interface ListDeliveriesOptions {
   per_page?: number;
 }
 
+export class WebhookUrlNotAllowedError extends Error {
+  status = 422;
+  code = 'validation_error';
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'WebhookUrlNotAllowedError';
+  }
+}
+
 export interface PaginatedResult<T> {
   data: T[];
   total: number;
@@ -74,12 +86,13 @@ export interface PaginatedResult<T> {
 /** A minimal subset of the global `fetch` signature, for injection in tests. */
 export type FetchImpl = (
   url: string,
-  init: { method: string; headers: Record<string, string>; body: string },
+  init: { method: string; headers: Record<string, string>; body: string; redirect: 'manual'; signal: AbortSignal },
 ) => Promise<{ status: number; ok?: boolean }>;
 
 // ─── Constants ──────────────────────────────────────────────────
 
 const MAX_ATTEMPTS = 5;
+const DELIVERY_TIMEOUT_MS = 10_000;
 
 // ─── Helpers ────────────────────────────────────────────────────
 
@@ -92,10 +105,67 @@ function computeSignature(secret: string, rawBody: string): string {
   return 'sha256=' + createHmac('sha256', secret).update(rawBody).digest('hex');
 }
 
+function isBlockedIp(address: string): boolean {
+  const version = isIP(address);
+  if (version === 4) {
+    const parts = address.split('.').map((p) => Number(p));
+    const [a, b] = parts;
+    return (
+      a === 0 ||
+      a === 10 ||
+      a === 127 ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      a >= 224
+    );
+  }
+  if (version === 6) {
+    const normalized = address.toLowerCase();
+    return (
+      normalized === '::1' ||
+      normalized === '::' ||
+      normalized.startsWith('fc') ||
+      normalized.startsWith('fd') ||
+      normalized.startsWith('fe80:') ||
+      normalized.startsWith('::ffff:127.') ||
+      normalized.startsWith('::ffff:10.') ||
+      normalized.startsWith('::ffff:192.168.')
+    );
+  }
+  return false;
+}
+
+function parseAllowedWebhookUrl(value: string): URL {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new WebhookUrlNotAllowedError('Webhook URL must be a valid HTTPS URL');
+  }
+  if (url.protocol !== 'https:') {
+    throw new WebhookUrlNotAllowedError('Webhook URL must use HTTPS');
+  }
+  const hostname = url.hostname.toLowerCase();
+  if (!hostname || hostname === 'localhost' || hostname.endsWith('.localhost') || isBlockedIp(hostname)) {
+    throw new WebhookUrlNotAllowedError('Webhook URL host is not allowed');
+  }
+  return url;
+}
+
+async function assertResolvedWebhookHostAllowed(url: URL): Promise<void> {
+  const addresses = await lookup(url.hostname, { all: true, verbatim: true });
+  if (addresses.length === 0 || addresses.some((entry) => isBlockedIp(entry.address))) {
+    throw new Error('Webhook URL resolves to a blocked network address');
+  }
+}
+
 // ─── Service ────────────────────────────────────────────────────
 
 export class WebhookService {
   private fetchImpl: FetchImpl;
+  private resolveTargets: boolean;
 
   constructor(
     private db: Database.Database,
@@ -103,11 +173,13 @@ export class WebhookService {
   ) {
     // Default to the global fetch (Node 20+). Bound so `this` is preserved.
     this.fetchImpl = fetchImpl ?? ((url, init) => fetch(url, init) as unknown as ReturnType<FetchImpl>);
+    this.resolveTargets = fetchImpl === undefined;
   }
 
   // ── CRUD ──────────────────────────────────────────────────────
 
   create(userId: string, input: CreateWebhookInput): Webhook {
+    parseAllowedWebhookUrl(input.url);
     const id = generateId();
     const secret = input.secret ?? randomBytes(32).toString('hex');
     const events = normalizeEvents(input.events);
@@ -138,7 +210,10 @@ export class WebhookService {
     const fields: string[] = [];
     const values: unknown[] = [];
 
-    if (patch.url !== undefined) { fields.push('url = ?'); values.push(patch.url); }
+    if (patch.url !== undefined) {
+      parseAllowedWebhookUrl(patch.url);
+      fields.push('url = ?'); values.push(patch.url);
+    }
     if (patch.events !== undefined) { fields.push('events = ?'); values.push(normalizeEvents(patch.events)); }
     if (patch.secret !== undefined) { fields.push('secret = ?'); values.push(patch.secret); }
     if (patch.active !== undefined) { fields.push('active = ?'); values.push(patch.active ? 1 : 0); }
@@ -278,6 +353,8 @@ export class WebhookService {
     const attempts = (current?.attempts ?? 0) + 1;
 
     try {
+      const url = parseAllowedWebhookUrl(hook.url);
+      if (this.resolveTargets) await assertResolvedWebhookHostAllowed(url);
       const res = await this.fetchImpl(hook.url, {
         method: 'POST',
         headers: {
@@ -286,6 +363,8 @@ export class WebhookService {
           'X-Mob-Event': hook.events,
         },
         body: rawBody,
+        redirect: 'manual',
+        signal: AbortSignal.timeout(DELIVERY_TIMEOUT_MS),
       });
 
       const status = res.status;

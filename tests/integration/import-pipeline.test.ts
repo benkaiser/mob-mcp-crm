@@ -70,7 +70,7 @@ describe('runImportPipeline', () => {
     expect(summary.skipped_duplicate).toBe(0);
   });
 
-  it('enforces quota on a hosted free user and reports skipped_quota', () => {
+  it('does not enforce quota on a hosted free user during beta', () => {
     db.prepare("UPDATE users SET plan='free' WHERE id=?").run(userId);
     const planService = new PlanService(db, true);
 
@@ -80,11 +80,9 @@ describe('runImportPipeline', () => {
     }
 
     const summary = runImportPipeline(db, userId, records, { planService });
-    // Free tier cap is 11.
-    expect(summary.created).toBe(11);
-    expect(summary.skipped_quota).toBe(4);
-    expect(summary.created + summary.skipped_quota).toBe(15);
-    expect(summary.warnings.length).toBeGreaterThan(0);
+    expect(summary.created).toBe(15);
+    expect(summary.skipped_quota).toBe(0);
+    expect(summary.warnings).toHaveLength(0);
   });
 
   it('does not enforce quota when no planService is passed', () => {

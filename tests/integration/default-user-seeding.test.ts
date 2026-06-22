@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { createServer } from '../../src/server/http-server.js';
 import http from 'node:http';
+import { createHash } from 'node:crypto';
 
 /**
  * Tests that the server properly handles user creation and contact operations
@@ -40,11 +41,16 @@ describe('Authenticated User Contact Creation', () => {
           } catch {
             // skip non-JSON data lines
           }
+
         }
       }
       throw new Error('No JSON-RPC message found in SSE stream');
     }
     return response.json();
+  }
+
+  function s256(verifier: string): string {
+    return createHash('sha256').update(verifier).digest('base64url');
   }
 
   async function mcpRequest(body: any, sessionId?: string, token?: string) {
@@ -166,8 +172,8 @@ describe('Authenticated User Contact Creation', () => {
         email: 'persistent@test.com',
         password: 'testpass123',
         client_id: 'test-client',
-        code_challenge: 'test-verifier',
-        code_challenge_method: 'plain',
+        code_challenge: s256('test-verifier'),
+        code_challenge_method: 'S256',
         redirect_uri: 'http://localhost',
       }),
     });

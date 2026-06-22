@@ -55,7 +55,7 @@ export function createContactCustomFieldsRouter(db: Database.Database): Router {
     const contactId = param(req.params.contactId);
     requireContact(userId, contactId);
     const input = parseBody(updateCustomFieldSchema, req);
-    const updated = customFields.update(param(req.params.fieldId), input);
+    const updated = customFields.updateForContact(contactId, param(req.params.fieldId), input);
     if (!updated) throw new ApiError(404, 'not_found', 'Custom field not found');
     sendData(res, updated);
   }));
@@ -64,7 +64,7 @@ export function createContactCustomFieldsRouter(db: Database.Database): Router {
     const userId = getUserId(req);
     const contactId = param(req.params.contactId);
     requireContact(userId, contactId);
-    const ok = customFields.remove(param(req.params.fieldId));
+    const ok = customFields.removeForContact(contactId, param(req.params.fieldId));
     if (!ok) throw new ApiError(404, 'not_found', 'Custom field not found');
     sendData(res, { id: param(req.params.fieldId), deleted: true });
   }));

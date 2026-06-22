@@ -18,8 +18,8 @@ const createTokenSchema = z.object({
 
 /**
  * Internal API router for API token management, mounted at /web/api/tokens.
- * Gated behind the `public_api` feature: self-hosted = always allowed;
- * hosted = paid plans only (PlanService.requireFeature → 403 otherwise).
+ * Uses the `public_api` entitlement seam. During beta all hosted plans include
+ * this feature, but the gate remains for post-beta policy changes.
  */
 export function createApiTokensRouter(db: Database.Database, planService: PlanService): Router {
   const router = Router();

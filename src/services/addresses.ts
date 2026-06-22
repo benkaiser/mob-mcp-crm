@@ -102,8 +102,19 @@ export class AddressService {
     return this.getById(id);
   }
 
+  updateForContact(contactId: string, id: string, input: UpdateAddressInput): Address | null {
+    const existing = this.getById(id);
+    if (!existing || existing.contact_id !== contactId) return null;
+    return this.update(id, input);
+  }
+
   remove(id: string): boolean {
     const result = this.db.prepare('DELETE FROM addresses WHERE id = ?').run(id);
+    return result.changes > 0;
+  }
+
+  removeForContact(contactId: string, id: string): boolean {
+    const result = this.db.prepare('DELETE FROM addresses WHERE id = ? AND contact_id = ?').run(id, contactId);
     return result.changes > 0;
   }
 

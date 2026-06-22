@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import Database from 'better-sqlite3';
-import { PlanService, QuotaExceededError, FeatureNotAvailableError } from '../../src/services/plans.js';
+import { PlanService } from '../../src/services/plans.js';
 import { createTestDatabase, createTestUser, createTestContact } from '../fixtures/test-helpers.js';
 import { closeDatabase } from '../../src/db/connection.js';
 
@@ -26,6 +26,7 @@ describe('PlanService', () => {
     it('reports unlimited plan regardless of stored value', () => {
       db.prepare('UPDATE users SET plan = ? WHERE id = ?').run('free', userId);
       expect(service.getPlan(userId)).toBe('unlimited');
+      expect(service.getEntitlements(userId).contactCap).toBeNull();
     });
 
     it('enables every feature', () => {
@@ -62,23 +63,17 @@ describe('PlanService', () => {
       expect(service.getPlan(userId)).toBe('free');
     });
 
-    it('free plan caps contacts at 11', () => {
+    it('beta free plan has no contact cap', () => {
       db.prepare('UPDATE users SET plan = ? WHERE id = ?').run('free', userId);
-      addContacts(11);
-      expect(() => service.enforceContactQuota(userId, 1)).toThrow(QuotaExceededError);
-    });
-
-    it('free plan allows creating up to the cap', () => {
-      db.prepare('UPDATE users SET plan = ? WHERE id = ?').run('free', userId);
-      addContacts(10);
+      addContacts(50);
       expect(() => service.enforceContactQuota(userId, 1)).not.toThrow();
     });
 
-    it('free plan blocks gated features', () => {
+    it('beta free plan unlocks all features', () => {
       db.prepare('UPDATE users SET plan = ? WHERE id = ?').run('free', userId);
-      expect(service.isFeatureEnabled(userId, 'public_api')).toBe(false);
-      expect(() => service.requireFeature(userId, 'public_api')).toThrow(FeatureNotAvailableError);
-      expect(() => service.requireFeature(userId, 'webhooks')).toThrow(FeatureNotAvailableError);
+      expect(service.isFeatureEnabled(userId, 'public_api')).toBe(true);
+      expect(() => service.requireFeature(userId, 'public_api')).not.toThrow();
+      expect(() => service.requireFeature(userId, 'webhooks')).not.toThrow();
     });
 
     it('paid plan lifts the cap and unlocks features', () => {
@@ -89,21 +84,20 @@ describe('PlanService', () => {
       expect(() => service.requireFeature(userId, 'webhooks')).not.toThrow();
     });
 
-    it('quota counts only non-deleted contacts', () => {
+    it('quota remains a no-op even with deleted contacts', () => {
       db.prepare('UPDATE users SET plan = ? WHERE id = ?').run('free', userId);
       addContacts(11);
-      // Soft-delete one → back under the cap
       const oneId = (db.prepare('SELECT id FROM contacts WHERE user_id = ? LIMIT 1').get(userId) as any).id;
       db.prepare("UPDATE contacts SET deleted_at = datetime('now') WHERE id = ?").run(oneId);
       expect(() => service.enforceContactQuota(userId, 1)).not.toThrow();
     });
 
-    it('reports usage with cap for free plan', () => {
+    it('reports uncapped usage for free plan during beta', () => {
       db.prepare('UPDATE users SET plan = ? WHERE id = ?').run('free', userId);
       addContacts(4);
       const usage = service.getUsage(userId);
       expect(usage.contacts).toBe(4);
-      expect(usage.contactCap).toBe(11);
+      expect(usage.contactCap).toBeNull();
       expect(usage.plan).toBe('free');
     });
   });

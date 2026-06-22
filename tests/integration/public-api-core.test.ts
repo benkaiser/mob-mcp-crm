@@ -279,11 +279,10 @@ describe('Public API (/api/v1)', () => {
     expect(res.status).toBe(200);
   });
 
-  it('hosted free: public API is blocked (403)', async () => {
+  it('hosted free: public API is open during beta', async () => {
     h = await makeHarness({ cfg: hostedCfg, plan: 'free' });
     const res = await raw(h.app, 'GET', '/api/v1/contacts', { headers: auth(h.token) });
-    expect(res.status).toBe(403);
-    expect(JSON.parse(res.body).error.code).toBe('feature_not_available');
+    expect(res.status).toBe(200);
   });
 
   it('hosted paid: public API is open', async () => {

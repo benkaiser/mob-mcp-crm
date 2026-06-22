@@ -95,11 +95,11 @@ describe('API tokens internal API (/web/api/tokens)', () => {
     expect(JSON.parse(del.body).data.revoked).toBe(true);
   });
 
-  it('is blocked for hosted free plans (403)', async () => {
+  it('is allowed for hosted free plans during beta', async () => {
     server = createServer(hosted);
     const c = await makeClient(server, 'free@test.dev', 'free');
-    const res = await c.mutate('POST', '/web/api/tokens', { name: 'Nope' });
-    expect(res.status).toBe(403);
+    const res = await c.mutate('POST', '/web/api/tokens', { name: 'Beta Free' });
+    expect(res.status).toBe(201);
   });
 
   it('is allowed for hosted paid plans', async () => {
@@ -149,10 +149,10 @@ describe('Webhooks internal API (/web/api/webhooks)', () => {
     expect(res.status).toBe(422);
   });
 
-  it('is blocked for hosted free plans (403)', async () => {
+  it('is allowed for hosted free plans during beta', async () => {
     server = createServer(hosted);
     const c = await makeClient(server, 'freew@test.dev', 'free');
     const res = await c.get('/web/api/webhooks');
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(200);
   });
 });

@@ -56,7 +56,7 @@ export function createContactRelationshipsRouter(db: Database.Database): Router 
     const contactId = param(req.params.contactId);
     requireContact(userId, contactId);
     const input = parseBody(updateRelationshipSchema, req);
-    const updated = relationships.update(param(req.params.relationshipId), input);
+    const updated = relationships.updateForContact(contactId, param(req.params.relationshipId), input);
     if (!updated) throw new ApiError(404, 'not_found', 'Relationship not found');
     sendData(res, updated);
   }));
@@ -65,7 +65,7 @@ export function createContactRelationshipsRouter(db: Database.Database): Router 
     const userId = getUserId(req);
     const contactId = param(req.params.contactId);
     requireContact(userId, contactId);
-    const ok = relationships.remove(param(req.params.relationshipId));
+    const ok = relationships.removeForContact(contactId, param(req.params.relationshipId));
     if (!ok) throw new ApiError(404, 'not_found', 'Relationship not found');
     sendData(res, { id: param(req.params.relationshipId), deleted: true });
   }));

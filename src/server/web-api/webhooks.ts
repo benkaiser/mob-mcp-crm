@@ -30,8 +30,8 @@ const updateWebhookSchema = z.object({
 
 /**
  * Internal API router for webhook management, mounted at /web/api/webhooks.
- * Gated behind the `webhooks` feature: self-hosted = always allowed;
- * hosted = paid plans only (PlanService.requireFeature → 403 otherwise).
+ * Uses the `webhooks` entitlement seam. During beta all hosted plans include
+ * this feature, but the gate remains for post-beta policy changes.
  */
 export function createWebhooksRouter(db: Database.Database, planService: PlanService): Router {
   const router = Router();

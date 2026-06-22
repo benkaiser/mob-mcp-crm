@@ -218,6 +218,12 @@ export class RelationshipService {
     return this.getById(id);
   }
 
+  updateForContact(contactId: string, id: string, input: UpdateRelationshipInput): Relationship | null {
+    const existing = this.getById(id);
+    if (!existing || existing.contact_id !== contactId) return null;
+    return this.update(id, input);
+  }
+
   /**
    * Remove a relationship. Also removes the inverse relationship.
    */
@@ -237,6 +243,12 @@ export class RelationshipService {
 
     transaction();
     return true;
+  }
+
+  removeForContact(contactId: string, id: string): boolean {
+    const existing = this.getById(id);
+    if (!existing || existing.contact_id !== contactId) return false;
+    return this.remove(id);
   }
 
   /**

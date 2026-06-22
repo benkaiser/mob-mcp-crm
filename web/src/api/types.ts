@@ -32,7 +32,7 @@ export interface ApiResult<T> {
 // ─── /me payload ─────────────��──────────────────────────────────
 
 export interface MeEntitlements {
-  contact_cap: number;
+  contact_cap: number | null;
   public_api: boolean;
   webhooks: boolean;
   advanced_import: boolean;
@@ -40,7 +40,7 @@ export interface MeEntitlements {
 
 export interface MeUsage {
   contacts: number;
-  contact_cap: number;
+  contact_cap: number | null;
 }
 
 export interface Me {

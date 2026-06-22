@@ -119,6 +119,43 @@ describe('Contact sub-entities internal API (/contacts)', () => {
     expect(JSON.parse(res.body).error.code).toBe('not_found');
   });
 
+  it('does not mutate child records from another user when child IDs are known', async () => {
+    const srv = createServer(persistent);
+    cleanup = () => srv.stop();
+    const accounts = new AccountService(srv.db);
+    const attacker = await accounts.createAccount({ name: 'Attacker', email: 'attacker@test.dev', password: 'password123' });
+    const victim = await accounts.createAccount({ name: 'Victim', email: 'victim@test.dev', password: 'password123' });
+    const contacts = new ContactService(srv.db);
+    const attackerContact = contacts.create(attacker.id, { first_name: 'Attacker Contact' });
+    const victimContact = contacts.create(victim.id, { first_name: 'Victim Contact' });
+
+    const methodId = (srv.db.prepare(`
+      INSERT INTO contact_methods (id, contact_id, type, value)
+      VALUES ('victim-method', ?, 'email', 'victim@example.com')
+      RETURNING id
+    `).get(victimContact.id) as { id: string }).id;
+    const addressId = (srv.db.prepare(`
+      INSERT INTO addresses (id, contact_id, city)
+      VALUES ('victim-address', ?, 'Brisbane')
+      RETURNING id
+    `).get(victimContact.id) as { id: string }).id;
+    const fieldId = (srv.db.prepare(`
+      INSERT INTO custom_fields (id, contact_id, field_name, field_value)
+      VALUES ('victim-field', ?, 'Secret', 'Value')
+      RETURNING id
+    `).get(victimContact.id) as { id: string }).id;
+
+    const app = makeApp(srv, attacker.id);
+
+    expect((await raw(app, 'PATCH', `/contacts/${attackerContact.id}/methods/${methodId}`, { body: { value: 'owned@example.com' } })).status).toBe(404);
+    expect((await raw(app, 'DELETE', `/contacts/${attackerContact.id}/addresses/${addressId}`)).status).toBe(404);
+    expect((await raw(app, 'PATCH', `/contacts/${attackerContact.id}/custom-fields/${fieldId}`, { body: { field_value: 'owned' } })).status).toBe(404);
+
+    expect((srv.db.prepare('SELECT value FROM contact_methods WHERE id = ?').get(methodId) as { value: string }).value).toBe('victim@example.com');
+    expect((srv.db.prepare('SELECT city FROM addresses WHERE id = ?').get(addressId) as { city: string }).city).toBe('Brisbane');
+    expect((srv.db.prepare('SELECT field_value FROM custom_fields WHERE id = ?').get(fieldId) as { field_value: string }).field_value).toBe('Value');
+  });
+
   it('CRUDs addresses', async () => {
     const { app, contactId } = await setup();
     const create = await raw(app, 'POST', `/contacts/${contactId}/addresses`, { body: { label: 'Home', city: 'Brisbane' } });

@@ -42,8 +42,6 @@ export class FeatureNotAvailableError extends Error {
 
 // ─── Entitlement tables ─────────────────────────────────────────
 
-const FREE_TIER_CONTACT_CAP = 11;
-
 const UNLIMITED_ENTITLEMENTS: Entitlements = {
   contactCap: null,
   publicApi: true,
@@ -54,12 +52,8 @@ const UNLIMITED_ENTITLEMENTS: Entitlements = {
 const ENTITLEMENTS: Record<PlanName, Entitlements> = {
   unlimited: UNLIMITED_ENTITLEMENTS,
   paid: UNLIMITED_ENTITLEMENTS,
-  free: {
-    contactCap: FREE_TIER_CONTACT_CAP,
-    publicApi: false,
-    webhooks: false,
-    advancedImport: false,
-  },
+  // Beta: hosted free users get full access and no contact cap.
+  free: UNLIMITED_ENTITLEMENTS,
 };
 
 const FEATURE_KEY: Record<Feature, keyof Entitlements> = {
@@ -72,8 +66,9 @@ const FEATURE_KEY: Record<Feature, keyof Entitlements> = {
  * Plan and quota enforcement.
  *
  * CRITICAL: gating is only active when the server runs in HOSTED mode.
- * In self-hosted / open-source mode (`hosted = false`) every user is treated
- * as unlimited and every gate is a no-op, regardless of the stored plan value.
+ * In self-hosted mode everyone is reported as unlimited. During hosted beta,
+ * every hosted plan has unlimited entitlements, but the stored plan label is
+ * still returned for UI/business continuity.
  */
 export class PlanService {
   constructor(
@@ -94,7 +89,6 @@ export class PlanService {
     const row = this.db.prepare('SELECT plan FROM users WHERE id = ?').get(userId) as { plan?: string } | undefined;
     const plan = row?.plan;
     if (plan === 'free' || plan === 'paid' || plan === 'unlimited') return plan;
-    // Unknown/missing → safest default in hosted mode is the free tier.
     return 'free';
   }
 
@@ -129,7 +123,7 @@ export class PlanService {
 
   /**
    * Throws QuotaExceededError if creating `adding` more contacts would exceed
-   * the user's cap. No-op when self-hosted or plan is uncapped.
+   * the user's cap. During beta all plans are uncapped, so this is a no-op.
    */
   enforceContactQuota(userId: string, adding = 1): void {
     if (!this.hosted) return;

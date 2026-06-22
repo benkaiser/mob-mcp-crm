@@ -1,6 +1,13 @@
 <%
+const clientLabel = typeof clientId !== 'undefined' && clientId ? String(clientId) : 'Unknown client';
+const redirectLabel = typeof redirectUri !== 'undefined' && redirectUri ? String(redirectUri) : '';
 const content = `
   ${ error ? '<div class="error">' + error + '</div>' : '' }
+  <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:0.8rem;margin-bottom:1rem;font-size:0.95rem;">
+    <strong>Authorize MCP client</strong><br>
+    Client: ${clientLabel.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}<br>
+    ${redirectLabel ? 'Redirect: <code style="font-size:0.8rem;word-break:break-all;">' + redirectLabel.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</code>' : ''}
+  </div>
   <form method="POST" action="${authorizeUrl}">
     <label for="email">Email</label>
     <input type="email" id="email" name="email" required autofocus>

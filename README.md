@@ -17,6 +17,10 @@ Mob helps you maintain meaningful relationships by remembering everything about 
 - **Gifts & Debts** — Track gift ideas and money owed
 - **Tags** — Organize contacts with flexible labels
 
+## Hosted Beta
+
+Hosted Mob is free during beta with all features enabled and no contact caps. For support, email [mobsupport@benkaiser.dev](mailto:mobsupport@benkaiser.dev).
+
 ## How It Works
 
 Mob is an **MCP server**. You connect to it with an MCP-compatible AI client, and interact using natural language:
@@ -106,6 +110,18 @@ npm start
 ```
 
 The server will create and manage its SQLite database files in the specified directory. Ensure this directory is on persistent storage (not an ephemeral filesystem) to retain data across restarts.
+
+For a hosted beta deployment, also set `MOB_HOSTED=true` and `MOB_BASE_URL` to the public HTTPS origin so cookies and OAuth metadata are generated correctly.
+
+### Hosted Beta Operations
+
+Hosted beta accounts are free, uncapped, and include all features. Before running a hosted beta instance:
+
+- Set `MOB_HOSTED=true`, `MOB_BASE_URL=https://<public-origin>`, and `MOB_DATA_DIR` on persistent storage.
+- Put the server behind TLS and ensure the public base URL is HTTPS so session and CSRF cookies are marked secure.
+- Back up the SQLite data directory regularly and verify restore procedures.
+- Keep outbound webhook egress restricted; Mob also blocks non-HTTPS, localhost, private, link-local, and reserved webhook targets in application code.
+- Password reset is not self-service during beta. Users should email [mobsupport@benkaiser.dev](mailto:mobsupport@benkaiser.dev) for account help, data deletion requests, or other support.
 
 ### Project Structure
 

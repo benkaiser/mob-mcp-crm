@@ -56,7 +56,7 @@ export function createContactAddressesRouter(db: Database.Database): Router {
     const contactId = param(req.params.contactId);
     requireContact(userId, contactId);
     const input = parseBody(updateAddressSchema, req);
-    const updated = addresses.update(param(req.params.addressId), input);
+    const updated = addresses.updateForContact(contactId, param(req.params.addressId), input);
     if (!updated) throw new ApiError(404, 'not_found', 'Address not found');
     sendData(res, updated);
   }));
@@ -65,7 +65,7 @@ export function createContactAddressesRouter(db: Database.Database): Router {
     const userId = getUserId(req);
     const contactId = param(req.params.contactId);
     requireContact(userId, contactId);
-    const ok = addresses.remove(param(req.params.addressId));
+    const ok = addresses.removeForContact(contactId, param(req.params.addressId));
     if (!ok) throw new ApiError(404, 'not_found', 'Address not found');
     sendData(res, { id: param(req.params.addressId), deleted: true });
   }));

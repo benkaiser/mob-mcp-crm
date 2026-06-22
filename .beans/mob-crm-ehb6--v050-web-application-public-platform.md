@@ -24,18 +24,18 @@ Both heads share the same `src/services/` core. We do NOT add AI/LLM input to th
 - **Three layers:**
   1. `src/services/*` — shared core (already exists, MCP-agnostic).
   2. **Internal JSON API** (`/web/api/*`) — session-cookie auth, ungated for free tier, consumed ONLY by the Preact SPA.
-  3. **Public REST API** (`/api/v1/*`) — API-token auth, plan-gated, webhooks. Separate surface; the SPA never uses it.
+  3. **Public REST API** (`/api/v1/*`) — API-token auth, entitlement seam, webhooks. Separate surface; the SPA never uses it. During beta this is enabled for everyone.
 - **Sessions:** move web sessions from in-memory Map to a durable `sessions` table (restart-safe, multi-instance-safe).
 - **Server stack stays:** Express 5 + EJS (for the static shell/auth pages) + better-sqlite3 + zod.
 
 ## Business model (forward-looking, build the seams now)
 
-Open-source + paid hosting. Free tier:
-- Up to **11 contacts**.
+Open-source + paid hosting. During beta, hosted users get:
+- No contact cap.
 - Full web UI access.
-- NO public REST API / webhooks / some advanced features (gated to paid).
+- Public REST API, webhooks, imports, and all advanced features enabled for free.
 
-Build a `plan` concept + quota enforcement (contact cap) + feature-gating middleware from the start, even if everything is "unlimited/local" in self-hosted mode. Self-hosted single-user defaults to an unlimited plan.
+Keep the `plan` concept + quota/feature-gating seams so post-beta limits can be reintroduced without changing API shapes. Self-hosted single-user defaults to an unlimited plan.
 
 ## Scope of epics
 
@@ -45,7 +45,7 @@ Build a `plan` concept + quota enforcement (contact cap) + feature-gating middle
 4. Web CRUD — Interactions, life events, notes, reminders, timeline
 5. Web CRUD — Gifts, debts, tasks, tags, food preferences
 6. Web — Dashboard, global search, settings, data export/import UI
-7. Public REST API + API tokens + webhooks (plan-gated)
+7. Public REST API + API tokens + webhooks (entitlement seam; beta-enabled for all)
 8. Contact import (vCard / Google Contacts CSV) generalized
 9. PWA — manifest, offline shell, installability, push integration
 10. AI ↔ Web continuity — URL elicitation deep-links from MCP actions to web resources

@@ -63,7 +63,7 @@ export function createContactMethodsRouter(db: Database.Database): Router {
     const contactId = param(req.params.contactId);
     requireContact(userId, contactId);
     const input = parseBody(updateMethodSchema, req);
-    const updated = methods.update(param(req.params.methodId), input);
+    const updated = methods.updateForContact(contactId, param(req.params.methodId), input);
     if (!updated) throw new ApiError(404, 'not_found', 'Contact method not found');
     sendData(res, updated);
   }));
@@ -72,7 +72,7 @@ export function createContactMethodsRouter(db: Database.Database): Router {
     const userId = getUserId(req);
     const contactId = param(req.params.contactId);
     requireContact(userId, contactId);
-    const ok = methods.remove(param(req.params.methodId));
+    const ok = methods.removeForContact(contactId, param(req.params.methodId));
     if (!ok) throw new ApiError(404, 'not_found', 'Contact method not found');
     sendData(res, { id: param(req.params.methodId), deleted: true });
   }));

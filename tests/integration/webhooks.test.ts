@@ -73,6 +73,13 @@ describe('WebhookService', () => {
       });
       expect(hook.secret).toBe('my-fixed-secret');
     });
+
+    it('rejects non-HTTPS and local webhook URLs', () => {
+      const service = new WebhookService(db);
+      expect(() => service.create(userId, { url: 'http://example.com/hook', events: '*' })).toThrow(/HTTPS/);
+      expect(() => service.create(userId, { url: 'https://127.0.0.1/hook', events: '*' })).toThrow(/not allowed/);
+      expect(() => service.create(userId, { url: 'https://localhost/hook', events: '*' })).toThrow(/not allowed/);
+    });
   });
 
   describe('dispatch', () => {

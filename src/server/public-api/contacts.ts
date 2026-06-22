@@ -202,7 +202,7 @@ export function createContactsRouter(db: Database.Database, planService: PlanSer
     const userId = getApiUserId(req);
     requireContact(userId, param(req.params.id));
     const input = parseBody(updateMethodSchema, req);
-    const updated = methods.update(param(req.params.methodId), input);
+    const updated = methods.updateForContact(param(req.params.id), param(req.params.methodId), input);
     if (!updated) throw new ApiError(404, 'not_found', 'Contact method not found');
     sendData(res, updated);
   }));
@@ -210,7 +210,7 @@ export function createContactsRouter(db: Database.Database, planService: PlanSer
   router.delete('/:id/methods/:methodId', asyncHandler((req, res) => {
     const userId = getApiUserId(req);
     requireContact(userId, param(req.params.id));
-    const ok = methods.remove(param(req.params.methodId));
+    const ok = methods.removeForContact(param(req.params.id), param(req.params.methodId));
     if (!ok) throw new ApiError(404, 'not_found', 'Contact method not found');
     sendData(res, { id: param(req.params.methodId), deleted: true });
   }));
@@ -234,7 +234,7 @@ export function createContactsRouter(db: Database.Database, planService: PlanSer
     const userId = getApiUserId(req);
     requireContact(userId, param(req.params.id));
     const input = parseBody(updateAddressSchema, req);
-    const updated = addresses.update(param(req.params.addressId), input);
+    const updated = addresses.updateForContact(param(req.params.id), param(req.params.addressId), input);
     if (!updated) throw new ApiError(404, 'not_found', 'Address not found');
     sendData(res, updated);
   }));
@@ -242,7 +242,7 @@ export function createContactsRouter(db: Database.Database, planService: PlanSer
   router.delete('/:id/addresses/:addressId', asyncHandler((req, res) => {
     const userId = getApiUserId(req);
     requireContact(userId, param(req.params.id));
-    const ok = addresses.remove(param(req.params.addressId));
+    const ok = addresses.removeForContact(param(req.params.id), param(req.params.addressId));
     if (!ok) throw new ApiError(404, 'not_found', 'Address not found');
     sendData(res, { id: param(req.params.addressId), deleted: true });
   }));
@@ -266,7 +266,7 @@ export function createContactsRouter(db: Database.Database, planService: PlanSer
     const userId = getApiUserId(req);
     requireContact(userId, param(req.params.id));
     const input = parseBody(updateCustomFieldSchema, req);
-    const updated = customFields.update(param(req.params.fieldId), input);
+    const updated = customFields.updateForContact(param(req.params.id), param(req.params.fieldId), input);
     if (!updated) throw new ApiError(404, 'not_found', 'Custom field not found');
     sendData(res, updated);
   }));
@@ -274,7 +274,7 @@ export function createContactsRouter(db: Database.Database, planService: PlanSer
   router.delete('/:id/custom-fields/:fieldId', asyncHandler((req, res) => {
     const userId = getApiUserId(req);
     requireContact(userId, param(req.params.id));
-    const ok = customFields.remove(param(req.params.fieldId));
+    const ok = customFields.removeForContact(param(req.params.id), param(req.params.fieldId));
     if (!ok) throw new ApiError(404, 'not_found', 'Custom field not found');
     sendData(res, { id: param(req.params.fieldId), deleted: true });
   }));
@@ -319,7 +319,7 @@ export function createContactsRouter(db: Database.Database, planService: PlanSer
   router.delete('/:id/relationships/:relationshipId', asyncHandler((req, res) => {
     const userId = getApiUserId(req);
     requireContact(userId, param(req.params.id));
-    const ok = relationships.remove(param(req.params.relationshipId));
+    const ok = relationships.removeForContact(param(req.params.id), param(req.params.relationshipId));
     if (!ok) throw new ApiError(404, 'not_found', 'Relationship not found');
     sendData(res, { id: param(req.params.relationshipId), deleted: true });
   }));
