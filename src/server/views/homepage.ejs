@@ -22,6 +22,7 @@
   nav{display:flex;align-items:center;justify-content:space-between;padding:1.3rem 0}
   .brand{font-weight:800;font-size:1.3rem;display:flex;align-items:center;gap:.5rem}
   .brand .ico{width:1.4rem;height:1.4rem;color:var(--primary)}
+  .brand-logo{width:1.5rem;height:1.5rem;display:block}
   .nav-links{display:flex;gap:1.6rem;align-items:center}
   .nav-links a{color:var(--muted);font-weight:600;font-size:.95rem}
   /* hero */
@@ -113,7 +114,7 @@
 
 <div class="wrap">
   <nav>
-    <div class="brand"><svg class="ico"><use href="#i-users"/></svg> Mob</div>
+    <div class="brand"><img class="brand-logo" src="/favicon.svg" alt="" width="22" height="22"> Mob</div>
     <div class="nav-links">
       <a href="#features">Features</a>
       <a href="#pricing">Pricing</a>
@@ -129,6 +130,9 @@
     <% } %>
     <h1>Your personal CRM, <span class="g">however you work</span>.</h1>
     <p class="lede">Capture life by talking to your AI assistant over MCP, or manage everything hands-on in the web app. Flip between them &mdash; it's the same CRM underneath.</p>
+    <% if (!forgetful) { %>
+    <p class="guest-note"><strong>Beta:</strong> hosted Mob is free with all features enabled and no contact caps. Need help? Email <a href="mailto:mobsupport@benkaiser.dev">mobsupport@benkaiser.dev</a>.</p>
+    <% } %>
     <% if (forgetful) { %>
     <p class="guest-note">This server runs in <strong>guest mode</strong>: every session gets its own sandbox pre-loaded with sample contacts as <strong>Bluey Heeler</strong>. Nothing is saved &mdash; perfect for a quick try.</p>
     <% } %>
@@ -228,7 +232,7 @@
     <div class="center">
       <div class="eyebrow">Pricing</div>
       <h2>Free in beta. Free forever if you self-host.</h2>
-      <p class="sub">Hosted Mob is free during beta. Afterwards managed hosting is a small subscription — self-hosting stays free and unlimited.</p>
+      <p class="sub">Hosted Mob is free during beta with every feature enabled and no caps. Afterwards managed hosting is a small subscription — self-hosting stays free and unlimited.</p>
     </div>
     <div class="price-grid">
       <div class="price">
@@ -239,7 +243,7 @@
       <div class="price featured">
         <span class="ribbon">FREE IN BETA</span>
         <h3>Hosted</h3><div class="amt">$5<span> /mo</span></div><div class="note">or $50/year · <strong>$0 today</strong></div>
-        <ul class="checks"><li><svg class="ico"><use href="#i-check"/></svg> Managed &amp; updated</li><li><svg class="ico"><use href="#i-check"/></svg> Push notifications</li><li><svg class="ico"><use href="#i-check"/></svg> Web + PWA</li><li><svg class="ico"><use href="#i-check"/></svg> Backups</li></ul>
+        <ul class="checks"><li><svg class="ico"><use href="#i-check"/></svg> Managed &amp; updated</li><li><svg class="ico"><use href="#i-check"/></svg> All features during beta</li><li><svg class="ico"><use href="#i-check"/></svg> No beta contact caps</li><li><svg class="ico"><use href="#i-check"/></svg> Push notifications</li><li><svg class="ico"><use href="#i-check"/></svg> Web + PWA</li><li><svg class="ico"><use href="#i-check"/></svg> Backups</li></ul>
         <a class="btn btn-primary" href="/web/login">Start free</a>
       </div>
       <div class="price">
@@ -250,6 +254,6 @@
     </div>
   </section>
 </div>
-<footer><div class="wrap">Mob — “a mob” is a group of kangaroos · <a href="https://github.com/benkaiser/mob-mcp-crm">Open source on GitHub</a></div></footer>
+<footer><div class="wrap">Mob — “a mob” is a group of kangaroos · <a href="https://github.com/benkaiser/mob-mcp-crm">Open source on GitHub</a> · Support: <a href="mailto:mobsupport@benkaiser.dev">mobsupport@benkaiser.dev</a></div></footer>
 </body>
 </html>
