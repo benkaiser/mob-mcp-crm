@@ -1,0 +1,25 @@
+BEGIN:VCARD
+VERSION:3.0
+N:Appleseed;John;;;
+FN:John Appleseed
+NICKNAME:Johnny
+ORG:Apple Inc.;Marketing
+TITLE:Product Manager
+EMAIL;TYPE=WORK:john@apple.com
+EMAIL;TYPE=HOME:john.home@example.com
+TEL;TYPE=CELL:+1-555-123-4567
+TEL;TYPE=WORK:+1-555-987-6543
+ADR;TYPE=HOME:;;1 Infinite Loop;Cupertino;CA;95014;USA
+BDAY:1980-04-15
+URL:https://johnappleseed.example.com
+NOTE:Met at WWDC.
+CATEGORIES:Friends,Tech
+END:VCARD
+BEGIN:VCARD
+VERSION:4.0
+N:Smith;Jane;;;
+FN:Jane Smith
+EMAIL:jane@example.com
+TEL;TYPE=cell:5550001111
+BDAY:--12-25
+END:VCARD

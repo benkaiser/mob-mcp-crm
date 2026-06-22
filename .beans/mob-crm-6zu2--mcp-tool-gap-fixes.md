@@ -1,11 +1,11 @@
 ---
 # mob-crm-6zu2
 title: MCP Tool Gap Fixes
-status: todo
+status: completed
 type: epic
 priority: high
 created_at: 2026-02-17T13:41:21Z
-updated_at: 2026-02-17T13:41:21Z
+updated_at: 2026-05-29T13:02:25Z
 ---
 
 Address critical and important gaps identified in the MCP tool gap analysis. These features improve data safety, reduce LLM round-trips, improve search completeness, and fill CRUD gaps.

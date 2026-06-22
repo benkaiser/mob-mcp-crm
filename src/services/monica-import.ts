@@ -117,6 +117,8 @@ export interface ImportResult {
   lifeEvents: number;
   gifts: number;
   reminders: number;
+  /** Count of Monica auto-generated birthday/special-date reminders skipped on import. */
+  skipped_birthday_reminders: number;
   calls: number;
   errors: string[];
 }
@@ -145,6 +147,7 @@ function importParsedData(db: Database.Database, userId: string, data: MonicaPar
     lifeEvents: 0,
     gifts: 0,
     reminders: 0,
+    skipped_birthday_reminders: 0,
     calls: 0,
     errors: [],
   };
@@ -579,6 +582,14 @@ function importParsedData(db: Database.Database, userId: string, data: MonicaPar
     for (const mr of data.reminders) {
       const contactMobId = contactIdMap.get(mr.contact_id);
       if (!contactMobId) continue;
+
+      // Skip Monica's auto-generated special-date reminders (delible=0), such as
+      // birthday reminders. Mob has its own birthday notification system driven
+      // by contact birthday fields, so importing these would duplicate them.
+      if (mr.delible === 0) {
+        result.skipped_birthday_reminders++;
+        continue;
+      }
 
       // Map Monica frequency to Mob frequency
       let frequency = 'one_time';

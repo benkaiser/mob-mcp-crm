@@ -151,6 +151,8 @@ export interface MonicaReminder {
   description: string | null;
   frequency_type: string;
   frequency_number: number;
+  /** Monica marks auto-generated special-date (e.g. birthday) reminders as non-deletable (0). */
+  delible: number;
 }
 
 export interface MonicaGender {
@@ -548,6 +550,7 @@ export function parseMonicaExport(sql: string): MonicaParsedData {
     description: row.description as string | null,
     frequency_type: (row.frequency_type ?? 'one_time') as string,
     frequency_number: (row.frequency_number ?? 1) as number,
+    delible: (row.delible ?? 1) as number,
   }));
 
   const genders = parseInserts(sql, 'genders').map(row => ({

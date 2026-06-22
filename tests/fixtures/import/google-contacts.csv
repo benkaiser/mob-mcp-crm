@@ -1,0 +1,4 @@
+Name,Given Name,Family Name,Nickname,Organization Name,Organization Title,Birthday,Notes,Labels,E-mail 1 - Type,E-mail 1 - Value,E-mail 2 - Type,E-mail 2 - Value,Phone 1 - Type,Phone 1 - Value,Address 1 - Type,Address 1 - Street,Address 1 - City,Address 1 - Region,Address 1 - Postal Code,Address 1 - Country
+Alice Brown,Alice,Brown,Ali,Acme Corp,Engineer,1990-07-21,"Likes hiking, and coffee",Friends ::: Work,Work,alice@acme.com,Home,alice.b@example.com,Mobile,+1 555-222-3333,Home,"123 Main St, Apt 4",Springfield,IL,62704,USA
+Bob Carter,Bob,Carter,,Globex,Director,--03-14,Met at conference,Work,Home,"bob@globex.com ::: bob.carter@personal.com",,,Mobile,5559998888,,,,,,
+"Carol, the Great",Carol,Davis,,,,,,My Contacts ::: Book Club,,,,,,,,,,,,

@@ -7,6 +7,7 @@ export interface UserSettings {
   timezone: string;
   birthday_reminder_time: string;
   birthday_reminder_offsets: number[];
+  reminder_offsets: number[];
   created_at: string;
   updated_at: string;
 }
@@ -15,6 +16,7 @@ export interface UpdateSettingsInput {
   timezone?: string;
   birthday_reminder_time?: string;
   birthday_reminder_offsets?: number[];
+  reminder_offsets?: number[];
 }
 
 // ─── Validation ─────────────────────────────────────────────────
@@ -90,6 +92,12 @@ export class UserSettingsService {
       }
     }
 
+    if (changes.reminder_offsets !== undefined) {
+      if (!isValidOffsets(changes.reminder_offsets)) {
+        throw new Error('reminder_offsets must be a non-empty array of non-negative integers');
+      }
+    }
+
     const fields: string[] = [];
     const values: any[] = [];
 
@@ -104,6 +112,10 @@ export class UserSettingsService {
     if (changes.birthday_reminder_offsets !== undefined) {
       fields.push('birthday_reminder_offsets = ?');
       values.push(JSON.stringify(changes.birthday_reminder_offsets));
+    }
+    if (changes.reminder_offsets !== undefined) {
+      fields.push('reminder_offsets = ?');
+      values.push(JSON.stringify(changes.reminder_offsets));
     }
 
     if (fields.length > 0) {
@@ -133,6 +145,7 @@ export class UserSettingsService {
       timezone: row.timezone,
       birthday_reminder_time: row.birthday_reminder_time,
       birthday_reminder_offsets: JSON.parse(row.birthday_reminder_offsets),
+      reminder_offsets: JSON.parse(row.reminder_offsets),
       created_at: row.created_at,
       updated_at: row.updated_at,
     };

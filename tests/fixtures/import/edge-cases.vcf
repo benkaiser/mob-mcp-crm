@@ -1,0 +1,23 @@
+BEGIN:VCARD
+VERSION:3.0
+FN:Folded Longname
+NOTE:This is a very long note that has been folded across multiple lines acco
+ rding to the vCard specification and should be reassembled into one single c
+ ontinuous string.
+EMAIL;TYPE=WORK:folded@example.com
+PHOTO;ENCODING=b;TYPE=JPEG:/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAYEBQYFBAYGBQYHB
+ wYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/wAAR
+ CAABAAEDASIA
+END:VCARD
+BEGIN:VCARD
+VERSION:4.0
+N:OnlyLast;;;;
+FN:OnlyLast
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+N:Doe;Mary;;;
+FN:Mary Doe
+TEL;TYPE=WHATSAPP:+447700900000
+CATEGORIES:Family
+END:VCARD

@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
+import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
-import multer from 'multer';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { requireBearerAuth } from '@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js';
@@ -14,19 +14,27 @@ import { runMigrations } from '../db/migrator.js';
 import { AccountService } from '../auth/accounts.js';
 import { OAuthService } from '../auth/oauth.js';
 import { McpTokenVerifier } from '../auth/mcp-token-verifier.js';
-import { importMonicaExport } from '../services/monica-import.js';
 import { generateId } from '../utils.js';
 import { ReminderService } from '../services/reminders.js';
 import { ForgetfulTemplate } from '../db/forgetful-template.js';
 import { UserSettingsService } from '../services/settings.js';
 import { PushNotificationService } from '../services/push-notifications.js';
 import { NotificationService } from '../services/notifications.js';
+import { SessionService } from '../services/sessions.js';
+import { PlanService } from '../services/plans.js';
+import { ApiTokenService } from '../services/api-tokens.js';
+import { WebhookService } from '../services/webhooks.js';
+import { createWebApiRouter } from './web-api/index.js';
+import { createPublicApiRouter } from './public-api/index.js';
+import { createDocsRouter } from './public-api/docs-router.js';
 
 export interface ServerConfig {
   port: number;
   dataDir: string;
   forgetful: boolean;
   baseUrl: string;
+  /** Hosted/production mode. When true, plan/quota gating is active. Self-hosted (false) = everything unlimited. */
+  hosted?: boolean;
 }
 
 export function createServer(config: ServerConfig): {
@@ -100,17 +108,77 @@ export function createServer(config: ServerConfig): {
   app.set('view engine', 'ejs');
   app.set('views', path.join(__dirname, 'views'));
 
-  app.use(express.json());
+  // App-level body parsing. The Monica import route handles its own (much
+  // larger) JSON body downstream, so skip it here — otherwise express.json()'s
+  // 100kb default would reject a multi-MB SQL export with PayloadTooLargeError
+  // before it ever reaches that route's own parser.
+  const appJson = express.json();
+  app.use((req, res, next) => {
+    if (req.path === '/web/api/import/monica') { next(); return; }
+    appJson(req, res, next);
+  });
   app.use(express.urlencoded({ extended: true }));
 
   // Track active MCP sessions
   const transports: Record<string, StreamableHTTPServerTransport> = {};
 
-  // Track web sessions (simple token → userId map)
-  const webSessions = new Map<string, { userId: string; userName: string; email: string }>();
+  // Durable web session store (persistent mode). Forgetful mode keeps an
+  // ephemeral in-memory map because its users live in per-session cloned DBs,
+  // not the main database, so the sessions table FK/JOIN can't apply to them.
+  const sessionService = new SessionService(db);
+  // Plan/quota gating. Active only in hosted mode; self-hosted = unlimited.
+  const planService = new PlanService(db, config.hosted === true);
+  // Public REST API: token auth + webhooks (plan-gated in hosted mode).
+  const tokenService = new ApiTokenService(db);
+  const webhookService = new WebhookService(db);
+  const forgetfulWebSessions = new Map<string, { userId: string; userName: string; email: string }>();
+  const cookieSecure = config.baseUrl.startsWith('https://');
 
-  // File upload handler (in-memory, max 50MB for SQL files)
-  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+  interface WebSessionData { userId: string; userName: string; email: string }
+
+  /** Create a web session, returning the opaque token. */
+  function setWebSession(data: WebSessionData, req?: express.Request): string {
+    if (config.forgetful) {
+      const token = randomUUID();
+      forgetfulWebSessions.set(token, data);
+      return token;
+    }
+    return sessionService.create(data.userId, {
+      userAgent: req?.headers['user-agent'],
+      ip: req?.ip,
+    });
+  }
+
+  /** Look up a web session by token, or null if missing/expired. */
+  function getWebSession(token: string | null | undefined): WebSessionData | null {
+    if (!token) return null;
+    if (config.forgetful) {
+      return forgetfulWebSessions.get(token) ?? null;
+    }
+    const s = sessionService.get(token);
+    return s ? { userId: s.userId, userName: s.userName, email: s.email } : null;
+  }
+
+  /** Destroy a web session by token. */
+  function deleteWebSession(token: string): void {
+    if (!token) return;
+    if (config.forgetful) {
+      forgetfulWebSessions.delete(token);
+      return;
+    }
+    sessionService.destroy(token);
+  }
+
+  /** Build a Set-Cookie value for the session cookie. */
+  function sessionCookie(token: string): string {
+    return `mob_session=${token}; Path=/; HttpOnly; SameSite=Lax${cookieSecure ? '; Secure' : ''}`;
+  }
+
+  /** Build a Set-Cookie value that clears the session cookie. */
+  function clearSessionCookie(): string {
+    return `mob_session=; Path=/; HttpOnly; Max-Age=0${cookieSecure ? '; Secure' : ''}`;
+  }
+
 
   /** Middleware: require web session cookie */
   function requireWebSession(req: express.Request, res: express.Response, next: express.NextFunction): void {
@@ -119,10 +187,10 @@ export function createServer(config: ServerConfig): {
       res.redirect(`/web/login?redirect=${encodeURIComponent(req.originalUrl)}`);
       return;
     }
-    const session = webSessions.get(sessionToken);
+    const session = getWebSession(sessionToken);
     if (!session) {
       // Expired/invalid session — clear cookie and redirect
-      res.setHeader('Set-Cookie', 'mob_session=; Path=/; HttpOnly; Max-Age=0');
+      res.setHeader('Set-Cookie', clearSessionCookie());
       res.redirect(`/web/login?redirect=${encodeURIComponent(req.originalUrl)}`);
       return;
     }
@@ -175,7 +243,7 @@ export function createServer(config: ServerConfig): {
       }
 
       try {
-        const user = await accountService.createAccount({ name, email, password, timezone });
+        const user = await accountService.createAccount({ name, email, password, timezone, plan: config.hosted ? 'free' : 'unlimited' });
 
         // If we're in an OAuth flow, issue code and redirect
         if (client_id && redirect_uri) {
@@ -191,11 +259,10 @@ export function createServer(config: ServerConfig): {
           if (state) redirectUrl.searchParams.set('state', state);
           res.redirect(redirectUrl.toString());
         } else {
-          // Not in OAuth flow — auto-login and redirect to dashboard
-          const token = randomUUID();
-          webSessions.set(token, { userId: user.id, userName: user.name, email: user.email });
-          res.setHeader('Set-Cookie', `mob_session=${token}; Path=/; HttpOnly; SameSite=Lax`);
-          res.redirect('/web/dashboard');
+          // Not in OAuth flow — auto-login and redirect to the SPA
+          const token = setWebSession({ userId: user.id, userName: user.name, email: user.email }, req);
+          res.setHeader('Set-Cookie', sessionCookie(token));
+          res.redirect('/app/');
         }
       } catch (err: any) {
         console.error('Registration error:', err);
@@ -215,7 +282,7 @@ export function createServer(config: ServerConfig): {
         res.status(400).json({ error: 'name, email, and password are required' });
         return;
       }
-      const user = await accountService.createAccount({ name, email, password });
+      const user = await accountService.createAccount({ name, email, password, plan: config.hosted ? 'free' : 'unlimited' });
       res.status(201).json(user);
     } catch (err: any) {
       console.error('Registration error:', err);
@@ -277,13 +344,40 @@ export function createServer(config: ServerConfig): {
       return;
     }
 
-    // Persistent mode — require login
-    if (!email || !password) {
-      res.status(400).json({ error: 'email and password are required' });
-      return;
-    }
+    // Persistent mode — require client params
     if (!client_id || !code_challenge) {
       res.status(400).json({ error: 'client_id and code_challenge are required' });
+      return;
+    }
+
+    // ── Unified auth bridge ──────────────────────────────────────
+    // If the caller already has a valid web session, treat that as proof of
+    // identity and mint an MCP authorization code WITHOUT requiring the
+    // password again ("Connect your AI assistant" from a logged-in web app).
+    const bridgeToken = parseCookie(req.headers.cookie ?? '', 'mob_session');
+    const bridgeSession = getWebSession(bridgeToken);
+    if (bridgeSession) {
+      const code = oauthService.createAuthorizationCode({
+        userId: bridgeSession.userId,
+        clientId: client_id,
+        codeChallenge: code_challenge,
+        codeChallengeMethod: code_challenge_method || 'S256',
+        redirectUri: redirect_uri || 'http://localhost',
+      });
+      if (isFormPost && redirect_uri) {
+        const redirectUrl = new URL(redirect_uri);
+        redirectUrl.searchParams.set('code', code);
+        if (state) redirectUrl.searchParams.set('state', state);
+        res.redirect(redirectUrl.toString());
+      } else {
+        res.json({ code, redirect_uri: redirect_uri || 'http://localhost' });
+      }
+      return;
+    }
+
+    // No web session — require credentials.
+    if (!email || !password) {
+      res.status(400).json({ error: 'email and password are required' });
       return;
     }
 
@@ -309,6 +403,10 @@ export function createServer(config: ServerConfig): {
 
     // Form posts (browser login) get a redirect; JSON API calls get JSON
     if (isFormPost && redirect_uri) {
+      // Reverse bridge: a browser OAuth login also establishes a web session so
+      // the same browser is logged into the web app (one identity, both heads).
+      const webToken = setWebSession({ userId: user.id, userName: user.name, email: user.email }, req);
+      res.setHeader('Set-Cookie', sessionCookie(webToken));
       const redirectUrl = new URL(redirect_uri);
       redirectUrl.searchParams.set('code', code);
       if (state) redirectUrl.searchParams.set('state', state);
@@ -362,10 +460,9 @@ export function createServer(config: ServerConfig): {
       const webSessionKey = `web-${tempId}`;
       forgetfulSessions.set(webSessionKey, { userId: tempId, db: clonedDb });
 
-      const token = randomUUID();
-      webSessions.set(token, { userId: tempId, userName: 'Bluey Heeler', email: `bluey-${tempId}@heeler.family` });
-      res.setHeader('Set-Cookie', `mob_session=${token}; Path=/; HttpOnly; SameSite=Lax`);
-      res.redirect('/web/dashboard');
+      const token = setWebSession({ userId: tempId, userName: 'Bluey Heeler', email: `bluey-${tempId}@heeler.family` }, req);
+      res.setHeader('Set-Cookie', sessionCookie(token));
+      res.redirect('/app/');
       return;
     }
     res.render('web-login', { error: undefined, redirect: req.query.redirect || '' });
@@ -375,7 +472,7 @@ export function createServer(config: ServerConfig): {
     const { email, password } = req.body;
     const redirect = req.body.redirect || '';
     // Validate redirect is a relative path to prevent open redirects
-    const safeRedirect = (typeof redirect === 'string' && redirect.startsWith('/') && !redirect.startsWith('//')) ? redirect : '/web/dashboard';
+    const safeRedirect = (typeof redirect === 'string' && redirect.startsWith('/') && !redirect.startsWith('//')) ? redirect : '/app/';
 
     if (!email || !password) {
       res.status(400).render('web-login', { error: 'Email and password are required', redirect });
@@ -388,26 +485,64 @@ export function createServer(config: ServerConfig): {
       return;
     }
 
-    const token = randomUUID();
-    webSessions.set(token, { userId: user.id, userName: user.name, email: user.email });
-    res.setHeader('Set-Cookie', `mob_session=${token}; Path=/; HttpOnly; SameSite=Lax`);
+    const token = setWebSession({ userId: user.id, userName: user.name, email: user.email }, req);
+    res.setHeader('Set-Cookie', sessionCookie(token));
     res.redirect(safeRedirect);
   });
 
   app.get('/web/logout', (req, res) => {
     const sessionToken = parseCookie(req.headers.cookie ?? '', 'mob_session');
     if (sessionToken) {
-      webSessions.delete(sessionToken);
+      deleteWebSession(sessionToken);
     }
-    res.setHeader('Set-Cookie', 'mob_session=; Path=/; HttpOnly; Max-Age=0');
+    res.setHeader('Set-Cookie', clearSessionCookie());
     res.redirect('/web/login');
   });
 
   // ─── Web Dashboard ────────────────────────────────────────
 
-  app.get('/web/dashboard', requireWebSession, (req, res) => {
-    const user = (req as any).webUser as { userId: string; userName: string; email: string };
-    res.render('dashboard', { userName: user.userName, error: undefined, success: undefined });
+  app.get('/web/dashboard', (_req, res) => {
+    // The old server-rendered dashboard has been replaced by the Preact SPA at
+    // /app/. Keep this path as a redirect so existing bookmarks, push deep-links,
+    // and any `?redirect=/web/dashboard` flows continue to land on the new UI.
+    res.redirect(301, '/app/');
+  });
+
+  // ─── Internal JSON API (/web/api) — consumed by the Preact SPA ──
+  app.use('/web/api', createWebApiRouter({
+    db,
+    planService,
+    getWebSession,
+    parseCookie,
+    cookieSecure,
+  }));
+
+  // ─── Public REST API (/api/v1) — API-token auth, plan-gated ─────
+  // Docs router first so /api/v1/docs + /api/v1/openapi.json bypass bearer auth.
+  app.use('/api/v1', createDocsRouter());
+  app.use('/api/v1', createPublicApiRouter({ db, planService, tokenService }));
+
+  // ─── Preact SPA (/app) — built by `npm run build:web` into dist-web ──
+  // Static assets first (Vite base '/app/' → absolute /app/assets/... URLs),
+  // then a history-fallback that serves index.html for any non-asset /app route.
+  // __dirname differs between dev (src/server) and the bundle (dist), so probe
+  // both candidate locations for the sibling dist-web/ directory.
+  const webDir = [
+    path.join(__dirname, '../../dist-web'), // dev: src/server → repo/dist-web
+    path.join(__dirname, '../dist-web'), // bundle: dist → repo/dist-web
+  ].find((p) => existsSync(p)) ?? path.join(__dirname, '../../dist-web');
+  app.use('/app', express.static(webDir, {
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('.webmanifest')) {
+        res.setHeader('Content-Type', 'application/manifest+json');
+      }
+    },
+  }));
+  app.use('/app', (req, res, next) => {
+    if (req.method !== 'GET') { next(); return; }
+    res.sendFile(path.join(webDir, 'index.html'), (err) => {
+      if (err) next();
+    });
   });
 
   // ─── Push Notification Services ─────────────────────────────
@@ -481,10 +616,9 @@ export function createServer(config: ServerConfig): {
       return;
     }
 
-    const sessionToken = randomUUID();
-    webSessions.set(sessionToken, { userId: user.id, userName: user.name, email: user.email });
-    res.setHeader('Set-Cookie', `mob_session=${sessionToken}; Path=/; HttpOnly; SameSite=Lax`);
-    res.redirect(req.query.redirect as string || '/web/dashboard');
+    const sessionToken = setWebSession({ userId: user.id, userName: user.name, email: user.email }, req);
+    res.setHeader('Set-Cookie', sessionCookie(sessionToken));
+    res.redirect(req.query.redirect as string || '/app/');
   });
 
   // ─── Push Notification Management Page ─────────────────────
@@ -497,9 +631,8 @@ export function createServer(config: ServerConfig): {
       if (userId) {
         const user = accountService.getPublicUser(userId);
         if (user) {
-          const sessionToken = randomUUID();
-          webSessions.set(sessionToken, { userId: user.id, userName: user.name, email: user.email });
-          res.setHeader('Set-Cookie', `mob_session=${sessionToken}; Path=/; HttpOnly; SameSite=Lax`);
+          const sessionToken = setWebSession({ userId: user.id, userName: user.name, email: user.email }, req);
+          res.setHeader('Set-Cookie', sessionCookie(sessionToken));
           res.redirect('/web/notifications');
           return;
         }
@@ -508,12 +641,12 @@ export function createServer(config: ServerConfig): {
 
     // Check session
     const sessionToken = parseCookie(req.headers.cookie ?? '', 'mob_session');
-    if (!sessionToken || !webSessions.get(sessionToken)) {
+    const session = getWebSession(sessionToken);
+    if (!session) {
       res.redirect('/web/login');
       return;
     }
 
-    const session = webSessions.get(sessionToken)!;
     res.render('notifications', { userName: session.userName });
   });
 
@@ -603,53 +736,15 @@ export function createServer(config: ServerConfig): {
     res.redirect(`/web/reminder/${req.params.id}?success=${encodeURIComponent('Reminder dismissed.')}`);
   });
 
-  // ─── Monica Import ────────────────────────────────────────
-
-  app.get('/web/import', requireWebSession, (req, res) => {
-    const user = (req as any).webUser as { userId: string; userName: string; email: string };
-    res.render('import', { userName: user.userName, error: undefined, success: undefined });
+  // ─── Monica Import (retired) ──────────────────────────────
+  // The server-rendered Monica import page has been replaced by the SPA Import
+  // screen (/app/import → POST /web/api/import/monica). Redirect the old paths so
+  // existing bookmarks keep working.
+  app.get('/web/import', (_req, res) => {
+    res.redirect(301, '/app/import');
   });
-
-  app.post('/web/import/monica', requireWebSession, upload.single('sqlfile'), (req, res) => {
-    const user = (req as any).webUser as { userId: string; userName: string; email: string };
-
-    if (!req.file) {
-      res.status(400).render('import', { userName: user.userName, error: 'No file uploaded. Please select a SQL file.', success: undefined });
-      return;
-    }
-
-    const sqlContent = req.file.buffer.toString('utf-8');
-
-    if (!sqlContent.includes('INSERT') || sqlContent.length < 100) {
-      res.status(400).render('import', { userName: user.userName, error: 'The file does not appear to be a valid Monica SQL export.', success: undefined });
-      return;
-    }
-
-    try {
-      const result = importMonicaExport(db, user.userId, sqlContent);
-
-      const summary = [
-        `${result.contacts} contacts`,
-        `${result.tags} tags`,
-        `${result.contactMethods} contact methods`,
-        `${result.notes} notes`,
-        `${result.activities} activities`,
-        `${result.relationships} relationships`,
-        `${result.addresses} addresses`,
-        `${result.lifeEvents} life events`,
-        `${result.gifts} gifts`,
-        `${result.reminders} reminders`,
-        `${result.calls} call records`,
-      ].join(', ');
-
-      const errorSummary = result.errors.length > 0
-        ? ` (${result.errors.length} warnings: ${result.errors.slice(0, 3).join('; ')}${result.errors.length > 3 ? '...' : ''})`
-        : '';
-
-      res.render('import', { userName: user.userName, error: undefined, success: `Import complete! Imported: ${summary}.${errorSummary}` });
-    } catch (err: any) {
-      res.status(500).render('import', { userName: user.userName, error: `Import failed: ${err.message}`, success: undefined });
-    }
+  app.post('/web/import/monica', (_req, res) => {
+    res.redirect(307, '/app/import');
   });
 
   // ─── MCP Streamable HTTP: POST ─────────────────────────────
@@ -758,6 +853,9 @@ export function createServer(config: ServerConfig): {
   const cleanupInterval = setInterval(() => {
     oauthService.cleanup();
     accountService.cleanupAutoLoginTokens();
+    if (!config.forgetful) {
+      sessionService.cleanupExpired();
+    }
   }, 5 * 60 * 1000);
 
   // Birthday reminder scheduler (every 15 minutes, persistent mode only)
@@ -794,7 +892,7 @@ export function createServer(config: ServerConfig): {
                   notification.user_id,
                   notification.title,
                   notification.body || '',
-                  '/web/dashboard'
+                  '/app/'
                 );
                 notificationService.recordPushResult(notification.id, result.sent > 0);
                 if (result.sent === 0 && result.failed > 0) {
@@ -815,7 +913,7 @@ export function createServer(config: ServerConfig): {
                 notification.user_id,
                 notification.title,
                 notification.body || '',
-                '/web/dashboard'
+                '/app/'
               );
               notificationService.recordPushResult(notification.id, result.sent > 0);
               if (result.sent === 0 && result.failed > 0) {
@@ -865,8 +963,19 @@ export function createServer(config: ServerConfig): {
               day: '2-digit',
             }).format(now); // en-CA gives YYYY-MM-DD format
 
-            // Find active reminders due today or overdue
-            const dueReminders = db.prepare(`
+            // Advance-notice offsets: fire a reminder N days before its due
+            // date for each configured offset (e.g. [0,7,30] = day-of, a week
+            // before, a month before). Overdue reminders fire every day until
+            // they're actioned.
+            const offsets = settings.reminder_offsets;
+            const maxOffset = Math.max(...offsets);
+            const windowEnd = new Date(userToday + 'T00:00:00Z');
+            windowEnd.setUTCDate(windowEnd.getUTCDate() + maxOffset);
+            const windowEndStr = windowEnd.toISOString().split('T')[0];
+
+            // Find active reminders that are overdue, due today, or upcoming
+            // within the furthest configured offset window.
+            const candidateReminders = db.prepare(`
               SELECT r.*, c.first_name, c.last_name
               FROM reminders r
               JOIN contacts c ON r.contact_id = c.id
@@ -874,12 +983,26 @@ export function createServer(config: ServerConfig): {
                 AND c.user_id = ?
                 AND r.status = 'active'
                 AND r.reminder_date <= ?
-            `).all(user.id, userToday) as any[];
+            `).all(user.id, windowEndStr) as any[];
 
-            for (const reminder of dueReminders) {
+            const todayMidnight = new Date(userToday + 'T00:00:00Z');
+
+            for (const reminder of candidateReminders) {
+              const reminderDate = new Date(reminder.reminder_date + 'T00:00:00Z');
+              const daysUntil = Math.round((reminderDate.getTime() - todayMidnight.getTime()) / 86400000);
+
+              // Skip future reminders that don't fall on a configured offset.
+              if (daysUntil > 0 && !offsets.includes(daysUntil)) continue;
+
               const contactName = [reminder.first_name, reminder.last_name].filter(Boolean).join(' ');
-              const isOverdue = reminder.reminder_date < userToday;
-              const title = isOverdue ? `Overdue: ${reminder.title}` : `Reminder: ${reminder.title}`;
+              let title: string;
+              if (daysUntil < 0) {
+                title = `Overdue: ${reminder.title}`;
+              } else if (daysUntil === 0) {
+                title = `Reminder: ${reminder.title}`;
+              } else {
+                title = `Upcoming in ${daysUntil} day${daysUntil > 1 ? 's' : ''}: ${reminder.title}`;
+              }
               const body = contactName + (reminder.description ? ` — ${reminder.description}` : '');
 
               try {

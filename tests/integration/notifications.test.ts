@@ -146,9 +146,11 @@ describe('NotificationService', () => {
 
   describe('generateBirthdayNotifications', () => {
     it('should generate a notification for a birthday that is today (0 days)', () => {
-      const now = new Date();
-      const month = now.getMonth() + 1;
-      const day = now.getDate();
+      // Service computes "today" in UTC by default, so derive month/day in UTC
+      // too — otherwise this is flaky near midnight in non-UTC timezones.
+      const [, month, day] = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'UTC', year: 'numeric', month: '2-digit', day: '2-digit',
+      }).format(new Date()).split('-').map(Number);
 
       // Insert a contact whose birthday is today
       db.prepare(`
@@ -163,9 +165,9 @@ describe('NotificationService', () => {
     });
 
     it('should not generate a duplicate notification for the same birthday in the same year', () => {
-      const now = new Date();
-      const month = now.getMonth() + 1;
-      const day = now.getDate();
+      const [, month, day] = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'UTC', year: 'numeric', month: '2-digit', day: '2-digit',
+      }).format(new Date()).split('-').map(Number);
 
       db.prepare(`
         INSERT INTO contacts (id, user_id, first_name, birthday_mode, birthday_month, birthday_day, status, is_favorite, created_at, updated_at)

@@ -25,6 +25,11 @@ describe('UserSettingsService', () => {
     expect(settings.birthday_reminder_offsets).toEqual([0, 7, 30]);
   });
 
+  it('should default reminder_offsets to [0, 7, 30]', () => {
+    const settings = service.get(userId);
+    expect(settings.reminder_offsets).toEqual([0, 7, 30]);
+  });
+
   it('should return existing settings without duplicating', () => {
     service.get(userId);
     const settings = service.get(userId);
@@ -44,6 +49,18 @@ describe('UserSettingsService', () => {
   it('should update birthday_reminder_offsets', () => {
     const settings = service.update(userId, { birthday_reminder_offsets: [0, 1, 3] });
     expect(settings.birthday_reminder_offsets).toEqual([0, 1, 3]);
+  });
+
+  it('should update reminder_offsets independently of birthday offsets', () => {
+    const settings = service.update(userId, { reminder_offsets: [0, 2, 5] });
+    expect(settings.reminder_offsets).toEqual([0, 2, 5]);
+    // Birthday offsets remain at their default
+    expect(settings.birthday_reminder_offsets).toEqual([0, 7, 30]);
+  });
+
+  it('should reject invalid reminder_offsets', () => {
+    expect(() => service.update(userId, { reminder_offsets: [] })).toThrow('non-empty array');
+    expect(() => service.update(userId, { reminder_offsets: [-1] })).toThrow('non-negative');
   });
 
   it('should reject invalid timezone', () => {

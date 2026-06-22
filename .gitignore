@@ -3,6 +3,7 @@ node_modules/
 
 # Build output
 dist/
+dist-web/
 
 # Data
 data/
@@ -26,3 +27,15 @@ coverage/
 
 # Logs
 *.log
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/.playwright/
+
+# Generated screenshot output
+.design-preview/
+
+# Local scratch notes
+/FOLLOWUP.md

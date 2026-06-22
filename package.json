@@ -6,12 +6,20 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsup",
+    "dev:all": "concurrently -n server,web -c blue,green \"npm:dev\" \"npm:web:dev\"",
+    "build": "npm run build:server && npm run build:web",
+    "build:server": "tsup",
+    "build:web": "vite build --config web/vite.config.ts",
     "start": "node dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "lint": "eslint src/ tests/"
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "lint": "eslint src/ tests/ web/",
+    "typecheck": "tsc --noEmit",
+    "web:dev": "vite --config web/vite.config.ts",
+    "web:build": "vite build --config web/vite.config.ts"
   },
   "keywords": [
     "crm",
@@ -22,7 +30,9 @@
   "author": "Ben Kaiser",
   "license": "MIT",
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
+    "@eslint/js": "^9.39.2",
+    "@playwright/test": "^1.60.0",
+    "@preact/preset-vite": "^2.10.2",
     "@types/bcrypt": "^6.0.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/ejs": "^3.1.5",
@@ -31,22 +41,28 @@
     "@types/node": "^25.2.2",
     "@typescript-eslint/eslint-plugin": "^8.54.0",
     "@typescript-eslint/parser": "^8.54.0",
+    "concurrently": "^9.2.1",
     "eslint": "^9.39.2",
     "tsup": "^8.5.1",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.54.0",
+    "vite": "^6.3.6",
     "vitest": "^4.0.18"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
+    "@preact/signals": "^2.0.5",
     "@types/web-push": "^3.6.4",
     "bcrypt": "^6.0.0",
     "better-sqlite3": "^12.6.2",
     "ejs": "^5.0.1",
     "express": "^5.2.1",
     "multer": "^2.0.2",
+    "preact": "^10.27.2",
     "web-push": "^3.6.7",
+    "wouter": "^3.7.1",
+    "wouter-preact": "^3.7.1",
     "zod": "^4.3.6"
   }
 }

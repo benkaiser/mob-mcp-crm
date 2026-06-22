@@ -343,7 +343,9 @@ Reminders ensure you never forget important dates, follow-ups, or recurring chec
 - **One-time reminders** move to `completed` status after their date passes.
 - **Recurring reminders** automatically advance `reminder_date` to the next occurrence after being acknowledged.
 - **Birthday reminders** are auto-generated when a birthday is set (with month and day). They are yearly reminders. If a birthday is removed, the auto-generated reminder is also removed.
+- **Monica import** skips Monica's auto-generated special-date reminders (non-deletable / `delible=0`, e.g. birthday reminders), since Mob drives birthday notifications from contact birthday fields directly. The import result reports how many were skipped via `skipped_birthday_reminders`.
 - **Snoozed reminders** can be postponed to a later date.
+- **Advance notice** — when web push is enabled, active reminders fire push notifications at the day offsets configured in the `reminder_offsets` user setting (default `[0, 7, 30]`: day-of, a week before, and a month before). This is a separate setting from `birthday_reminder_offsets`. Overdue reminders continue to fire daily until actioned.
 - **MCP tool queries** can surface upcoming reminders (e.g., "reminders in the next 7 days") to help the AI assistant proactively inform the user.
 
 ### 7.2 Reminder Notifications

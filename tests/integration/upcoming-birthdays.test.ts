@@ -70,15 +70,19 @@ describe('ContactService.getUpcomingBirthdays', () => {
   });
 
   it('should handle today as a birthday', () => {
-    const now = new Date();
+    // getUpcomingBirthdays computes "today" in UTC by default; derive month/day
+    // in UTC too so this isn't flaky near midnight in non-UTC timezones.
+    const [, todayMonth, todayDay] = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'UTC', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(new Date()).split('-').map(Number);
 
     createContactWithBirthday({
       firstName: 'Birthday',
       lastName: 'Person',
       birthdayMode: 'full_date',
-      birthdayDate: `1990-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`,
-      birthdayMonth: now.getMonth() + 1,
-      birthdayDay: now.getDate(),
+      birthdayDate: `1990-${String(todayMonth).padStart(2, '0')}-${String(todayDay).padStart(2, '0')}`,
+      birthdayMonth: todayMonth,
+      birthdayDay: todayDay,
     });
 
     const result = service.getUpcomingBirthdays(userId);

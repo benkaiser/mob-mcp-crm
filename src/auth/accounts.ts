@@ -19,6 +19,8 @@ export interface CreateAccountInput {
   email: string;
   password: string;
   timezone?: string;
+  /** Initial plan. Defaults to 'unlimited' (self-hosted). Hosted signups pass 'free'. */
+  plan?: string;
 }
 
 export interface PublicUser {
@@ -52,9 +54,9 @@ export class AccountService {
     const now = new Date().toISOString();
 
     this.db.prepare(`
-      INSERT INTO users (id, name, email, password_hash, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(id, input.name, input.email, passwordHash, now, now);
+      INSERT INTO users (id, name, email, password_hash, plan, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(id, input.name, input.email, passwordHash, input.plan ?? 'unlimited', now, now);
 
     // Auto-create self-contact so the user can participate in relationships
     const selfContactId = generateId();

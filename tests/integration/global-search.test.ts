@@ -76,6 +76,20 @@ describe('SearchService.globalSearch', () => {
     expect(result.results.contacts[0].title).toContain('Alice');
   });
 
+  it('should match a full "first last" name spanning both columns', () => {
+    // Regression: "Alice S" must match (first_name "Alice" + last_name "Smith"),
+    // even though no single column contains the space-spanning substring.
+    const result = searchService.globalSearch(userId, { query: 'Alice S' });
+    expect(result.results.contacts).toHaveLength(1);
+    expect(result.results.contacts[0].title).toContain('Alice');
+  });
+
+  it('should match a "last first" name ordering', () => {
+    const result = searchService.globalSearch(userId, { query: 'Smith Alice' });
+    expect(result.results.contacts).toHaveLength(1);
+    expect(result.results.contacts[0].title).toContain('Alice');
+  });
+
   it('should search contacts by company', () => {
     db.prepare('UPDATE contacts SET company = ? WHERE id = ?').run('Acme Corp', contactId);
 

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mob CRM</title>
+    <link rel="manifest" href="/app/manifest.webmanifest" />
+    <meta name="theme-color" content="#2563eb" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0e1726" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" type="image/svg+xml" href="/app/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/app/favicon-32.png" />
+    <link rel="apple-touch-icon" href="/app/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Mob" />
+    <script>
+      /* Resolve the theme before first paint to avoid a flash of the wrong
+         mode. Preference: explicit localStorage choice ('light'|'dark'),
+         otherwise follow the OS via prefers-color-scheme. The app's theme
+         store reads/writes the same key ('mob-theme'). */
+      (function () {
+        try {
+          var saved = localStorage.getItem('mob-theme');
+          var dark = saved === 'dark' ||
+            (saved !== 'light' && window.matchMedia &&
+             window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (dark) document.documentElement.setAttribute('data-theme', 'dark');
+        } catch (e) { /* localStorage unavailable — default to light */ }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

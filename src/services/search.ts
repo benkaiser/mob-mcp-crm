@@ -107,10 +107,17 @@ export class SearchService {
       FROM contacts
       WHERE user_id = ? AND deleted_at IS NULL AND (
         first_name LIKE ? OR last_name LIKE ? OR nickname LIKE ? OR
-        company LIKE ? OR job_title LIKE ? OR work_notes LIKE ?
+        company LIKE ? OR job_title LIKE ? OR work_notes LIKE ? OR
+        TRIM(COALESCE(first_name, '') || ' ' || COALESCE(last_name, '')) LIKE ? OR
+        TRIM(COALESCE(last_name, '') || ' ' || COALESCE(first_name, '')) LIKE ?
       )
       LIMIT ?
-    `).all(userId, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, limit) as any[];
+    `).all(
+      userId,
+      searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm,
+      searchTerm, searchTerm,
+      limit,
+    ) as any[];
 
     return rows.map((row) => {
       const name = [row.first_name, row.last_name].filter(Boolean).join(' ');

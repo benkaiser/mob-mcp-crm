@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type Database from 'better-sqlite3';
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { ContactService } from '../services/contacts.js';
+import { getContactProfile } from '../services/contact-profile.js';
 import { ContactMethodService } from '../services/contact-methods.js';
 import { AddressService } from '../services/addresses.js';
 import { FoodPreferencesService } from '../services/food-preferences.js';
@@ -23,7 +24,15 @@ import { DataExportService } from '../services/data-export.js';
 import { SearchService } from '../services/search.js';
 import { UserSettingsService } from '../services/settings.js';
 import { AccountService } from '../auth/accounts.js';
+import { deepLink, type DeepLinkEntity } from './deep-links.js';
 import { registerPrompts } from './prompts.js';
+
+/**
+ * Detect forgetful mode the same way `src/index.ts` does. In forgetful mode
+ * users live in ephemeral per-session DB clones with no persistent account,
+ * so auto-login tokens can't round-trip — deep-links are omitted.
+ */
+const FORGETFUL = process.argv.includes('--forgetful') || process.env.MOB_FORGETFUL === 'true';
 
 // ─── Helpers ──────────────────────────────────────────────────────
 
@@ -101,6 +110,27 @@ export function createMcpServer(db: Database.Database): McpServer {
   const dataExportService = new DataExportService(db);
   const searchService = new SearchService(db);
   const settingsService = new UserSettingsService(db);
+  const accountService = new AccountService(db);
+
+  /**
+   * Append an authenticated "view on web" deep-link to a tool result.
+   * The link is added as an extra text content block (leaving the primary
+   * JSON payload at content[0] untouched) and as a `web_url` field on
+   * structuredContent when present. In forgetful mode deepLink() returns
+   * null and the result is returned unchanged.
+   */
+  function withDeepLink(
+    result: { content: { type: 'text'; text: string }[]; structuredContent?: Record<string, unknown> },
+    userId: string,
+    entity: DeepLinkEntity,
+    id: string,
+  ) {
+    const url = deepLink(db, accountService, userId, entity, id, { forgetful: FORGETFUL });
+    if (!url) return result;
+    result.content.push({ type: 'text' as const, text: `View on web: ${url}` });
+    if (result.structuredContent) result.structuredContent.web_url = url;
+    return result;
+  }
 
   // ─── Contact Tools ────────────────────────────────────────────
 
@@ -136,7 +166,7 @@ export function createMcpServer(db: Database.Database): McpServer {
     try {
       const userId = getUserId(extra);
       const contact = contacts.create(userId, args);
-      return textResult(contact);
+      return withDeepLink(textResult(contact), userId, 'contact', (contact as any).id);
     } catch (err: any) {
       return errorResult(err.message);
     }
@@ -150,63 +180,8 @@ export function createMcpServer(db: Database.Database): McpServer {
   }, (args, extra) => {
     try {
       const userId = getUserId(extra);
-      const contact = contacts.get(userId, args.contact_id);
-      if (!contact) return errorResult('Contact not found');
-
-      // Enrich with sub-entities
-      const recentNotes = notes.listByContact(userId, args.contact_id, { per_page: 10 });
-      const recentActivities = activityService.list(userId, { contact_id: args.contact_id, per_page: 10 });
-      const allLifeEvents = lifeEvents.listByContact(userId, args.contact_id, { per_page: 1000 });
-
-      // Active reminders (not completed/dismissed) for this contact
-      const activeReminderRows = db.prepare(`
-        SELECT r.* FROM reminders r
-        JOIN contacts c ON r.contact_id = c.id
-        WHERE r.contact_id = ? AND r.deleted_at IS NULL AND c.deleted_at IS NULL AND c.user_id = ?
-          AND r.status NOT IN ('completed', 'dismissed')
-        ORDER BY r.reminder_date ASC
-      `).all(args.contact_id, userId) as any[];
-      const activeReminders = activeReminderRows.map((r: any) => ({
-        ...r,
-        is_auto_generated: Boolean(r.is_auto_generated),
-      }));
-
-      // Open tasks (not completed) for this contact
-      const openTaskRows = db.prepare(`
-        SELECT * FROM tasks
-        WHERE contact_id = ? AND user_id = ? AND deleted_at IS NULL
-          AND status != 'completed'
-        ORDER BY
-          CASE priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 WHEN 'low' THEN 2 END,
-          due_date ASC NULLS LAST,
-          created_at DESC
-      `).all(args.contact_id, userId) as any[];
-
-      const recentGifts = giftService.list(userId, { contact_id: args.contact_id, per_page: 10 });
-
-      // Active (unsettled) debts for this contact
-      const activeDebts = debtService.list(userId, { contact_id: args.contact_id, status: 'active' });
-
-      const debtSummary = debtService.summary(userId, args.contact_id);
-
-      const result = {
-        ...contact,
-        contact_methods: contactMethods.listByContact(args.contact_id),
-        addresses: addresses.listByContact(args.contact_id),
-        food_preferences: foodPreferences.get(args.contact_id),
-        custom_fields: customFields.listByContact(args.contact_id),
-        tags: tags.listByContact(args.contact_id),
-        relationships: relationships.listByContact(args.contact_id),
-        recent_notes: recentNotes.data,
-        recent_activities: recentActivities.data,
-        life_events: allLifeEvents.data,
-        active_reminders: activeReminders,
-        open_tasks: openTaskRows,
-        recent_gifts: recentGifts.data,
-        active_debts: activeDebts.data,
-        debt_summary: debtSummary,
-      };
-
+      const result = getContactProfile(db, userId, args.contact_id);
+      if (!result) return errorResult('Contact not found');
       return textResult(result);
     } catch (err: any) {
       return errorResult(err.message);
@@ -730,7 +705,7 @@ export function createMcpServer(db: Database.Database): McpServer {
           activity_type_id: args.activity_type_id,
           participant_contact_ids: args.participant_contact_ids,
         });
-        return textResult(activity);
+        return withDeepLink(textResult(activity), userId, 'activity', (activity as any).id);
       } else if (args.action === 'get') {
         if (!args.id) return errorResult('id is required for "get"');
         const activity = activityService.get(userId, args.id);
@@ -950,7 +925,7 @@ export function createMcpServer(db: Database.Database): McpServer {
         if (!args.contact_id || !args.title || !args.reminder_date) return errorResult('contact_id, title, and reminder_date are required for "create"');
         verifyContactOwnership(db, userId, args.contact_id);
         const reminder = reminderService.create(userId, { contact_id: args.contact_id, title: args.title, description: args.description, reminder_date: args.reminder_date, frequency: args.frequency });
-        return textResult(reminder);
+        return withDeepLink(textResult(reminder), userId, 'reminder', (reminder as any).id);
       } else if (args.action === 'list') {
         if (args.contact_id) {
           verifyContactOwnership(db, userId, args.contact_id);
@@ -1100,7 +1075,7 @@ export function createMcpServer(db: Database.Database): McpServer {
         verifyContactOwnership(db, userId, args.contact_id);
         const { action, id, ...createData } = args;
         const gift = giftService.create(userId, createData as any);
-        return textResult(gift);
+        return withDeepLink(textResult(gift), userId, 'gift', (gift as any).id);
       } else if (args.action === 'update') {
         if (!args.id) return errorResult('id is required for "update"');
         verifyRecordOwnership(db, userId, 'gifts', args.id);
@@ -1206,7 +1181,7 @@ export function createMcpServer(db: Database.Database): McpServer {
         if (!args.contact_id || !args.amount || !args.direction) return errorResult('contact_id, amount, and direction are required for "create"');
         verifyContactOwnership(db, userId, args.contact_id);
         const debt = debtService.create(userId, { contact_id: args.contact_id, amount: args.amount, direction: args.direction, currency: args.currency, reason: args.reason, incurred_at: args.incurred_at });
-        return textResult(debt);
+        return withDeepLink(textResult(debt), userId, 'debt', (debt as any).id);
       } else if (args.action === 'list') {
         if (args.contact_id) {
           verifyContactOwnership(db, userId, args.contact_id);
@@ -1628,12 +1603,15 @@ export function createMcpServer(db: Database.Database): McpServer {
       '• action="get": View current settings\n' +
       '• action="update": Update settings. Optional fields: timezone (IANA timezone like "America/New_York"), ' +
       'birthday_reminder_offsets (array of day offsets like [0,7,30] where 0=day-of, 7=week-before), ' +
+      'reminder_offsets (array of day offsets like [0,7,30] for advance notice on custom reminders), ' +
       'birthday_reminder_time (HH:MM 24-hour format for when to send reminders)',
     inputSchema: {
       action: z.enum(['get', 'update']).describe('Action to perform'),
       timezone: z.string().optional().describe('IANA timezone (e.g. "America/New_York", "Europe/London")'),
       birthday_reminder_offsets: z.array(z.number()).optional()
         .describe('Array of day offsets for birthday reminders (e.g. [0,7,30] = day-of, 1 week before, 1 month before)'),
+      reminder_offsets: z.array(z.number()).optional()
+        .describe('Array of day offsets for custom reminder advance notice (e.g. [0,7,30] = day-of, 1 week before, 1 month before)'),
       birthday_reminder_time: z.string().optional()
         .describe('Time of day for birthday reminders in HH:MM 24-hour format (e.g. "09:00")'),
     },
