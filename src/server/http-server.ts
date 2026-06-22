@@ -465,6 +465,17 @@ export function createServer(config: ServerConfig): {
       res.redirect('/app/');
       return;
     }
+
+    // Already signed in? Skip the form and go straight to the dashboard (or the
+    // requested redirect target, validated to a relative path).
+    const existingToken = parseCookie(req.headers.cookie ?? '', 'mob_session');
+    if (getWebSession(existingToken)) {
+      const redirect = req.query.redirect;
+      const safeRedirect = (typeof redirect === 'string' && redirect.startsWith('/') && !redirect.startsWith('//')) ? redirect : '/app/';
+      res.redirect(safeRedirect);
+      return;
+    }
+
     res.render('web-login', { error: undefined, redirect: req.query.redirect || '' });
   });
 

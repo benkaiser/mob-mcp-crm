@@ -1,88 +1,255 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <%- include('_head', { title: 'Mob — AI-First Personal CRM' }) %>
-  <style>
-    body { max-width: 720px; margin: 0 auto; padding: 2rem 1rem; }
-    h1 { font-size: 2.5rem; margin-bottom: 0.5rem; }
-    h2 { font-size: 1.4rem; margin-top: 2rem; margin-bottom: 0.5rem; color: #555; }
-    p { margin-bottom: 1rem; }
-    .tagline { font-size: 1.2rem; color: #666; margin-bottom: 2rem; }
-    .origin { font-size: 0.9rem; color: #888; font-style: italic; margin-bottom: 2rem; }
-    code { background: #f4f4f4; padding: 0.15em 0.4em; border-radius: 3px; font-size: 0.9em; }
-    pre { background: #f4f4f4; padding: 1rem; border-radius: 6px; overflow-x: auto; margin-bottom: 1rem; }
-    pre code { background: none; padding: 0; }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; }
-    th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #eee; }
-    th { color: #555; font-weight: 600; }
-    .examples { list-style: none; }
-    .examples li { padding: 0.5rem 0; border-bottom: 1px solid #f0f0f0; }
-    .examples li::before { content: '\01F4AC \00A0'; }
-    a { color: #2563eb; }
-    .guest-banner { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; padding: 1.2rem 1.5rem; margin-top: 2rem; margin-bottom: 0.5rem; }
-    .guest-banner h2 { margin-top: 0; color: #1d4ed8; }
-    .guest-banner p { margin-bottom: 0.7rem; }
-    .guest-banner ul { margin: 0.5rem 0 0 1.2rem; }
-    .guest-banner li { margin-bottom: 0.3rem; font-size: 0.95rem; }
-    .guest-banner code { background: #dbeafe; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mob — Your personal CRM, however you like to work</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<style>
+  :root{
+    --bg:#f5f9ff;--surface:#fff;--ink:#0b1a2e;--muted:#5c7290;--line:#dce6f5;
+    --primary:#2563eb;--primary-d:#1d4ed8;--accent:#0891b2;
+    --grad:linear-gradient(135deg,#2563eb,#06b6d4);--code-bg:#0c1726;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--ink);line-height:1.6}
+  a{color:var(--primary);text-decoration:none}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 1.5rem}
+  .ico{width:1.25em;height:1.25em;display:inline-block;vertical-align:-.22em}
+  .btn{display:inline-flex;align-items:center;gap:.5rem;padding:.8rem 1.4rem;border-radius:10px;font-weight:700;font-size:.95rem;cursor:pointer;border:none}
+  .btn-primary{background:var(--grad);color:#fff;box-shadow:0 10px 26px rgba(37,99,235,.28)}
+  .btn-out{background:var(--surface);color:var(--ink);border:1px solid var(--line)}
+  nav{display:flex;align-items:center;justify-content:space-between;padding:1.3rem 0}
+  .brand{font-weight:800;font-size:1.3rem;display:flex;align-items:center;gap:.5rem}
+  .brand .ico{width:1.4rem;height:1.4rem;color:var(--primary)}
+  .nav-links{display:flex;gap:1.6rem;align-items:center}
+  .nav-links a{color:var(--muted);font-weight:600;font-size:.95rem}
+  /* hero */
+  .hero{text-align:center;padding:3rem 0 1rem}
+  .pill{display:inline-flex;gap:.5rem;align-items:center;background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd;font-weight:700;font-size:.82rem;padding:.4rem .9rem;border-radius:999px;margin-bottom:1.3rem}
+  h1{font-size:3.4rem;line-height:1.08;letter-spacing:-.025em;margin-bottom:1rem;max-width:17ch;margin-inline:auto}
+  h1 .g{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .lede{font-size:1.2rem;color:var(--muted);max-width:60ch;margin:0 auto 1.6rem}
+  .guest-note{max-width:60ch;margin:0 auto 1.4rem;background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;border-radius:12px;padding:.8rem 1.1rem;font-size:.92rem}
+  /* tabs (pure CSS) */
+  .tabs{margin-top:1.5rem}
+  .tabbar{display:inline-flex;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:.3rem;gap:.3rem;box-shadow:0 6px 18px rgba(11,26,46,.06)}
+  .tabbar label{display:inline-flex;align-items:center;gap:.5rem;padding:.6rem 1.3rem;border-radius:999px;font-weight:700;font-size:.95rem;color:var(--muted);cursor:pointer;transition:.15s}
+  .tabbar label .ico{width:1.15rem;height:1.15rem}
+  .tabs input{position:absolute;opacity:0;pointer-events:none}
+  .panel{display:none;margin:1.6rem auto 0;max-width:880px;text-align:left}
+  #tab-mcp:checked ~ .panels #panel-mcp{display:block}
+  #tab-web:checked ~ .panels #panel-web{display:block}
+  #tab-mcp:checked ~ .tabbar label[for="tab-mcp"],
+  #tab-web:checked ~ .tabbar label[for="tab-web"]{background:var(--grad);color:#fff}
+  /* panel cards */
+  .frame{background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:0 24px 60px rgba(11,26,46,.12);overflow:hidden}
+  .frame-head{padding:1.1rem 1.4rem;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:.7rem;background:#fbfdff}
+  .frame-head .badge{width:38px;height:38px;border-radius:10px;background:var(--grad);color:#fff;display:flex;align-items:center;justify-content:center}
+  .frame-head .badge .ico{width:1.3rem;height:1.3rem}
+  .frame-head h3{font-size:1.1rem;margin:0}.frame-head p{margin:0;color:var(--muted);font-size:.85rem}
+  .frame-body{padding:1.5rem;display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;align-items:center}
+  pre{background:var(--code-bg);color:#e8eef7;border-radius:12px;padding:1rem;overflow-x:auto;font-size:.84rem;font-family:ui-monospace,Menlo,monospace;margin:0}
+  pre .k{color:#7dd3fc}pre .s{color:#86efac}pre .m{color:#64748b}pre .g{color:#86efac}pre .b{color:#7dd3fc}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:.45rem 1rem;font-size:.92rem}
+  .kv dt{color:var(--muted);font-weight:600}
+  code{font-family:ui-monospace,Menlo,monospace;background:#eef3fc;border:1px solid var(--line);padding:.15em .45em;border-radius:6px;font-size:.88em;color:var(--primary-d)}
+  .chatlist{display:flex;flex-direction:column;gap:.5rem}
+  .b{font-size:.88rem;padding:.5rem .8rem;border-radius:12px;max-width:92%}
+  .b.me{background:var(--grad);color:#fff;align-self:flex-end;border-bottom-right-radius:3px}
+  .b.bot{background:#eef3fc;border:1px solid var(--line);border-bottom-left-radius:3px}
+  /* mini dashboard */
+  .mini-main{display:grid;grid-template-columns:repeat(2,1fr);gap:.7rem}
+  .mtile{background:#fbfdff;border:1px solid var(--line);border-radius:10px;padding:.8rem}
+  .mtile .n{font-size:1.5rem;font-weight:800}.mtile .l{font-size:.75rem;color:var(--muted)}
+  .mwide{grid-column:span 2;display:flex;flex-direction:column;gap:.4rem}
+  .chip{height:9px;background:#eaf1fb;border-radius:5px}
+  .cta-under{margin-top:1.2rem;display:flex;gap:.7rem;justify-content:center;flex-wrap:wrap}
+  /* sections */
+  section{padding:4rem 0}
+  .center{text-align:center;max-width:60ch;margin:0 auto 2.5rem}
+  .eyebrow{color:var(--accent);font-weight:800;letter-spacing:.08em;text-transform:uppercase;font-size:.82rem;margin-bottom:.6rem}
+  h2{font-size:2.3rem;letter-spacing:-.02em;margin-bottom:.6rem}
+  .sub{color:var(--muted);font-size:1.08rem}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:1.3rem}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:1.6rem}
+  .card .ic{width:42px;height:42px;border-radius:11px;background:#eff6ff;color:var(--primary);display:flex;align-items:center;justify-content:center;margin-bottom:.9rem}
+  .card .ic .ico{width:1.4rem;height:1.4rem}
+  .card h3{font-size:1.12rem;margin-bottom:.35rem}.card p{color:var(--muted);font-size:.95rem}
+  .card.spotlight{grid-column:span 3;display:grid;grid-template-columns:1.2fr 1fr;gap:2rem;align-items:center;background:linear-gradient(135deg,#eff6ff,#ecfeff);border-color:#bfdbfe}
+  .card.spotlight .ic{width:54px;height:54px;background:var(--grad);color:#fff}
+  .card.spotlight .ic .ico{width:1.7rem;height:1.7rem}.card.spotlight h3{font-size:1.5rem}
+  ul.checks{list-style:none}
+  ul.checks li{padding:.35rem 0;color:var(--muted);display:flex;gap:.5rem;align-items:flex-start}
+  ul.checks li .ico{width:1.1rem;height:1.1rem;color:var(--accent);flex-shrink:0;margin-top:.2rem}
+  /* pricing */
+  .price-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.3rem;align-items:start}
+  .price{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:2rem;position:relative}
+  .price.featured{border:2px solid var(--primary);box-shadow:0 20px 50px rgba(37,99,235,.16)}
+  .ribbon{position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:var(--grad);color:#fff;font-size:.72rem;font-weight:800;letter-spacing:.04em;padding:.25rem .8rem;border-radius:999px}
+  .price h3{font-size:1.15rem}.price .amt{font-size:2.5rem;font-weight:800;margin:.5rem 0 .1rem}
+  .price .amt span{font-size:1rem;color:var(--muted);font-weight:600}
+  .price .note{color:var(--muted);font-size:.85rem;margin-bottom:1rem}
+  .price .btn{width:100%;justify-content:center;margin-top:1rem}
+  footer{border-top:1px solid var(--line);padding:2.5rem 0;color:var(--muted);font-size:.9rem;text-align:center;margin-top:2rem}
+  @media(max-width:860px){.frame-body,.grid3,.price-grid,.card.spotlight{grid-template-columns:1fr}h1{font-size:2.6rem}.nav-links a:not(:last-child){display:none}}
+</style>
 </head>
 <body>
-  <h1>&#x1F998; Mob</h1>
-  <p class="tagline">An AI-first Personal CRM</p>
-  <p class="origin">"Mob" is the name for a group of kangaroos.</p>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></symbol>
+<symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></symbol>
+<symbol id="i-gift" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13"/><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/><path d="M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8"/><path d="M16.5 8a2.5 2.5 0 0 0 0-5C13 3 12 8 12 8"/></symbol>
+<symbol id="i-phone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></symbol>
+<symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></symbol>
+<symbol id="i-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+<symbol id="i-monitor" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></symbol>
+<symbol id="i-bolt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></symbol>
+<symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></symbol>
+</defs></svg>
 
-  <p>Mob is a personal CRM you interact with entirely through natural language via an AI assistant. No forms, no dashboards — just talk about your relationships and Mob keeps track.</p>
+<div class="wrap">
+  <nav>
+    <div class="brand"><svg class="ico"><use href="#i-users"/></svg> Mob</div>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#pricing">Pricing</a>
+      <a class="btn btn-out" href="/web/login">Sign in</a>
+    </div>
+  </nav>
 
-  <% if (forgetful) { %>
-  <div class="guest-banner">
-    <h2>Guest Mode</h2>
-    <p>This server is running in <strong>guest mode</strong> for testing and demos. No account or login is required.</p>
-    <ul>
-      <li>Each MCP session gets its own isolated database pre-loaded with sample data</li>
-      <li>You are signed in as <strong>Bluey Heeler</strong> with 20 contacts from the Heeler family and friends</li>
-      <li>All data is temporary and will be lost when the session ends or the server restarts</li>
-      <li>Just point your MCP client at <code><%= serverUrl %>/mcp</code> and start chatting</li>
-    </ul>
-  </div>
-  <% } %>
-
-  <h2>How to Connect</h2>
-  <table>
-    <tr><th>Transport</th><td>Streamable HTTP</td></tr>
-    <tr><th>Server URL</th><td><code><%= serverUrl %>/mcp</code></td></tr>
+  <header class="hero">
     <% if (forgetful) { %>
-    <tr><th>Auth</th><td>None required (Guest Mode)</td></tr>
+    <span class="pill"><svg class="ico"><use href="#i-bolt"/></svg> Guest mode &middot; try it free, no signup</span>
     <% } else { %>
-    <tr><th>Auth</th><td>OAuth 2.0 with PKCE</td></tr>
+    <span class="pill"><svg class="ico"><use href="#i-bolt"/></svg> AI-first &middot; web &amp; PWA included</span>
     <% } %>
-  </table>
+    <h1>Your personal CRM, <span class="g">however you work</span>.</h1>
+    <p class="lede">Capture life by talking to your AI assistant over MCP, or manage everything hands-on in the web app. Flip between them &mdash; it's the same CRM underneath.</p>
+    <% if (forgetful) { %>
+    <p class="guest-note">This server runs in <strong>guest mode</strong>: every session gets its own sandbox pre-loaded with sample contacts as <strong>Bluey Heeler</strong>. Nothing is saved &mdash; perfect for a quick try.</p>
+    <% } %>
 
-  <p>Recommended client: <a href="https://github.com/benkaiser/joey-mcp-client">Joey MCP Client</a></p>
+    <div class="tabs">
+      <input type="radio" name="hero" id="tab-mcp" checked>
+      <input type="radio" name="hero" id="tab-web">
+      <div class="tabbar">
+        <label for="tab-mcp"><svg class="ico"><use href="#i-chat"/></svg> Talk to it (MCP)</label>
+        <label for="tab-web"><svg class="ico"><use href="#i-monitor"/></svg> Use the web app</label>
+      </div>
+      <div class="panels">
+        <div class="panel" id="panel-mcp">
+          <div class="frame">
+            <div class="frame-head"><span class="badge"><svg class="ico"><use href="#i-chat"/></svg></span><div><h3>Connect your AI assistant</h3><p>Model Context Protocol · Streamable HTTP</p></div></div>
+            <div class="frame-body">
+              <div class="chatlist">
+                <div class="b me">Add Sarah Chen, senior engineer at Google</div>
+                <div class="b bot">Created Sarah Chen · work: Google</div>
+                <div class="b me">Remind me to call Lisa next Tuesday</div>
+                <div class="b bot">Reminder set — I'll push a notification.</div>
+                <div class="b me">Who haven't I talked to in a while?</div>
+                <div class="b bot">Tom (2mo), Priya (3mo), Wei (4mo).</div>
+              </div>
+              <div>
+<pre><span class="m"># mcp.json</span>
+{
+  <span class="k">"mcpServers"</span>: {
+    <span class="k">"mob"</span>: { <span class="k">"url"</span>: <span class="s">"<%= serverUrl %>/mcp"</span> }
+  }
+}</pre>
+                <dl class="kv" style="margin-top:1rem">
+                  <dt>Transport</dt><dd>Streamable HTTP</dd>
+                  <dt>Auth</dt><dd><% if (forgetful) { %>None &mdash; guest mode<% } else { %>OAuth 2.0 + PKCE<% } %></dd>
+                  <dt>Client</dt><dd><a href="https://benkaiser.github.io/joey-mcp-client/">Joey MCP Client</a></dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+          <div class="cta-under"><a class="btn btn-out" href="https://benkaiser.github.io/joey-mcp-client/">Get the Joey client &rarr;</a></div>
+        </div>
 
-  <h2>Example Interactions</h2>
-  <% if (forgetful) { %>
-  <ul class="examples">
-    <li>Who are my favourite contacts?</li>
-    <li>When is Bingo's birthday?</li>
-    <li>Log that I played Keepy Uppy with Bandit and Bingo at home</li>
-    <li>What's Muffin's food preferences?</li>
-    <li>Remind me to plan a playdate with Mackenzie next week</li>
-    <li>Show me my family contacts</li>
-    <li>Add a gift idea for Bingo: a new Floppy bunny plush for her birthday</li>
-    <li>Who haven't I talked to in a while?</li>
-  </ul>
-  <% } else { %>
-  <ul class="examples">
-    <li>Add a new contact: Sarah Chen, she works at Google as a senior engineer</li>
-    <li>Log that I had coffee with Mike yesterday at Blue Bottle</li>
-    <li>When is Tom's birthday?</li>
-    <li>Remind me to call Lisa next Tuesday</li>
-    <li>Who haven't I talked to in a while?</li>
-  </ul>
+        <div class="panel" id="panel-web">
+          <div class="frame">
+            <div class="frame-head"><span class="badge"><svg class="ico"><use href="#i-monitor"/></svg></span><div><h3>The web dashboard &amp; PWA</h3><p>Browse, edit, search and import — installable</p></div></div>
+            <div class="frame-body">
+              <div class="mini-main">
+                <div class="mtile"><div class="n">128</div><div class="l">Contacts</div></div>
+                <div class="mtile"><div class="n">5</div><div class="l">Reminders</div></div>
+                <div class="mtile"><div class="n">12</div><div class="l">Gift ideas</div></div>
+                <div class="mtile"><div class="n">3</div><div class="l">Birthdays</div></div>
+                <div class="mtile mwide"><div class="l">Upcoming reminders</div><div class="chip" style="width:80%"></div><div class="chip" style="width:62%"></div><div class="chip" style="width:72%"></div></div>
+              </div>
+              <ul class="checks">
+                <li><svg class="ico"><use href="#i-check"/></svg> Dashboard with reminders &amp; birthdays</li>
+                <li><svg class="ico"><use href="#i-check"/></svg> Full contact management &amp; global search</li>
+                <li><svg class="ico"><use href="#i-check"/></svg> Push notification setup in Settings</li>
+                <li><svg class="ico"><use href="#i-check"/></svg> Import from Monica, vCard &amp; Google Contacts</li>
+                <li><svg class="ico"><use href="#i-check"/></svg> Installable PWA with an offline shell</li>
+              </ul>
+            </div>
+          </div>
+          <div class="cta-under"><a class="btn btn-primary" href="/web/login">Open the web app →</a></div>
+        </div>
+      </div>
+    </div>
+  </header>
 
-  <h2>Web Dashboard</h2>
-  <p><a href="/web/login">Sign in to the web dashboard</a> to import your Monica CRM data.</p>
-  <% } %>
+  <section id="features">
+    <div class="center">
+      <div class="eyebrow">Features</div>
+      <h2>Everything a personal CRM should have</h2>
+      <p class="sub">Reachable from your AI and from the web — same data, no compromise.</p>
+    </div>
+    <div class="grid3">
+      <div class="card spotlight">
+        <div>
+          <div class="ic"><svg class="ico"><use href="#i-bell"/></svg></div>
+          <h3>Push notifications that reach you</h3>
+          <p class="sub">Birthday and follow-up alerts to phone and desktop &mdash; ahead of time, even when the app is closed.</p>
+        </div>
+        <ul class="checks">
+          <li><svg class="ico"><use href="#i-check"/></svg> Birthdays tracked automatically</li>
+          <li><svg class="ico"><use href="#i-check"/></svg> Configurable advance notice</li>
+          <li><svg class="ico"><use href="#i-check"/></svg> Works on the installed PWA</li>
+        </ul>
+      </div>
+      <div class="card"><div class="ic"><svg class="ico"><use href="#i-users"/></svg></div><h3>Rich profiles</h3><p>Relationships, food prefs, addresses, custom fields, tags &amp; timeline.</p></div>
+      <div class="card"><div class="ic"><svg class="ico"><use href="#i-clock"/></svg></div><h3>Reminders &amp; tasks</h3><p>One-off or recurring, tied to the right people.</p></div>
+      <div class="card"><div class="ic"><svg class="ico"><use href="#i-gift"/></svg></div><h3>Gifts &amp; debts</h3><p>Wishlists and IOUs in any currency.</p></div>
+      <div class="card"><div class="ic"><svg class="ico"><use href="#i-search"/></svg></div><h3>Global search</h3><p>Find any contact, note or reminder in a keystroke.</p></div>
+      <div class="card"><div class="ic"><svg class="ico"><use href="#i-download"/></svg></div><h3>Import &amp; export</h3><p>Monica, vCard &amp; Google Contacts. Always portable.</p></div>
+    </div>
+  </section>
+
+  <section id="pricing">
+    <div class="center">
+      <div class="eyebrow">Pricing</div>
+      <h2>Free in beta. Free forever if you self-host.</h2>
+      <p class="sub">Hosted Mob is free during beta. Afterwards managed hosting is a small subscription — self-hosting stays free and unlimited.</p>
+    </div>
+    <div class="price-grid">
+      <div class="price">
+        <h3>Guest</h3><div class="amt">$0</div><div class="note">Instant demo, no signup</div>
+        <ul class="checks"><li><svg class="ico"><use href="#i-check"/></svg> Sample contacts</li><li><svg class="ico"><use href="#i-check"/></svg> Full UI</li><li><svg class="ico"><use href="#i-check"/></svg> Ephemeral</li></ul>
+        <a class="btn btn-out" href="/web/login">Try the demo</a>
+      </div>
+      <div class="price featured">
+        <span class="ribbon">FREE IN BETA</span>
+        <h3>Hosted</h3><div class="amt">$5<span> /mo</span></div><div class="note">or $50/year · <strong>$0 today</strong></div>
+        <ul class="checks"><li><svg class="ico"><use href="#i-check"/></svg> Managed &amp; updated</li><li><svg class="ico"><use href="#i-check"/></svg> Push notifications</li><li><svg class="ico"><use href="#i-check"/></svg> Web + PWA</li><li><svg class="ico"><use href="#i-check"/></svg> Backups</li></ul>
+        <a class="btn btn-primary" href="/web/login">Start free</a>
+      </div>
+      <div class="price">
+        <h3>Self-hosted</h3><div class="amt">$0<span> forever</span></div><div class="note">Open source, unlimited</div>
+        <ul class="checks"><li><svg class="ico"><use href="#i-check"/></svg> Unlimited contacts</li><li><svg class="ico"><use href="#i-check"/></svg> No caps</li><li><svg class="ico"><use href="#i-check"/></svg> Own your data</li></ul>
+        <a class="btn btn-out" href="https://github.com/benkaiser/mob-mcp-crm">View on GitHub</a>
+      </div>
+    </div>
+  </section>
+</div>
+<footer><div class="wrap">Mob — “a mob” is a group of kangaroos · <a href="https://github.com/benkaiser/mob-mcp-crm">Open source on GitHub</a></div></footer>
 </body>
 </html>
