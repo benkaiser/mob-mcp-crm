@@ -19,6 +19,7 @@
   .btn{display:inline-flex;align-items:center;gap:.5rem;padding:.8rem 1.4rem;border-radius:10px;font-weight:700;font-size:.95rem;cursor:pointer;border:none}
   .btn-primary{background:var(--grad);color:#fff;box-shadow:0 10px 26px rgba(37,99,235,.28)}
   .btn-out{background:var(--surface);color:var(--ink);border:1px solid var(--line)}
+  .btn-lg{padding:1rem 1.9rem;font-size:1.05rem;border-radius:12px}
   nav{display:flex;align-items:center;justify-content:space-between;padding:1.3rem 0}
   .brand{font-weight:800;font-size:1.3rem;display:flex;align-items:center;gap:.5rem}
   .brand .ico{width:1.4rem;height:1.4rem;color:var(--primary)}
@@ -32,6 +33,10 @@
   h1 .g{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
   .lede{font-size:1.2rem;color:var(--muted);max-width:60ch;margin:0 auto 1.6rem}
   .guest-note{max-width:60ch;margin:0 auto 1.4rem;background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;border-radius:12px;padding:.8rem 1.1rem;font-size:.92rem}
+  .hero-cta{margin:1.6rem auto .4rem;display:flex;flex-direction:column;align-items:center;gap:.7rem}
+  .hero-cta__minor{color:var(--muted);font-size:.92rem;margin:0}
+  .hero-cta__minor a{font-weight:600}
+  .hero-cta__sep{color:var(--line);margin:0 .5rem}
   /* tabs (pure CSS) */
   .tabs{margin-top:1.5rem}
   .tabbar{display:inline-flex;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:.3rem;gap:.3rem;box-shadow:0 6px 18px rgba(11,26,46,.06)}
@@ -70,7 +75,7 @@
   section{padding:4rem 0}
   .center{text-align:center;max-width:60ch;margin:0 auto 2.5rem}
   .eyebrow{color:var(--accent);font-weight:800;letter-spacing:.08em;text-transform:uppercase;font-size:.82rem;margin-bottom:.6rem}
-  h2{font-size:2.3rem;letter-spacing:-.02em;margin-bottom:.6rem}
+  h2{font-size:2.3rem;letter-spacing:-.02em;margin-bottom:.6rem;text-wrap:balance}
   .sub{color:var(--muted);font-size:1.08rem}
   .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:1.3rem}
   .card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:1.6rem}
@@ -130,12 +135,21 @@
     <% } %>
     <h1>Your personal CRM, <span class="g">however you work</span>.</h1>
     <p class="lede">Capture life by talking to your AI assistant over MCP, or manage everything hands-on in the web app. Flip between them &mdash; it's the same CRM underneath.</p>
-    <% if (!forgetful) { %>
-    <p class="guest-note"><strong>Beta:</strong> hosted Mob is free with all features enabled and no contact caps. Need help? Email <a href="mailto:mobsupport@benkaiser.dev">mobsupport@benkaiser.dev</a>.</p>
-    <% } %>
     <% if (forgetful) { %>
     <p class="guest-note">This server runs in <strong>guest mode</strong>: every session gets its own sandbox pre-loaded with sample contacts as <strong>Bluey Heeler</strong>. Nothing is saved &mdash; perfect for a quick try.</p>
     <% } %>
+
+    <div class="hero-cta">
+      <% if (forgetful) { %>
+      <a class="btn btn-primary btn-lg" href="/web/login">Try Mob free &mdash; no signup</a>
+      <p class="hero-cta__minor">
+        Prefer your AI? <a href="https://benkaiser.github.io/joey-mcp-client/">Get the Joey client</a>
+      </p>
+      <% } else { %>
+      <a class="btn btn-primary btn-lg" href="/auth/register?from=web">Create your free account</a>
+      <p class="hero-cta__minor"><strong>Free in beta</strong> &mdash; all features, no contact caps.</p>
+      <% } %>
+    </div>
 
     <div class="tabs">
       <input type="radio" name="hero" id="tab-mcp" checked>
@@ -195,7 +209,7 @@
               </ul>
             </div>
           </div>
-          <div class="cta-under"><a class="btn btn-primary" href="/web/login">Open the web app →</a></div>
+          <div class="cta-under"><a class="btn btn-out" href="/web/login">Open the web app &rarr;</a></div>
         </div>
       </div>
     </div>
@@ -231,7 +245,7 @@
   <section id="pricing">
     <div class="center">
       <div class="eyebrow">Pricing</div>
-      <h2>Free in beta. Free forever if you self-host.</h2>
+      <h2>Free in beta. Free forever if you self&#8209;host.</h2>
       <p class="sub">Hosted Mob is free during beta with every feature enabled and no caps. Afterwards managed hosting is a small subscription — self-hosting stays free and unlimited.</p>
     </div>
     <div class="price-grid">
@@ -244,7 +258,7 @@
         <span class="ribbon">FREE IN BETA</span>
         <h3>Hosted</h3><div class="amt">$5<span> /mo</span></div><div class="note">or $50/year · <strong>$0 today</strong></div>
         <ul class="checks"><li><svg class="ico"><use href="#i-check"/></svg> Managed &amp; updated</li><li><svg class="ico"><use href="#i-check"/></svg> All features during beta</li><li><svg class="ico"><use href="#i-check"/></svg> No beta contact caps</li><li><svg class="ico"><use href="#i-check"/></svg> Push notifications</li><li><svg class="ico"><use href="#i-check"/></svg> Web + PWA</li><li><svg class="ico"><use href="#i-check"/></svg> Backups</li></ul>
-        <a class="btn btn-primary" href="/web/login">Start free</a>
+        <a class="btn btn-primary" href="<%= forgetful ? '/web/login' : '/auth/register?from=web' %>">Start free</a>
       </div>
       <div class="price">
         <h3>Self-hosted</h3><div class="amt">$0<span> forever</span></div><div class="note">Open source, unlimited</div>
