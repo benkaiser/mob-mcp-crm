@@ -658,19 +658,15 @@ export function createServer(config: ServerConfig): {
   // ─── Favicon ──────────────────────────────────────────────
 
   app.get('/favicon.svg', (_req, res) => {
-    res.setHeader('Content-Type', 'image/svg+xml');
-    res.setHeader('Cache-Control', 'public, max-age=86400');
-    res.sendFile(path.join(__dirname, 'favicon.svg'));
+    res.redirect(301, '/app/icons/icon.svg');
   });
 
   app.get('/favicon-192.png', (_req, res) => {
-    res.setHeader('Content-Type', 'image/png');
-    res.setHeader('Cache-Control', 'public, max-age=86400');
-    res.sendFile(path.join(__dirname, 'favicon-192.png'));
+    res.redirect(301, '/app/icons/icon-192.png');
   });
 
   app.get('/favicon.ico', (_req, res) => {
-    res.redirect(301, '/favicon.svg');
+    res.redirect(301, '/app/icons/icon.svg');
   });
 
   // ─── Service Worker ────────────────────────────────────────
