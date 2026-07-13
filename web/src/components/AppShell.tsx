@@ -4,7 +4,7 @@ import { Link, useRoute, useLocation } from 'wouter-preact';
 import { user } from '../store/session';
 import { apiGet } from '../api/client';
 import type { GlobalSearchResult, SearchEntityType, SearchResult } from '../api/types';
-import { Input } from '../ui';
+import { CopyField, Input, Modal } from '../ui';
 import { InstallPrompt } from './InstallPrompt';
 import { ThemeToggle } from './ThemeToggle';
 
@@ -305,58 +305,150 @@ function ShellSearch() {
   );
 }
 
+const SETUP_TABS = ['Claude Code', 'Codex', 'Cursor', 'VS Code'] as const;
+type SetupTab = typeof SETUP_TABS[number];
+
+function McpConnectionModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [activeTab, setActiveTab] = useState<SetupTab>('Claude Code');
+  const origin = typeof window === 'undefined' ? '' : window.location.origin;
+  const mcpUrl = `${origin}/mcp`;
+  const snippets: Record<SetupTab, string> = {
+    'Claude Code': `claude mcp add mob --transport http ${mcpUrl}`,
+    Codex: `codex mcp add mob --url ${mcpUrl}`,
+    Cursor: JSON.stringify({ mcpServers: { mob: { url: mcpUrl } } }, null, 2),
+    'VS Code': JSON.stringify({ servers: { mob: { type: 'http', url: mcpUrl } } }, null, 2),
+  };
+
+  return (
+    <Modal open={open} title="MCP Connection Instructions" onClose={onClose} wide>
+      <div class="mcp-connect">
+        <p class="mcp-connect__intro">
+          Connect your AI client to this Mob CRM server over Streamable HTTP.
+        </p>
+
+        <CopyField value={mcpUrl} label="Server URL" />
+
+        <div class="mcp-connect__facts" aria-label="Connection facts">
+          <div class="mcp-connect__fact">
+            <span class="mcp-connect__fact-label">Transport</span>
+            <strong>Streamable HTTP</strong>
+          </div>
+          <div class="mcp-connect__fact">
+            <span class="mcp-connect__fact-label">Authentication</span>
+            <strong>OAuth</strong>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="mcp-connect__heading">Setup</h3>
+          <div class="mcp-connect__tabs" role="tablist" aria-label="MCP client setup">
+            {SETUP_TABS.map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === tab}
+                class={`mcp-connect__tab${activeTab === tab ? ' mcp-connect__tab--active' : ''}`}
+                onClick={() => setActiveTab(tab)}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+          <CopyField value={snippets[activeTab]} />
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 export function AppShell({ children }: { children: ComponentChildren }) {
   const me = user.value;
+  const [location] = useLocation();
+  const [mcpModalOpen, setMcpModalOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location]);
+
   return (
     <div class="app-shell">
       <a href="#main-content" class="skip-link" data-testid="skip-link">Skip to content</a>
       <aside class="sidebar">
-        <div class="sidebar__brand">
+        <Link href="/" class="sidebar__brand" data-testid="sidebar-brand">
           <img class="sidebar__brand-logo" src="/app/logo.svg" alt="" aria-hidden="true" width="28" height="28" />
           <span>Mob CRM</span>
-        </div>
+        </Link>
+        <button
+          type="button"
+          class="sidebar__menu-toggle"
+          aria-controls="sidebar-menu"
+          aria-expanded={mobileMenuOpen}
+          onClick={() => setMobileMenuOpen((open) => !open)}
+        >
+          <span class="sr-only">{mobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}</span>
+          <span class="sidebar__menu-toggle-bars" aria-hidden="true"></span>
+        </button>
         <ShellSearch />
         <Link href="/contacts/new" class="sidebar__cta" data-testid="sidebar-new-contact">
           <span aria-hidden="true">＋</span> New contact
         </Link>
-        {/* Secondary quick-add links: smaller, ghost-styled so the primary
-            "New contact" CTA remains visually dominant. */}
-        <div class="sidebar__quick" data-testid="sidebar-quick-add">
-          <div class="sidebar__quick-label">Quick add</div>
-          <Link href="/notes/new" class="sidebar__quick-link" data-testid="sidebar-new-note">
-            <span aria-hidden="true">+</span> Note
-          </Link>
-          <Link href="/activities/new" class="sidebar__quick-link" data-testid="sidebar-new-activity">
-            <span aria-hidden="true">+</span> Activity
-          </Link>
-          <Link href="/reminders/new" class="sidebar__quick-link" data-testid="sidebar-new-reminder">
-            <span aria-hidden="true">+</span> Reminder
-          </Link>
-          <Link href="/tasks/new" class="sidebar__quick-link" data-testid="sidebar-new-task">
-            <span aria-hidden="true">+</span> Task
-          </Link>
-        </div>
-        <nav class="sidebar__nav">
-          {NAV.map((item) => (
-            <NavLink key={item.href} item={item} />
-          ))}
-        </nav>
-        <div class="sidebar__user" data-testid="sidebar-user">
-          {me && (
-            <>
-              <div class="sidebar__user-name" data-testid="sidebar-user-name">{me.name}</div>
-              <div class="sidebar__user-plan" data-testid="sidebar-user-plan">{me.plan} plan</div>
-            </>
-          )}
-          <InstallPrompt />
-          <div class="sidebar__user-actions">
-            {/* Server-rendered logout route — full navigation, not SPA. */}
-            <a href="/web/logout" data-testid="logout-link">Log out</a>
-            <ThemeToggle />
+        <div
+          id="sidebar-menu"
+          class={`sidebar__menu${mobileMenuOpen ? ' sidebar__menu--open' : ''}`}
+        >
+          {/* Secondary quick-add links: smaller, ghost-styled so the primary
+              "New contact" CTA remains visually dominant. */}
+          <div class="sidebar__quick" data-testid="sidebar-quick-add">
+            <div class="sidebar__quick-label">Quick add</div>
+            <Link href="/notes/new" class="sidebar__quick-link" data-testid="sidebar-new-note">
+              <span aria-hidden="true">+</span> Note
+            </Link>
+            <Link href="/activities/new" class="sidebar__quick-link" data-testid="sidebar-new-activity">
+              <span aria-hidden="true">+</span> Activity
+            </Link>
+            <Link href="/reminders/new" class="sidebar__quick-link" data-testid="sidebar-new-reminder">
+              <span aria-hidden="true">+</span> Reminder
+            </Link>
+            <Link href="/tasks/new" class="sidebar__quick-link" data-testid="sidebar-new-task">
+              <span aria-hidden="true">+</span> Task
+            </Link>
+          </div>
+          <nav class="sidebar__nav">
+            {NAV.map((item) => (
+              <NavLink key={item.href} item={item} />
+            ))}
+          </nav>
+          <button
+            type="button"
+            class="sidebar__mcp-cta"
+            data-testid="sidebar-mcp-instructions"
+            onClick={() => {
+              setMcpModalOpen(true);
+              setMobileMenuOpen(false);
+            }}
+          >
+            MCP Connection Instructions
+          </button>
+          <div class="sidebar__user" data-testid="sidebar-user">
+            {me && (
+              <>
+                <div class="sidebar__user-name" data-testid="sidebar-user-name">{me.name}</div>
+                <div class="sidebar__user-plan" data-testid="sidebar-user-plan">{me.plan} plan</div>
+              </>
+            )}
+            <InstallPrompt />
+            <div class="sidebar__user-actions">
+              {/* Server-rendered logout route — full navigation, not SPA. */}
+              <a href="/web/logout" data-testid="logout-link">Log out</a>
+              <ThemeToggle />
+            </div>
           </div>
         </div>
       </aside>
       <main class="main" id="main-content" tabIndex={-1}>{children}</main>
+      <McpConnectionModal open={mcpModalOpen} onClose={() => setMcpModalOpen(false)} />
     </div>
   );
 }

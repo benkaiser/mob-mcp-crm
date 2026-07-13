@@ -32,7 +32,7 @@
   h1{font-size:3.4rem;line-height:1.08;letter-spacing:-.025em;margin-bottom:1rem;max-width:17ch;margin-inline:auto}
   h1 .g{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
   .lede{font-size:1.2rem;color:var(--muted);max-width:60ch;margin:0 auto 1.6rem}
-  .guest-note{max-width:60ch;margin:0 auto 1.4rem;background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;border-radius:12px;padding:.8rem 1.1rem;font-size:.92rem}
+  .demo-note{max-width:60ch;margin:0 auto 1.4rem;background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;border-radius:12px;padding:.8rem 1.1rem;font-size:.92rem}
   .hero-cta{margin:1.6rem auto .4rem;display:flex;flex-direction:column;align-items:center;gap:.7rem}
   .hero-cta__minor{color:var(--muted);font-size:.92rem;margin:0}
   .hero-cta__minor a{font-weight:600}
@@ -89,7 +89,7 @@
   ul.checks li{padding:.35rem 0;color:var(--muted);display:flex;gap:.5rem;align-items:flex-start}
   ul.checks li .ico{width:1.1rem;height:1.1rem;color:var(--accent);flex-shrink:0;margin-top:.2rem}
   /* pricing */
-  .price-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.3rem;align-items:start}
+  .price-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1.3rem;align-items:start;max-width:760px;margin:0 auto}
   .price{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:2rem;position:relative}
   .price.featured{border:2px solid var(--primary);box-shadow:0 20px 50px rgba(37,99,235,.16)}
   .ribbon{position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:var(--grad);color:#fff;font-size:.72rem;font-weight:800;letter-spacing:.04em;padding:.25rem .8rem;border-radius:999px}
@@ -129,14 +129,14 @@
 
   <header class="hero">
     <% if (forgetful) { %>
-    <span class="pill"><svg class="ico"><use href="#i-bolt"/></svg> Guest mode &middot; try it free, no signup</span>
+    <span class="pill"><svg class="ico"><use href="#i-bolt"/></svg> Demo mode &middot; try it free, no signup</span>
     <% } else { %>
     <span class="pill"><svg class="ico"><use href="#i-bolt"/></svg> AI-first &middot; web &amp; PWA included</span>
     <% } %>
     <h1>Your personal CRM, <span class="g">however you work</span>.</h1>
     <p class="lede">Capture life by talking to your AI assistant over MCP, or manage everything hands-on in the web app. Flip between them &mdash; it's the same CRM underneath.</p>
     <% if (forgetful) { %>
-    <p class="guest-note">This server runs in <strong>guest mode</strong>: every session gets its own sandbox pre-loaded with sample contacts as <strong>Bluey Heeler</strong>. Nothing is saved &mdash; perfect for a quick try.</p>
+    <p class="demo-note">This server runs in <strong>demo mode</strong>: every session gets its own sandbox pre-loaded with sample contacts as <strong>Bluey Heeler</strong>. Nothing is saved &mdash; perfect for a quick try.</p>
     <% } %>
 
     <div class="hero-cta">
@@ -180,7 +180,7 @@
 }</pre>
                 <dl class="kv" style="margin-top:1rem">
                   <dt>Transport</dt><dd>Streamable HTTP</dd>
-                  <dt>Auth</dt><dd><% if (forgetful) { %>None &mdash; guest mode<% } else { %>OAuth 2.0 + PKCE<% } %></dd>
+                  <dt>Auth</dt><dd><% if (forgetful) { %>None &mdash; demo mode<% } else { %>OAuth 2.0 + PKCE<% } %></dd>
                   <dt>Client</dt><dd><a href="https://benkaiser.github.io/joey-mcp-client/">Joey MCP Client</a></dd>
                 </dl>
               </div>
@@ -249,16 +249,12 @@
       <p class="sub">Hosted Mob is free during beta with every feature enabled and no caps. Afterwards managed hosting is a small subscription — self-hosting stays free and unlimited.</p>
     </div>
     <div class="price-grid">
-      <div class="price">
-        <h3>Guest</h3><div class="amt">$0</div><div class="note">Instant demo, no signup</div>
-        <ul class="checks"><li><svg class="ico"><use href="#i-check"/></svg> Sample contacts</li><li><svg class="ico"><use href="#i-check"/></svg> Full UI</li><li><svg class="ico"><use href="#i-check"/></svg> Ephemeral</li></ul>
-        <a class="btn btn-out" href="/web/login">Try the demo</a>
-      </div>
       <div class="price featured">
         <span class="ribbon">FREE IN BETA</span>
         <h3>Hosted</h3><div class="amt">$5<span> /mo</span></div><div class="note">or $50/year · <strong>$0 today</strong></div>
         <ul class="checks"><li><svg class="ico"><use href="#i-check"/></svg> Managed &amp; updated</li><li><svg class="ico"><use href="#i-check"/></svg> All features during beta</li><li><svg class="ico"><use href="#i-check"/></svg> No beta contact caps</li><li><svg class="ico"><use href="#i-check"/></svg> Push notifications</li><li><svg class="ico"><use href="#i-check"/></svg> Web + PWA</li><li><svg class="ico"><use href="#i-check"/></svg> Backups</li></ul>
         <a class="btn btn-primary" href="<%= forgetful ? '/web/login' : '/auth/register?from=web' %>">Start free</a>
+        <a class="btn btn-out" href="https://mobdemo.kaiser.lol/app/">Try demo account</a>
       </div>
       <div class="price">
         <h3>Self-hosted</h3><div class="amt">$0<span> forever</span></div><div class="note">Open source, unlimited</div>

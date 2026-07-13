@@ -7,6 +7,7 @@ interface ModalProps {
   onClose: () => void;
   children?: ComponentChildren;
   footer?: ComponentChildren;
+  wide?: boolean;
 }
 
 /** Elements that can receive keyboard focus inside the dialog. */
@@ -29,7 +30,7 @@ const FOCUSABLE =
  * parent re-render (callers usually pass an inline arrow) doesn't tear down and
  * re-run the effect, which would thrash focus back to the trigger.
  */
-export function Modal({ open, title, onClose, children, footer }: ModalProps) {
+export function Modal({ open, title, onClose, children, footer, wide = false }: ModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const restoreRef = useRef<HTMLElement | null>(null);
   const onCloseRef = useRef(onClose);
@@ -86,7 +87,7 @@ export function Modal({ open, title, onClose, children, footer }: ModalProps) {
     <div class="modal-backdrop" onClick={onClose} data-testid="modal-backdrop">
       <div
         ref={dialogRef}
-        class="modal"
+        class={`modal${wide ? ' modal--wide' : ''}`}
         role="dialog"
         aria-modal="true"
         aria-label={title}
