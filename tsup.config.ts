@@ -13,5 +13,8 @@ export default defineConfig({
   onSuccess: async () => {
     cpSync('src/server/views', 'dist/views', { recursive: true });
     cpSync('src/server/service-worker.js', 'dist/service-worker.js');
+    // The bundled migrator resolves migrations relative to dist/ (import.meta.url),
+    // so ship the SQL files alongside the bundle for `npm start` to work.
+    cpSync('src/db/migrations', 'dist/migrations', { recursive: true });
   },
 });

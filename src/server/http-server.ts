@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import path from 'node:path';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -127,8 +128,34 @@ export function createServer(config: ServerConfig): {
   // ephemeral in-memory map because its users live in per-session cloned DBs,
   // not the main database, so the sessions table FK/JOIN can't apply to them.
   const sessionService = new SessionService(db);
+
+  // ─── Forgetful-mode per-request database resolution ───────────
+  // Forgetful mode gives each session its own cloned DB (seeded with demo
+  // data). MCP requests select their clone explicitly. The web API routers,
+  // however, close over a single Database instance. To make the web app work
+  // in forgetful mode without threading a db argument through every router and
+  // service, we expose a Proxy whose calls are dispatched to the clone stored
+  // in AsyncLocalStorage for the current request (falling back to the main db
+  // outside a request). In persistent mode this is bypassed entirely.
+  const forgetfulDbStore = new AsyncLocalStorage<Database.Database>();
+  function makeForgetfulDbProxy(fallback: Database.Database): Database.Database {
+    return new Proxy(fallback, {
+      get(target, prop) {
+        const active = forgetfulDbStore.getStore() ?? target;
+        const value = Reflect.get(active as object, prop, active);
+        return typeof value === 'function' ? value.bind(active) : value;
+      },
+    }) as Database.Database;
+  }
+  // The db handle the web API + its plan service should use. In forgetful mode
+  // this routes to the per-session clone; in persistent mode it's just `db`.
+  const webDb = config.forgetful ? makeForgetfulDbProxy(db) : db;
+
   // Plan/quota gating. Active only in hosted mode; self-hosted = unlimited.
   const planService = new PlanService(db, config.hosted === true);
+  // Plan service scoped to the web request's database (forgetful-aware) so
+  // usage counts reflect the session's cloned data.
+  const webPlanService = config.forgetful ? new PlanService(webDb, config.hosted === true) : planService;
   // Public REST API: token auth + webhooks (plan-gated in hosted mode).
   const tokenService = new ApiTokenService(db);
   const webhookService = new WebhookService(db);
@@ -717,9 +744,24 @@ export function createServer(config: ServerConfig): {
   });
 
   // ─── Internal JSON API (/web/api) — consumed by the Preact SPA ──
+  // In forgetful mode, resolve the caller's cloned (seeded) database from their
+  // web session and run the request within that db context, so the web API
+  // sees the same demo data as MCP sessions instead of the empty main db.
+  if (config.forgetful) {
+    app.use('/web/api', (req, _res, next) => {
+      const token = parseCookie(req.headers.cookie ?? '', 'mob_session');
+      const session = token ? forgetfulWebSessions.get(token) : undefined;
+      const clone = session ? forgetfulSessions.get(`web-${session.userId}`)?.db : undefined;
+      if (clone) {
+        forgetfulDbStore.run(clone, next);
+      } else {
+        next();
+      }
+    });
+  }
   app.use('/web/api', createWebApiRouter({
-    db,
-    planService,
+    db: webDb,
+    planService: webPlanService,
     getWebSession,
     parseCookie,
     cookieSecure,

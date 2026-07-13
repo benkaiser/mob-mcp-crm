@@ -127,4 +127,97 @@ describe('Forgetful Mode', () => {
       server.close();
     }
   });
+
+  it('serves seeded Bluey demo data through the web API after auto-login', async () => {
+    serverInstance = createServer({ port: 0, dataDir: ':memory:', forgetful: true, baseUrl: 'http://localhost:0' });
+    const app = serverInstance.app;
+
+    const { default: http } = await import('node:http');
+    const server = http.createServer(app);
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    const port = (server.address() as { port: number }).port;
+
+    const sessionFrom = (res: Response): string => {
+      const raw = res.headers.get('set-cookie') ?? '';
+      const m = raw.match(/mob_session=([^;]+)/);
+      if (!m) throw new Error('no mob_session cookie issued by /web/login');
+      return m[1];
+    };
+
+    try {
+      // Auto-login clones the seeded template DB for this web session.
+      const login = await fetch(`http://localhost:${port}/web/login`, { redirect: 'manual' });
+      const session = sessionFrom(login);
+
+      // The web API must see the cloned (seeded) db, not the empty main db.
+      const contactsRes = await fetch(`http://localhost:${port}/web/api/contacts?per_page=100`, {
+        headers: { Cookie: `mob_session=${session}` },
+      });
+      expect(contactsRes.status).toBe(200);
+      const contacts = await contactsRes.json();
+      expect(contacts.meta.total).toBeGreaterThan(0);
+      // Bluey herself is part of the seed.
+      const names = contacts.data.map((c: { first_name: string }) => c.first_name);
+      expect(names).toContain('Bluey');
+
+      // /me usage should reflect the seeded contact count too.
+      const meRes = await fetch(`http://localhost:${port}/web/api/me`, {
+        headers: { Cookie: `mob_session=${session}` },
+      });
+      const me = await meRes.json();
+      expect(me.data.usage.contacts).toBe(contacts.meta.total);
+    } finally {
+      server.close();
+    }
+  });
+
+  it('gives each forgetful web session an isolated cloned database', async () => {
+    serverInstance = createServer({ port: 0, dataDir: ':memory:', forgetful: true, baseUrl: 'http://localhost:0' });
+    const app = serverInstance.app;
+
+    const { default: http } = await import('node:http');
+    const server = http.createServer(app);
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    const port = (server.address() as { port: number }).port;
+
+    const cookies = (res: Response): { session: string; csrf: string } => {
+      const raw = res.headers.get('set-cookie') ?? '';
+      const s = raw.match(/mob_session=([^;]+)/);
+      const c = raw.match(/mob_csrf=([^;]+)/);
+      if (!s) throw new Error('no session cookie');
+      return { session: s[1], csrf: c ? c[1] : '' };
+    };
+
+    try {
+      // Two independent auto-logins → two independent clones.
+      const l1 = await fetch(`http://localhost:${port}/web/login`, { redirect: 'manual' });
+      const s1 = cookies(l1).session;
+      const l2 = await fetch(`http://localhost:${port}/web/login`, { redirect: 'manual' });
+      const s2 = cookies(l2).session;
+
+      // Need a csrf cookie for the mutation; a GET issues one.
+      const csrfRes = await fetch(`http://localhost:${port}/web/api/me`, { headers: { Cookie: `mob_session=${s2}` } });
+      const csrf = (csrfRes.headers.get('set-cookie') ?? '').match(/mob_csrf=([^;]+)/)?.[1] ?? '';
+
+      const before = await (await fetch(`http://localhost:${port}/web/api/contacts?per_page=100`, { headers: { Cookie: `mob_session=${s1}` } })).json();
+      const total = before.meta.total;
+
+      // Delete a contact in session 2.
+      const list2 = await (await fetch(`http://localhost:${port}/web/api/contacts?per_page=1`, { headers: { Cookie: `mob_session=${s2}` } })).json();
+      const victimId = list2.data[0].id;
+      const del = await fetch(`http://localhost:${port}/web/api/contacts/${victimId}`, {
+        method: 'DELETE',
+        headers: { Cookie: `mob_session=${s2}; mob_csrf=${csrf}`, 'X-CSRF-Token': csrf },
+      });
+      expect(del.status).toBe(200);
+
+      // Session 1 is unaffected; session 2 dropped by one.
+      const after1 = await (await fetch(`http://localhost:${port}/web/api/contacts?per_page=100`, { headers: { Cookie: `mob_session=${s1}` } })).json();
+      const after2 = await (await fetch(`http://localhost:${port}/web/api/contacts?per_page=100`, { headers: { Cookie: `mob_session=${s2}` } })).json();
+      expect(after1.meta.total).toBe(total);
+      expect(after2.meta.total).toBe(total - 1);
+    } finally {
+      server.close();
+    }
+  });
 });
