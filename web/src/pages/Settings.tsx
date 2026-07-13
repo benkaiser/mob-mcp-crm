@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { Card, Badge, Button, Spinner, EmptyState, ErrorBanner, Modal, ConfirmDialog, Field, Input, Select, CopyField, showToast } from '../ui';
 import { user } from '../store/session';
+import { loadSession } from '../store/session';
 import { ApiError } from '../api/client';
 import { errorMessage, formatDate } from '../lib/format';
 import { downloadExport } from '../lib/export';
@@ -14,6 +15,13 @@ import {
   toBool, WEBHOOK_EVENTS,
   type ApiToken, type ApiTokenCreated, type Webhook, type WebhookDelivery,
 } from '../api/settings';
+import {
+  changePassword, updateProfile, resendVerification,
+  listConnections, revokeConnection,
+  listSessions, revokeSession, revokeAllSessions,
+  deleteAccount,
+  type Connection, type WebSession,
+} from '../api/account';
 
 export function Settings() {
   const me = user.value;
@@ -25,17 +33,7 @@ export function Settings() {
     <div class="stack">
       <div class="page-header"><h1>Settings</h1></div>
 
-      <Card class="section" data-testid="settings-profile">
-        <div class="section__head"><h2>Profile</h2></div>
-        <dl class="kv">
-          <dt>Name</dt><dd data-testid="settings-profile-name">{me.name}</dd>
-          <dt>Email</dt><dd data-testid="settings-profile-email">{me.email}</dd>
-          <dt>Plan</dt><dd data-testid="settings-profile-plan"><Badge tone="primary">{me.plan}</Badge>{me.hosted ? ' · hosted' : ' · self-hosted'}</dd>
-        </dl>
-        <p style="margin-top:1rem;">
-          <a href="/web/logout">Log out</a>
-        </p>
-      </Card>
+      <ProfileSection />
 
       <Card class="section" data-testid="settings-plan">
         <div class="section__head"><h2>Plan &amp; usage</h2></div>
@@ -53,11 +51,434 @@ export function Settings() {
         </dl>
       </Card>
 
+      <SecuritySection />
       <TokensSection enabled={ent.public_api} />
       <WebhooksSection enabled={ent.webhooks} />
       <PushSection />
+      <ConnectionsSection />
+      <SessionsSection />
       <ExportSection />
+      <DangerZoneSection />
     </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════
+// Profile (editable name / email / timezone + verification banner)
+// ════════════════════════════════════════════════════════════════
+
+/** A small, curated list of common IANA timezones for the picker. */
+const TIMEZONES = [
+  'UTC', 'America/Los_Angeles', 'America/Denver', 'America/Chicago', 'America/New_York',
+  'America/Sao_Paulo', 'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Europe/Moscow',
+  'Asia/Dubai', 'Asia/Kolkata', 'Asia/Singapore', 'Asia/Tokyo', 'Asia/Shanghai',
+  'Australia/Perth', 'Australia/Sydney', 'Pacific/Auckland',
+];
+
+function ProfileSection() {
+  const me = user.value;
+  const [name, setName] = useState(me?.name ?? '');
+  const [email, setEmail] = useState(me?.email ?? '');
+  const [timezone, setTimezone] = useState(me?.timezone ?? 'UTC');
+  const [busy, setBusy] = useState(false);
+  const [resending, setResending] = useState(false);
+
+  if (!me) return null;
+
+  // Include the current timezone in the options even if it isn't in our curated list.
+  const tzOptions = TIMEZONES.includes(timezone) ? TIMEZONES : [timezone, ...TIMEZONES];
+
+  const dirty = name.trim() !== me.name || email.trim() !== me.email || timezone !== me.timezone;
+
+  async function save(e: Event) {
+    e.preventDefault();
+    if (!me || !dirty || busy) return;
+    setBusy(true);
+    try {
+      const body: { name?: string; email?: string; timezone?: string } = {};
+      if (name.trim() !== me.name) body.name = name.trim();
+      if (timezone !== me.timezone) body.timezone = timezone;
+      if (email.trim() !== me.email) body.email = email.trim();
+      const { data } = await updateProfile(body);
+      await loadSession();
+      if (data?.email_change_pending) {
+        showToast(`Confirmation sent to ${data.pending_email}. Your email changes once you confirm it.`, 'success');
+      } else {
+        showToast('Profile updated', 'success');
+      }
+    } catch (err) {
+      showToast(errorMessage(err, 'Failed to update profile'), 'error');
+      // Reset email field on failure so the UI matches server state.
+      setEmail(me.email);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resend() {
+    setResending(true);
+    try {
+      await resendVerification();
+      showToast('Verification email sent', 'success');
+    } catch (err) {
+      showToast(errorMessage(err, 'Failed to send verification email'), 'error');
+    } finally {
+      setResending(false);
+    }
+  }
+
+  return (
+    <Card class="section" data-testid="settings-profile">
+      <div class="section__head"><h2>Profile</h2></div>
+
+      {!me.email_verified && (
+        <div class="callout callout--warning" data-testid="settings-verify-banner">
+          <p class="callout__title">Verify your email</p>
+          <p style="margin:0 0 0.5rem;">
+            {me.pending_email
+              ? <>Check <strong>{me.pending_email}</strong> to confirm your new email address.</>
+              : <>Please confirm <strong>{me.email}</strong> to secure your account.</>}
+          </p>
+          <Button size="sm" variant="secondary" onClick={resend} disabled={resending} data-testid="settings-resend-verification">
+            {resending ? 'Sending…' : 'Resend verification email'}
+          </Button>
+        </div>
+      )}
+
+      <form onSubmit={save} class="stack" style="margin-top:0.5rem;">
+        <Field label="Name">
+          <Input value={name} onInput={(e) => setName((e.target as HTMLInputElement).value)} data-testid="settings-profile-name-input" />
+        </Field>
+        <Field label="Email" hint={me.email_verified ? undefined : 'Unverified'}>
+          <Input type="email" value={email} onInput={(e) => setEmail((e.target as HTMLInputElement).value)} data-testid="settings-profile-email-input" />
+        </Field>
+        <Field label="Timezone">
+          <Select value={timezone} onChange={(e) => setTimezone((e.target as HTMLSelectElement).value)} data-testid="settings-profile-timezone-input">
+            {tzOptions.map((tz) => <option key={tz} value={tz}>{tz}</option>)}
+          </Select>
+        </Field>
+        <div>
+          <dl class="kv" style="margin-bottom:0.75rem;">
+            <dt>Plan</dt>
+            <dd data-testid="settings-profile-plan"><Badge tone="primary">{me.plan}</Badge>{me.hosted ? ' · hosted' : ' · self-hosted'}</dd>
+          </dl>
+          <Button type="submit" disabled={!dirty || busy} data-testid="settings-profile-save">
+            {busy ? 'Saving…' : 'Save changes'}
+          </Button>
+          {' '}
+          <a href="/web/logout" class="muted" style="margin-left:0.5rem;">Log out</a>
+        </div>
+      </form>
+    </Card>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════
+// Security (change password)
+// ════════════════════════════════════════════════════════════════
+
+function SecuritySection() {
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: Event) {
+    e.preventDefault();
+    setError(null);
+    if (next !== confirm) { setError('New passwords do not match'); return; }
+    if (next.length < 8) { setError('Password must be at least 8 characters'); return; }
+    setBusy(true);
+    try {
+      await changePassword({ current_password: current, new_password: next });
+      setCurrent(''); setNext(''); setConfirm('');
+      showToast('Password changed. Other sessions have been signed out.', 'success');
+    } catch (err) {
+      setError(errorMessage(err, 'Failed to change password'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card class="section" data-testid="settings-security">
+      <div class="section__head"><h2>Password</h2></div>
+      {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
+      <form onSubmit={submit} class="stack">
+        <Field label="Current password">
+          <Input type="password" value={current} onInput={(e) => setCurrent((e.target as HTMLInputElement).value)} data-testid="settings-password-current" />
+        </Field>
+        <Field label="New password" hint="At least 8 characters">
+          <Input type="password" value={next} onInput={(e) => setNext((e.target as HTMLInputElement).value)} data-testid="settings-password-new" />
+        </Field>
+        <Field label="Confirm new password">
+          <Input type="password" value={confirm} onInput={(e) => setConfirm((e.target as HTMLInputElement).value)} data-testid="settings-password-confirm" />
+        </Field>
+        <div>
+          <Button type="submit" disabled={busy || !current || !next} data-testid="settings-password-save">
+            {busy ? 'Saving…' : 'Change password'}
+          </Button>
+        </div>
+      </form>
+    </Card>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════
+// Connected AI assistants (OAuth clients)
+// ════════════════════════════════════════════════════════════════
+
+function ConnectionsSection() {
+  const [connections, setConnections] = useState<Connection[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [revoking, setRevoking] = useState<Connection | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  function load() {
+    setLoading(true);
+    setError(null);
+    listConnections()
+      .then(({ data }) => setConnections(data))
+      .catch((err) => setError(errorMessage(err, 'Failed to load connections')))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(load, []);
+
+  async function confirmRevoke() {
+    if (!revoking) return;
+    setBusy(true);
+    try {
+      await revokeConnection(revoking.client_id);
+      showToast('Connection revoked', 'success');
+      setRevoking(null);
+      load();
+    } catch (err) {
+      showToast(errorMessage(err, 'Failed to revoke connection'), 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card class="section" data-testid="settings-connections">
+      <div class="section__head"><h2>Connected AI assistants</h2></div>
+      <p class="muted">Apps and AI assistants you've connected via OAuth. Revoking a connection immediately cuts off its access.</p>
+      {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
+      {loading ? (
+        <Spinner center />
+      ) : !connections || connections.length === 0 ? (
+        <EmptyState title="No connected assistants" description="Connect an AI assistant to Mob to see it here." />
+      ) : (
+        <div class="list">
+          {connections.map((c) => (
+            <div key={c.client_id} class="sub-row" data-testid="connection-row">
+              <div>
+                <strong>{c.client_id}</strong>
+                <div class="muted" style="font-size:0.85rem;">
+                  {c.last_used_at ? `Last used ${formatDate(c.last_used_at)}` : 'Never used'}
+                  {c.token_count > 1 ? ` · ${c.token_count} tokens` : ''}
+                </div>
+              </div>
+              <Button variant="danger" size="sm" data-testid="connection-revoke" onClick={() => setRevoking(c)}>Revoke</Button>
+            </div>
+          ))}
+        </div>
+      )}
+      <ConfirmDialog
+        open={revoking !== null}
+        title="Revoke connection?"
+        message={<>This will immediately disconnect <strong>{revoking?.client_id}</strong>. It will need to be re-authorized to access your data again.</>}
+        confirmLabel="Revoke"
+        danger
+        busy={busy}
+        onConfirm={confirmRevoke}
+        onCancel={() => setRevoking(null)}
+      />
+    </Card>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════
+// Active web sessions
+// ════════════════════════════════════════════════════════════════
+
+function SessionsSection() {
+  const [sessions, setSessions] = useState<WebSession[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [revokingAll, setRevokingAll] = useState(false);
+
+  function load() {
+    setLoading(true);
+    setError(null);
+    listSessions()
+      .then(({ data }) => setSessions(data))
+      .catch((err) => setError(errorMessage(err, 'Failed to load sessions')))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(load, []);
+
+  async function revoke(s: WebSession) {
+    setBusyId(s.id);
+    try {
+      await revokeSession(s.id);
+      showToast('Session revoked', 'success');
+      load();
+    } catch (err) {
+      showToast(errorMessage(err, 'Failed to revoke session'), 'error');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function revokeOthers() {
+    setRevokingAll(true);
+    try {
+      const { data } = await revokeAllSessions();
+      showToast(data && data.revoked > 0 ? `Signed out ${data.revoked} other session${data.revoked > 1 ? 's' : ''}` : 'No other sessions to sign out', 'success');
+      load();
+    } catch (err) {
+      showToast(errorMessage(err, 'Failed to sign out other sessions'), 'error');
+    } finally {
+      setRevokingAll(false);
+    }
+  }
+
+  const hasOthers = (sessions ?? []).some((s) => !s.current);
+
+  return (
+    <Card class="section" data-testid="settings-sessions">
+      <div class="section__head"><h2>Active sessions</h2></div>
+      <p class="muted">Browsers and devices signed in to your account.</p>
+      {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
+      {loading ? (
+        <Spinner center />
+      ) : !sessions || sessions.length === 0 ? (
+        <EmptyState title="No active sessions" description="" />
+      ) : (
+        <>
+          <div class="list">
+            {sessions.map((s) => (
+              <div key={s.id} class="sub-row" data-testid="session-row">
+                <div>
+                  <strong>{s.user_agent ? shortenUa(s.user_agent) : 'Unknown device'}</strong>
+                  {s.current && <> <Badge tone="success">this device</Badge></>}
+                  <div class="muted" style="font-size:0.85rem;">
+                    {s.ip ? `${s.ip} · ` : ''}Last active {formatDate(s.last_seen_at)}
+                  </div>
+                </div>
+                {!s.current && (
+                  <Button variant="danger" size="sm" data-testid="session-revoke" disabled={busyId === s.id} onClick={() => revoke(s)}>
+                    {busyId === s.id ? 'Revoking…' : 'Revoke'}
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+          {hasOthers && (
+            <div style="margin-top:1rem;">
+              <Button variant="secondary" size="sm" disabled={revokingAll} data-testid="sessions-revoke-all" onClick={revokeOthers}>
+                {revokingAll ? 'Signing out…' : 'Log out everywhere else'}
+              </Button>
+            </div>
+          )}
+        </>
+      )}
+    </Card>
+  );
+}
+
+/** Best-effort friendly label from a raw User-Agent string. */
+function shortenUa(ua: string): string {
+  const browser = /Firefox\/[\d.]+/.test(ua) ? 'Firefox'
+    : /Edg\//.test(ua) ? 'Edge'
+    : /Chrome\//.test(ua) ? 'Chrome'
+    : /Safari\//.test(ua) ? 'Safari'
+    : null;
+  const os = /Windows/.test(ua) ? 'Windows'
+    : /Macintosh|Mac OS/.test(ua) ? 'macOS'
+    : /Android/.test(ua) ? 'Android'
+    : /iPhone|iPad|iOS/.test(ua) ? 'iOS'
+    : /Linux/.test(ua) ? 'Linux'
+    : null;
+  if (browser && os) return `${browser} on ${os}`;
+  return browser || os || ua.slice(0, 40);
+}
+
+// ════════════════════════════════════════════════════════════════
+// Danger zone (hard account deletion)
+// ════════════════════════════════════════════════════════════════
+
+function DangerZoneSection() {
+  const me = user.value;
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState('');
+  const [confirmEmail, setConfirmEmail] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (!me) return null;
+
+  async function confirmDelete() {
+    if (!me) return;
+    setError(null);
+    setBusy(true);
+    try {
+      await deleteAccount({ password, confirm_email: confirmEmail });
+      // Account and session are gone — send the user to the login page.
+      window.location.href = '/web/login';
+    } catch (err) {
+      setError(errorMessage(err, 'Failed to delete account'));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card class="section" data-testid="settings-danger">
+      <div class="section__head"><h2>Danger zone</h2></div>
+      <p class="muted">
+        Permanently delete your account and all associated data — contacts, notes, activities,
+        reminders and everything else. This <strong>cannot be undone</strong>.
+      </p>
+      <Button variant="danger" data-testid="account-delete-open" onClick={() => { setOpen(true); setError(null); setPassword(''); setConfirmEmail(''); }}>
+        Delete my account
+      </Button>
+
+      <Modal
+        open={open}
+        title="Delete your account?"
+        onClose={() => !busy && setOpen(false)}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setOpen(false)} disabled={busy} data-testid="account-delete-cancel">Cancel</Button>
+            <Button
+              variant="danger"
+              onClick={confirmDelete}
+              disabled={busy || password.length === 0 || confirmEmail.trim().toLowerCase() !== me.email.toLowerCase()}
+              data-testid="account-delete-confirm"
+            >
+              {busy ? 'Deleting…' : 'Permanently delete'}
+            </Button>
+          </>
+        }
+      >
+        <div class="stack">
+          {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
+          <p style="margin:0;">This is permanent. All your data will be erased immediately and cannot be recovered.</p>
+          <Field label={`Type your email (${me.email}) to confirm`}>
+            <Input value={confirmEmail} onInput={(e) => setConfirmEmail((e.target as HTMLInputElement).value)} data-testid="account-delete-email" />
+          </Field>
+          <Field label="Enter your password">
+            <Input type="password" value={password} onInput={(e) => setPassword((e.target as HTMLInputElement).value)} data-testid="account-delete-password" />
+          </Field>
+        </div>
+      </Modal>
+    </Card>
   );
 }
 

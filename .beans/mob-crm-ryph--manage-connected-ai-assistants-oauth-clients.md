@@ -1,11 +1,11 @@
 ---
 # mob-crm-ryph
 title: Manage connected AI assistants (OAuth clients)
-status: todo
+status: completed
 type: feature
 priority: normal
 created_at: 2026-07-12T23:50:27Z
-updated_at: 2026-07-12T23:50:49Z
+updated_at: 2026-07-13T00:38:51Z
 parent: mob-crm-rqef
 ---
 
@@ -21,7 +21,7 @@ Users connect AI assistants via OAuth PKCE, but there's no way to see or revoke 
 - `src/auth/oauth.ts` (list/revoke-by-user helpers); account api router; `web/src/pages/Settings.tsx` section + api module.
 
 ## Checklist
-- [ ] OAuthService: listConnectionsForUser + revoke by id/client (user-scoped)
-- [ ] GET/DELETE /web/api/account/connections routes
-- [ ] Settings 'Connected AI assistants' UI + revoke
-- [ ] Tests: list only own tokens, revoke invalidates access, cross-tenant denied
+- [x] OAuthService: listConnectionsForUser + revoke by id/client (user-scoped)
+- [x] GET/DELETE /web/api/account/connections routes
+- [x] Settings 'Connected AI assistants' UI + revoke
+- [x] Tests: list only own tokens, revoke invalidates access, cross-tenant denied

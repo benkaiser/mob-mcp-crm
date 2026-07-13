@@ -18,6 +18,7 @@ import { generateId } from '../utils.js';
 import { ReminderService } from '../services/reminders.js';
 import { ForgetfulTemplate } from '../db/forgetful-template.js';
 import { UserSettingsService } from '../services/settings.js';
+import { EmailService, createEmailServiceFromEnv, renderActionEmail } from '../services/email.js';
 import { PushNotificationService } from '../services/push-notifications.js';
 import { NotificationService } from '../services/notifications.js';
 import { SessionService } from '../services/sessions.js';
@@ -131,6 +132,8 @@ export function createServer(config: ServerConfig): {
   // Public REST API: token auth + webhooks (plan-gated in hosted mode).
   const tokenService = new ApiTokenService(db);
   const webhookService = new WebhookService(db);
+  const settingsService = new UserSettingsService(db);
+  const emailService = createEmailServiceFromEnv();
   const forgetfulWebSessions = new Map<string, { userId: string; userName: string; email: string }>();
   const cookieSecure = config.baseUrl.startsWith('https://');
 
@@ -199,6 +202,23 @@ export function createServer(config: ServerConfig): {
     next();
   }
 
+  /** Send an email-verification link to a user (best-effort; logs on failure). */
+  async function sendVerificationEmail(user: { name: string; email: string }, token: string): Promise<void> {
+    const url = `${config.baseUrl}/auth/verify?token=${encodeURIComponent(token)}`;
+    const { text, html } = renderActionEmail({
+      title: 'Verify your email',
+      intro: `Hi ${user.name}, welcome to Mob! Please confirm your email address to finish setting up your account.`,
+      buttonLabel: 'Verify email',
+      url,
+      outro: "If you didn't create a Mob account, you can safely ignore this email.",
+    });
+    try {
+      await emailService.sendMail({ to: user.email, subject: 'Verify your Mob email', text, html });
+    } catch (err) {
+      console.error('Failed to send verification email:', err);
+    }
+  }
+
   // ─── Homepage ──────────────────────────────────────────────
   app.get('/', (_req, res) => {
     res.render('homepage', { serverUrl, forgetful: config.forgetful });
@@ -253,6 +273,7 @@ export function createServer(config: ServerConfig): {
 
       try {
         const user = await accountService.createAccount({ name, email, password, timezone, plan: config.hosted ? 'free' : 'unlimited' });
+        await sendVerificationEmail(user, accountService.createEmailVerificationToken(user.id));
 
         // If we're in an OAuth flow, issue code and redirect
         if (isOAuthRegistration) {
@@ -291,6 +312,7 @@ export function createServer(config: ServerConfig): {
         return;
       }
       const user = await accountService.createAccount({ name, email, password, plan: config.hosted ? 'free' : 'unlimited' });
+      await sendVerificationEmail(user, accountService.createEmailVerificationToken(user.id));
       res.status(201).json(user);
     } catch (err: any) {
       console.error('Registration error:', err);
@@ -310,6 +332,98 @@ export function createServer(config: ServerConfig): {
       return;
     }
     res.render('register', { registerUrl: _req.originalUrl, loginUrl: getLoginUrlFromRegister(_req.originalUrl), error: undefined, success: undefined });
+  });
+
+  // ─── Password Reset (forgot password) ─────────────────────
+
+  // Forgot-password page (GET)
+  app.get('/auth/forgot', (_req, res) => {
+    if (config.forgetful) { res.redirect('/'); return; }
+    res.render('forgot', { error: undefined, success: undefined });
+  });
+
+  // Request a reset link (POST). Always responds generically to avoid
+  // account enumeration, regardless of whether the email exists.
+  app.post('/auth/forgot', async (req, res) => {
+    if (config.forgetful) { res.redirect('/'); return; }
+    const email = typeof req.body.email === 'string' ? req.body.email : '';
+    const generic = 'If an account exists for that email, a reset link is on its way.';
+    if (!email) {
+      res.status(400).render('forgot', { error: 'Please enter your email address.', success: undefined });
+      return;
+    }
+    try {
+      const result = accountService.createPasswordResetToken(email);
+      if (result) {
+        const url = `${config.baseUrl}/auth/reset?token=${encodeURIComponent(result.token)}`;
+        const { text, html } = renderActionEmail({
+          title: 'Reset your password',
+          intro: `Hi ${result.user.name}, we received a request to reset your Mob password. This link expires in 1 hour.`,
+          buttonLabel: 'Reset password',
+          url,
+          outro: "If you didn't request this, you can safely ignore this email — your password won't change.",
+        });
+        await emailService.sendMail({ to: result.user.email, subject: 'Reset your Mob password', text, html });
+      }
+    } catch (err) {
+      console.error('Password reset request error:', err);
+    }
+    res.render('forgot', { error: undefined, success: generic });
+  });
+
+  // Reset form (GET) — token carried in the query string.
+  app.get('/auth/reset', (req, res) => {
+    if (config.forgetful) { res.redirect('/'); return; }
+    const token = typeof req.query.token === 'string' ? req.query.token : '';
+    if (!token) {
+      res.status(400).render('reset', { token: '', error: 'Missing or invalid reset link.', success: undefined });
+      return;
+    }
+    res.render('reset', { token, error: undefined, success: undefined });
+  });
+
+  // Set a new password (POST).
+  app.post('/auth/reset', async (req, res) => {
+    if (config.forgetful) { res.redirect('/'); return; }
+    const token = typeof req.body.token === 'string' ? req.body.token : '';
+    const password = typeof req.body.password === 'string' ? req.body.password : '';
+    const confirm = typeof req.body.confirm === 'string' ? req.body.confirm : '';
+
+    if (!token) {
+      res.status(400).render('reset', { token: '', error: 'Missing or invalid reset link.', success: undefined });
+      return;
+    }
+    if (!password || password !== confirm) {
+      res.status(400).render('reset', { token, error: 'Passwords are required and must match.', success: undefined });
+      return;
+    }
+    try {
+      const userId = await accountService.resetPassword(token, password);
+      // Security: revoke all existing sessions after a password reset.
+      sessionService.destroyAllForUser(userId);
+      res.render('reset', { token: '', error: undefined, success: 'Your password has been reset. You can now sign in.' });
+    } catch (err: any) {
+      const message = err?.code === 'weak_password' || err?.code === 'invalid_token'
+        ? err.message
+        : 'Something went wrong. Please request a new reset link.';
+      res.status(400).render('reset', { token, error: message, success: undefined });
+    }
+  });
+
+  // ─── Email Verification ───────────────────────────────────
+  app.get('/auth/verify', (req, res) => {
+    if (config.forgetful) { res.redirect('/'); return; }
+    const token = typeof req.query.token === 'string' ? req.query.token : '';
+    if (!token) {
+      res.status(400).render('verify', { error: 'Missing or invalid verification link.', success: undefined });
+      return;
+    }
+    try {
+      accountService.verifyEmailToken(token);
+      res.render('verify', { error: undefined, success: 'Your email has been verified. Thanks!' });
+    } catch (err: any) {
+      res.status(400).render('verify', { error: err?.message ?? 'This verification link is invalid or has expired.', success: undefined });
+    }
   });
 
   // ─── OAuth 2.0 PKCE Endpoints ─────────────────────────────
@@ -609,6 +723,13 @@ export function createServer(config: ServerConfig): {
     getWebSession,
     parseCookie,
     cookieSecure,
+    accountService,
+    sessionService,
+    oauthService,
+    settingsService,
+    emailService,
+    baseUrl: config.baseUrl,
+    forgetful: config.forgetful,
   }));
 
   // ─── Public REST API (/api/v1) — API-token auth, plan-gated ─────
@@ -641,7 +762,6 @@ export function createServer(config: ServerConfig): {
 
   // ─── Push Notification Services ─────────────────────────────
   const pushService = new PushNotificationService(db);
-  const settingsService = new UserSettingsService(db);
 
   // Store base URL in server_config for MCP tools to reference
   db.prepare("INSERT OR REPLACE INTO server_config (key, value) VALUES ('base_url', ?)").run(serverUrl);
@@ -947,6 +1067,7 @@ export function createServer(config: ServerConfig): {
   const cleanupInterval = setInterval(() => {
     oauthService.cleanup();
     accountService.cleanupAutoLoginTokens();
+    accountService.cleanupAccountTokens();
     if (!config.forgetful) {
       sessionService.cleanupExpired();
     }

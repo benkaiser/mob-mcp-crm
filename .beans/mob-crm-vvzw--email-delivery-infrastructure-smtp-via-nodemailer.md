@@ -1,11 +1,11 @@
 ---
 # mob-crm-vvzw
 title: Email delivery infrastructure (SMTP via nodemailer)
-status: todo
+status: completed
 type: feature
 priority: high
 created_at: 2026-07-12T23:49:19Z
-updated_at: 2026-07-12T23:50:49Z
+updated_at: 2026-07-13T00:38:51Z
 parent: mob-crm-rqef
 blocking:
     - mob-crm-rbdk
@@ -26,9 +26,9 @@ There is currently no way for Mob to send email. This is a hard prerequisite for
 - Unit test with a nodemailer mock/stub transport (`jsonTransport` or a stub) verifying subject/to/body composition and that unconfigured SMTP no-ops safely.
 
 ## Checklist
-- [ ] Add nodemailer dependency
-- [ ] EmailService with SMTP transport + config
-- [ ] Safe no-op when SMTP unconfigured
-- [ ] Transactional email template helper
-- [ ] Config/env wiring + docs (README/AGENTS or FEATURES)
-- [ ] Unit tests with mock transport
+- [x] Add nodemailer dependency
+- [x] EmailService with SMTP transport + config
+- [x] Safe no-op when SMTP unconfigured
+- [x] Transactional email template helper
+- [x] Config/env wiring + docs (README/AGENTS or FEATURES)
+- [x] Unit tests with mock transport

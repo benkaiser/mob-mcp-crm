@@ -47,6 +47,9 @@ export interface Me {
   id: string;
   name: string;
   email: string;
+  email_verified: boolean;
+  pending_email: string | null;
+  timezone: string;
   plan: string;
   hosted: boolean;
   usage: MeUsage;

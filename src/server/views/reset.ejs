@@ -1,0 +1,19 @@
+<%
+const escapedToken = String(token || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+const content = `
+  ${ error ? '<div class="error">' + error + '</div>' : '' }
+  ${ success ? '<div class="success">' + success + '</div>' : '' }
+  ${ success ? '<p class="alt-link"><a href="/web/login">Go to sign in</a></p>' : (token ? `
+  <p style="color:#666;margin-bottom:1rem;">Choose a new password (at least 8 characters).</p>
+  <form method="POST" action="/auth/reset">
+    <input type="hidden" name="token" value="${escapedToken}">
+    <label for="password">New password</label>
+    <input type="password" id="password" name="password" required autofocus minlength="8">
+    <label for="confirm">Confirm new password</label>
+    <input type="password" id="confirm" name="confirm" required minlength="8">
+    <button type="submit" style="width:100%;">Set new password</button>
+  </form>
+  ` : '<p class="alt-link"><a href="/auth/forgot">Request a new reset link</a></p>') }
+`;
+%>
+<%- include('_auth-layout', { title: 'Reset password — Mob CRM', subtitle: 'Set a new password', content }) %>

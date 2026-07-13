@@ -31,6 +31,12 @@ import { createExportRouter } from './export.js';
 import { createImportRouter } from './import.js';
 import { createApiTokensRouter } from './api-tokens.js';
 import { createWebhooksRouter } from './webhooks.js';
+import { createAccountRouter } from './account.js';
+import type { AccountService } from '../../auth/accounts.js';
+import type { OAuthService } from '../../auth/oauth.js';
+import type { SessionService } from '../../services/sessions.js';
+import type { UserSettingsService } from '../../services/settings.js';
+import type { EmailService } from '../../services/email.js';
 
 export interface WebApiDeps {
   db: Database.Database;
@@ -41,6 +47,14 @@ export interface WebApiDeps {
   parseCookie: (cookieHeader: string, name: string) => string | null;
   /** Whether cookies should be marked Secure (https). */
   cookieSecure: boolean;
+  /** Services for the account self-service router. */
+  accountService: AccountService;
+  sessionService: SessionService;
+  oauthService: OAuthService;
+  settingsService: UserSettingsService;
+  emailService: EmailService;
+  baseUrl: string;
+  forgetful: boolean;
 }
 
 /**
@@ -51,7 +65,10 @@ export interface WebApiDeps {
  * powers the web UI, which all plans get in full.
  */
 export function createWebApiRouter(deps: WebApiDeps): Router {
-  const { db, planService, getWebSession, parseCookie, cookieSecure } = deps;
+  const {
+    db, planService, getWebSession, parseCookie, cookieSecure,
+    accountService, sessionService, oauthService, settingsService, emailService, baseUrl, forgetful,
+  } = deps;
   const router = Router();
 
   // JSON body parsing scoped to the API. The Monica import route parses its own
@@ -84,10 +101,17 @@ export function createWebApiRouter(deps: WebApiDeps): Router {
     const session = (req as unknown as { webUser: { userId: string; userName: string; email: string } }).webUser;
     const usage = planService.getUsage(userId);
     const entitlements = planService.getEntitlements(userId);
+    // Forgetful-mode users live in an ephemeral cloned DB, not the main users
+    // table, so account/settings lookups don't apply — use sensible defaults.
+    const verification = forgetful ? { email_verified: true, pending_email: null } : accountService.getVerification(userId);
+    const timezone = forgetful ? 'UTC' : settingsService.get(userId).timezone;
     sendData(res, {
       id: session.userId,
       name: session.userName,
       email: session.email,
+      email_verified: verification.email_verified,
+      pending_email: verification.pending_email,
+      timezone,
       plan: usage.plan,
       hosted: planService.isHosted(),
       usage: { contacts: usage.contacts, contact_cap: usage.contactCap },
@@ -125,6 +149,10 @@ export function createWebApiRouter(deps: WebApiDeps): Router {
   router.use('/import', createImportRouter(db, planService));
   router.use('/tokens', createApiTokensRouter(db, planService));
   router.use('/webhooks', createWebhooksRouter(db, planService));
+  router.use('/account', createAccountRouter({
+    accountService, sessionService, oauthService, settingsService, emailService,
+    baseUrl, cookieSecure, forgetful,
+  }));
 
   // Central error handler (must be last).
   router.use(apiErrorHandler);

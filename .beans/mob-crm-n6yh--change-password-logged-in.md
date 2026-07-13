@@ -1,11 +1,11 @@
 ---
 # mob-crm-n6yh
 title: Change password (logged in)
-status: todo
+status: completed
 type: feature
 priority: high
 created_at: 2026-07-12T23:49:48Z
-updated_at: 2026-07-12T23:50:49Z
+updated_at: 2026-07-13T00:38:51Z
 parent: mob-crm-rqef
 ---
 
@@ -21,7 +21,7 @@ Logged-in users cannot change their password from Settings. Add a change-passwor
 - `src/server/web-api/` new `account.ts` router (mounted at `/account`) or extend existing; `AccountService`; `web/src/pages/Settings.tsx`; `web/src/api/settings.ts` (or new account api module).
 
 ## Checklist
-- [ ] AccountService.changePassword (verify current, set new)
-- [ ] POST /web/api/account/password route (CSRF + session)
-- [ ] Settings 'Password' section UI + client call
-- [ ] Tests: success, wrong current password, too-short new password
+- [x] AccountService.changePassword (verify current, set new)
+- [x] POST /web/api/account/password route (CSRF + session)
+- [x] Settings 'Password' section UI + client call
+- [x] Tests: success, wrong current password, too-short new password

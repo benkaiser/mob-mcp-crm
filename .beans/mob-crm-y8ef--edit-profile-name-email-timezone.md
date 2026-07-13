@@ -1,11 +1,11 @@
 ---
 # mob-crm-y8ef
 title: Edit profile (name, email, timezone)
-status: todo
+status: completed
 type: feature
 priority: normal
 created_at: 2026-07-12T23:49:48Z
-updated_at: 2026-07-12T23:50:49Z
+updated_at: 2026-07-13T00:38:51Z
 parent: mob-crm-rqef
 ---
 
@@ -22,8 +22,8 @@ The Settings profile section is read-only (name/email/plan). Let users edit thei
 - `AccountService.updateProfile`; `UserSettingsService` for timezone; `web/src/pages/Settings.tsx` (editable form); account api module.
 
 ## Checklist
-- [ ] AccountService.updateProfile (name/timezone; email via verification)
-- [ ] PATCH /web/api/account/profile route
-- [ ] Settings editable profile form + client call
-- [ ] Refresh session cache (name/email) after update
-- [ ] Tests: name/timezone update, duplicate email rejected
+- [x] AccountService.updateProfile (name/timezone; email via verification)
+- [x] PATCH /web/api/account/profile route
+- [x] Settings editable profile form + client call
+- [x] Refresh session cache (name/email) after update
+- [x] Tests: name/timezone update, duplicate email rejected

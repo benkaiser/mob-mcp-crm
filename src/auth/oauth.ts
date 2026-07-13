@@ -197,6 +197,47 @@ export class OAuthService {
   }
 
   /**
+   * List a user's connected clients (e.g. AI assistants), grouped by client_id.
+   * Combines live token data with the authorization log for first-authorized
+   * and last-used timestamps. Only active (unexpired) tokens are counted.
+   */
+  listConnectionsForUser(userId: string): Array<{
+    clientId: string;
+    tokenCount: number;
+    authorizedAt: string | null;
+    lastUsedAt: string | null;
+    expiresAt: number;
+  }> {
+    const now = Date.now();
+    const rows = this.db.prepare(`
+      SELECT t.client_id AS clientId,
+             COUNT(*) AS tokenCount,
+             MAX(t.expires_at) AS expiresAt,
+             MIN(l.authorized_at) AS authorizedAt,
+             MAX(l.last_used_at) AS lastUsedAt
+      FROM oauth_tokens t
+      LEFT JOIN authorization_log l
+        ON l.user_id = t.user_id AND l.client_id = t.client_id
+      WHERE t.user_id = ? AND t.expires_at > ?
+      GROUP BY t.client_id
+      ORDER BY lastUsedAt DESC
+    `).all(userId, now) as Array<{
+      clientId: string; tokenCount: number; expiresAt: number;
+      authorizedAt: string | null; lastUsedAt: string | null;
+    }>;
+    return rows;
+  }
+
+  /**
+   * Revoke all of a user's access tokens for a given client (user-scoped, so a
+   * user can only ever revoke their own connections). Returns the count removed.
+   */
+  revokeConnection(userId: string, clientId: string): number {
+    return this.db.prepare('DELETE FROM oauth_tokens WHERE user_id = ? AND client_id = ?')
+      .run(userId, clientId).changes;
+  }
+
+  /**
    * Log an OAuth authorization event.
    */
   private logAuthorization(userId: string, clientId: string, ipAddress?: string, userAgent?: string): void {

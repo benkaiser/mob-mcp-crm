@@ -20,17 +20,63 @@ async function gotoSettings(page: import('@playwright/test').Page) {
   await expect(page.getByTestId('settings-profile')).toBeVisible();
 }
 
-test('profile section shows account name, email and plan', async ({ page, account }) => {
+test('profile section shows editable name, email and plan; name save persists', async ({ page, account }) => {
   await gotoSettings(page);
 
   const profile = page.getByTestId('settings-profile');
-  await expect(profile.getByTestId('settings-profile-name')).toContainText(account.name);
-  await expect(profile.getByTestId('settings-profile-email')).toContainText(account.email);
-  // Self-hosted accounts default to the unlimited plan; just assert it renders a plan + self-hosted.
+  await expect(profile.getByTestId('settings-profile-name-input')).toHaveValue(account.name);
+  await expect(profile.getByTestId('settings-profile-email-input')).toHaveValue(account.email);
   await expect(profile.getByTestId('settings-profile-plan')).toContainText('self-hosted');
+
+  // Edit the name and save → toast + persisted value after reload.
+  const nameInput = profile.getByTestId('settings-profile-name-input');
+  await nameInput.fill('Renamed User');
+  await profile.getByTestId('settings-profile-save').click();
+  await expect(page.getByTestId('toast')).toBeVisible();
+  await expect(profile.getByTestId('settings-profile-name-input')).toHaveValue('Renamed User');
 
   // The plan & usage section also renders.
   await expect(page.getByTestId('settings-plan')).toBeVisible();
+});
+
+test('password section rejects a wrong current password', async ({ page, account }) => {
+  void account;
+  await gotoSettings(page);
+
+  const section = page.getByTestId('settings-security');
+  await expect(section).toBeVisible();
+  await section.getByTestId('settings-password-current').fill('definitely-wrong');
+  await section.getByTestId('settings-password-new').fill('newpassword456');
+  await section.getByTestId('settings-password-confirm').fill('newpassword456');
+  await section.getByTestId('settings-password-save').click();
+  // Inline error banner surfaces the failure.
+  await expect(section.getByTestId('error-banner')).toBeVisible();
+});
+
+test('sessions section lists the current device', async ({ page, account }) => {
+  void account;
+  await gotoSettings(page);
+
+  const section = page.getByTestId('settings-sessions');
+  await expect(section).toBeVisible();
+  await expect(section.getByTestId('session-row').first()).toContainText('this device');
+});
+
+test('danger zone requires typed email + password to enable deletion', async ({ page, account }) => {
+  await gotoSettings(page);
+
+  const section = page.getByTestId('settings-danger');
+  await expect(section).toBeVisible();
+  await section.getByTestId('account-delete-open').click();
+  await expect(page.getByTestId('modal')).toBeVisible();
+
+  // Confirm button stays disabled until the email matches AND a password is present.
+  const confirm = page.getByTestId('account-delete-confirm');
+  await expect(confirm).toBeDisabled();
+  await page.getByTestId('account-delete-email').fill(account.email);
+  await expect(confirm).toBeDisabled();
+  await page.getByTestId('account-delete-password').fill('some-password');
+  await expect(confirm).toBeEnabled();
 });
 
 test('API token: create → shown once → masked in list → revoke', async ({ page, account }) => {

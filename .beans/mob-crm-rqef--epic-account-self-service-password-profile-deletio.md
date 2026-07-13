@@ -1,11 +1,11 @@
 ---
 # mob-crm-rqef
 title: 'Epic: Account self-service (password, profile, deletion, sessions)'
-status: todo
+status: completed
 type: epic
 priority: high
 created_at: 2026-07-12T23:48:58Z
-updated_at: 2026-07-12T23:49:06Z
+updated_at: 2026-07-13T00:39:04Z
 parent: mob-crm-ehb6
 ---
 

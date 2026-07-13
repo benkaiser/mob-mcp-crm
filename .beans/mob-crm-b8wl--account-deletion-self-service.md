@@ -1,11 +1,11 @@
 ---
 # mob-crm-b8wl
 title: Account deletion (self-service)
-status: todo
+status: completed
 type: feature
 priority: high
 created_at: 2026-07-12T23:50:27Z
-updated_at: 2026-07-12T23:50:49Z
+updated_at: 2026-07-13T00:38:51Z
 parent: mob-crm-rqef
 ---
 
@@ -24,8 +24,8 @@ Users cannot delete their own account. Add a self-service deletion path (importa
 - `AccountService.deleteAccount`; account api router; `web/src/pages/Settings.tsx` Danger Zone; possibly a shared 'purge user data' helper.
 
 ## Checklist
-- [ ] AccountService.deleteAccount (transactional purge of all owned data + tokens/sessions)
-- [ ] DELETE /web/api/account route with password re-auth
-- [ ] Settings Danger Zone + confirm modal
-- [ ] Clear cookie + redirect after deletion
-- [ ] Tests: full data purge, wrong password rejected, cross-tenant isolation
+- [x] AccountService.deleteAccount (transactional purge of all owned data + tokens/sessions)
+- [x] DELETE /web/api/account route with password re-auth
+- [x] Settings Danger Zone + confirm modal
+- [x] Clear cookie + redirect after deletion
+- [x] Tests: full data purge, wrong password rejected, cross-tenant isolation

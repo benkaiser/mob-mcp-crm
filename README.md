@@ -113,6 +113,19 @@ The server will create and manage its SQLite database files in the specified dir
 
 For a hosted beta deployment, also set `MOB_HOSTED=true` and `MOB_BASE_URL` to the public HTTPS origin so cookies and OAuth metadata are generated correctly.
 
+#### Email (SMTP)
+
+Password reset and email verification send transactional email via SMTP (any provider, including self-hosted). Email is optional — if SMTP is not configured, these flows degrade gracefully (the server logs a warning and skips sending). Configure it with:
+
+```bash
+export SMTP_HOST=smtp.example.com        # enables email when set
+export SMTP_PORT=587                      # default 587
+export SMTP_SECURE=false                  # true for implicit TLS (port 465)
+export SMTP_USER=apikey                   # optional
+export SMTP_PASS=secret                   # optional
+export MAIL_FROM="Mob <no-reply@example.com>"
+```
+
 ### Hosted Beta Operations
 
 Hosted beta accounts are free, uncapped, and include all features. Before running a hosted beta instance:
@@ -121,7 +134,8 @@ Hosted beta accounts are free, uncapped, and include all features. Before runnin
 - Put the server behind TLS and ensure the public base URL is HTTPS so session and CSRF cookies are marked secure.
 - Back up the SQLite data directory regularly and verify restore procedures.
 - Keep outbound webhook egress restricted; Mob also blocks non-HTTPS, localhost, private, link-local, and reserved webhook targets in application code.
-- Password reset is not self-service during beta. Users should email [mobsupport@benkaiser.dev](mailto:mobsupport@benkaiser.dev) for account help, data deletion requests, or other support.
+- Configure SMTP (`SMTP_HOST`, `MAIL_FROM`, etc.) so password reset and email verification links can be delivered.
+- Users manage their own account from **Settings**: change password, edit profile (name/email/timezone), verify email, review connected AI assistants and active sessions, export their data, and delete their account. Direct other account help or data-deletion questions to [mobsupport@benkaiser.dev](mailto:mobsupport@benkaiser.dev).
 
 ### Project Structure
 

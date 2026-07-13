@@ -1,11 +1,11 @@
 ---
 # mob-crm-rbdk
 title: Password reset (forgot password) flow
-status: todo
+status: completed
 type: feature
 priority: high
 created_at: 2026-07-12T23:49:48Z
-updated_at: 2026-07-12T23:50:49Z
+updated_at: 2026-07-13T00:38:51Z
 parent: mob-crm-rqef
 ---
 
@@ -27,10 +27,10 @@ Users who forget their password have no recovery path today. Add a standard toke
 - Routes in `src/server/http-server.ts`; views `forgot.ejs`, `reset.ejs`; link from `login.ejs`/`web-login.ejs`.
 
 ## Checklist
-- [ ] Migration: password_reset_tokens (hashed, expiring, single-use)
-- [ ] AccountService reset token create/consume methods
-- [ ] /auth/forgot page + POST handler (generic response, rate-limited)
-- [ ] /auth/reset page + POST handler (validate + set new password)
-- [ ] Reset email template + send
-- [ ] 'Forgot password?' link on login pages
-- [ ] Integration tests (happy path, expired, reused, unknown email)
+- [x] Migration: password_reset_tokens (hashed, expiring, single-use)
+- [x] AccountService reset token create/consume methods
+- [x] /auth/forgot page + POST handler (generic response, rate-limited)
+- [x] /auth/reset page + POST handler (validate + set new password)
+- [x] Reset email template + send
+- [x] 'Forgot password?' link on login pages
+- [x] Integration tests (happy path, expired, reused, unknown email)
