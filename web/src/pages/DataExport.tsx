@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'preact/hooks';
 import { apiGet } from '../api/client';
 import type { CrmStatistics } from '../api/types';
-import { Card, Button, Spinner, ErrorBanner, Badge, showToast } from '../ui';
+import { Card, Button, Spinner, ErrorBanner, Badge } from '../ui';
 import { errorMessage } from '../lib/format';
+import { downloadExport } from '../lib/export';
 
 export function DataExport() {
   const [stats, setStats] = useState<CrmStatistics | null>(null);
@@ -22,23 +23,7 @@ export function DataExport() {
   async function download() {
     setDownloading(true);
     try {
-      // Fetch the full export and trigger a client-side blob download.
-      const res = await fetch('/web/api/export', { credentials: 'include' });
-      if (!res.ok) throw new Error(`Export failed (${res.status})`);
-      const json = await res.text();
-      const blob = new Blob([json], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      const date = new Date().toISOString().slice(0, 10);
-      a.download = `mob-crm-export-${date}.json`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      showToast('Export downloaded', 'success');
-    } catch (err) {
-      showToast(errorMessage(err, 'Export failed'), 'error');
+      await downloadExport();
     } finally {
       setDownloading(false);
     }

@@ -136,3 +136,18 @@ test('push notifications section renders gracefully without VAPID', async ({ pag
   const kv = section.locator('dl.kv');
   await expect(empty.or(kv).first()).toBeVisible();
 });
+
+test('export section is visible in Settings and downloads a JSON snapshot', async ({ page, account }) => {
+  void account;
+  await gotoSettings(page);
+
+  const section = page.getByTestId('settings-export');
+  await expect(section).toBeVisible();
+  await expect(section.getByRole('heading', { name: 'Export your data' })).toBeVisible();
+
+  // Clicking Download triggers a client-side blob download of the export JSON.
+  const downloadPromise = page.waitForEvent('download');
+  await section.getByTestId('settings-export-download').click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/^mob-crm-export-\d{4}-\d{2}-\d{2}\.json$/);
+});

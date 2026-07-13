@@ -3,6 +3,7 @@ import { Card, Badge, Button, Spinner, EmptyState, ErrorBanner, Modal, ConfirmDi
 import { user } from '../store/session';
 import { ApiError } from '../api/client';
 import { errorMessage, formatDate } from '../lib/format';
+import { downloadExport } from '../lib/export';
 import {
   pushSupported, vapidAvailable, permission, subscribed, subscriptionCount,
   pushBusy, pushError, initPush, subscribe as pushSubscribe, unsubscribe as pushUnsubscribe,
@@ -55,7 +56,34 @@ export function Settings() {
       <TokensSection enabled={ent.public_api} />
       <WebhooksSection enabled={ent.webhooks} />
       <PushSection />
+      <ExportSection />
     </div>
+  );
+}
+
+function ExportSection() {
+  const [downloading, setDownloading] = useState(false);
+
+  async function onDownload() {
+    setDownloading(true);
+    try {
+      await downloadExport();
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  return (
+    <Card class="section" data-testid="settings-export">
+      <div class="section__head"><h2>Export your data</h2></div>
+      <p class="muted">
+        Download a full JSON snapshot of all your CRM data — contacts, activities, notes,
+        reminders and everything else. This is your complete data, yours to keep.
+      </p>
+      <Button onClick={onDownload} disabled={downloading} data-testid="settings-export-download">
+        {downloading ? 'Preparing…' : 'Download JSON export'}
+      </Button>
+    </Card>
   );
 }
 

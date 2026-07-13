@@ -1,0 +1,36 @@
+---
+# mob-crm-rbdk
+title: Password reset (forgot password) flow
+status: todo
+type: feature
+priority: high
+created_at: 2026-07-12T23:49:48Z
+updated_at: 2026-07-12T23:50:49Z
+parent: mob-crm-rqef
+---
+
+Users who forget their password have no recovery path today. Add a standard token-based reset flow.
+
+## Flow
+1. `/auth/forgot` page (EJS, styled like login/register): user enters email.
+2. Server generates a single-use, expiring (e.g. 1h) reset token, stores a hash of it in a new `password_reset_tokens` table (token_hash, user_id, expires_at, used_at). Always respond with a generic success message regardless of whether the email exists (no account enumeration).
+3. Email the reset link via EmailService: `/auth/reset?token=...`.
+4. `/auth/reset` page: enter + confirm new password. Validate token (exists, unexpired, unused), update `password_hash` (bcrypt), mark token used, and optionally revoke existing web sessions.
+5. Rate-limit requests per email/IP.
+
+## Depends on
+- Email delivery infrastructure (SMTP).
+
+## Files
+- New migration for `password_reset_tokens`.
+- `AccountService`: `createPasswordResetToken(email)`, `resetPassword(token, newPassword)`.
+- Routes in `src/server/http-server.ts`; views `forgot.ejs`, `reset.ejs`; link from `login.ejs`/`web-login.ejs`.
+
+## Checklist
+- [ ] Migration: password_reset_tokens (hashed, expiring, single-use)
+- [ ] AccountService reset token create/consume methods
+- [ ] /auth/forgot page + POST handler (generic response, rate-limited)
+- [ ] /auth/reset page + POST handler (validate + set new password)
+- [ ] Reset email template + send
+- [ ] 'Forgot password?' link on login pages
+- [ ] Integration tests (happy path, expired, reused, unknown email)
