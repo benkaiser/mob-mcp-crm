@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'preact/hooks';
+import type { ComponentChildren } from 'preact';
 import { useLocation, Link } from 'wouter-preact';
 import { apiGet, apiPatch, apiDelete, apiPost, ApiError } from '../api/client';
 import {
@@ -42,6 +43,17 @@ const CONFIG: Record<string, ResourceConfig> = {
   debts: { field: 'reason', input: 'text' },
   tasks: { field: 'title', input: 'text', canComplete: true },
 };
+
+/** Resources that have a bespoke rich read layout (vs. the raw field dump). */
+const RICH_RESOURCES = new Set([
+  'activities',
+  'notes',
+  'life-events',
+  'reminders',
+  'gifts',
+  'debts',
+  'tasks',
+]);
 
 type Record_ = Record<string, unknown>;
 
@@ -89,18 +101,6 @@ function daysUntil(dateStr: string): number {
   return Math.round((target.getTime() - today.getTime()) / 86400000);
 }
 
-/** A friendly countdown label + tone for a reminder's due date. */
-function reminderCountdown(dateStr: string): { label: string; sub: string; tone: Tone } {
-  const d = daysUntil(dateStr);
-  if (d < 0) {
-    const n = Math.abs(d);
-    return { label: n === 1 ? 'Overdue by 1 day' : `Overdue by ${n} days`, sub: 'This reminder is past due', tone: 'danger' };
-  }
-  if (d === 0) return { label: 'Due today', sub: "Don't let this one slip", tone: 'success' };
-  if (d === 1) return { label: 'Due tomorrow', sub: 'Coming up next', tone: 'warning' };
-  return { label: `In ${d} days`, sub: 'On the horizon', tone: d <= 7 ? 'warning' : 'primary' };
-}
-
 /** Tone for a reminder/task status value. */
 function statusTone(status: unknown): Tone {
   switch (status) {
@@ -110,6 +110,71 @@ function statusTone(status: unknown): Tone {
     case 'dismissed': return 'default';
     default: return 'default';
   }
+}
+
+/** Human-friendly relative time (e.g. "3 days ago", "in 2 weeks") for a date. */
+function relativeTime(value: unknown): string | null {
+  if (typeof value !== 'string' || !value) return null;
+  const d = new Date(value.length <= 10 ? value + 'T00:00:00' : value);
+  if (Number.isNaN(d.getTime())) return null;
+  const diffMs = d.getTime() - Date.now();
+  const past = diffMs < 0;
+  const abs = Math.abs(diffMs);
+  const mins = Math.round(abs / 60000);
+  if (mins < 1) return 'just now';
+  const units: [number, string][] = [
+    [60, 'minute'],
+    [60, 'hour'],
+    [24, 'day'],
+    [7, 'week'],
+    [4.348, 'month'],
+    [12, 'year'],
+  ];
+  let val = mins;
+  let unit = 'minute';
+  for (const [size, name] of units) {
+    if (val < size) { unit = name; break; }
+    val = val / size;
+    unit = name;
+  }
+  const rounded = Math.max(1, Math.round(val));
+  const label = `${rounded} ${unit}${rounded === 1 ? '' : 's'}`;
+  return past ? `${label} ago` : `in ${label}`;
+}
+
+/** Format a currency amount (falls back to a plain number when currency is odd). */
+function formatMoney(amount: unknown, currency: unknown): string {
+  const num = typeof amount === 'number' ? amount : Number(amount);
+  if (!Number.isFinite(num)) return '—';
+  const code = typeof currency === 'string' && currency ? currency : 'USD';
+  try {
+    return new Intl.NumberFormat(undefined, { style: 'currency', currency: code }).format(num);
+  } catch {
+    return `${num.toFixed(2)} ${code}`;
+  }
+}
+
+/** Format a duration in minutes as a friendly string ("1h 30m"). */
+function formatDuration(minutes: unknown): string {
+  const num = typeof minutes === 'number' ? minutes : Number(minutes);
+  if (!Number.isFinite(num) || num <= 0) return '—';
+  const h = Math.floor(num / 60);
+  const m = Math.round(num % 60);
+  if (h && m) return `${h}h ${m}m`;
+  if (h) return `${h}h`;
+  return `${m}m`;
+}
+
+/** A friendly countdown label + tone for any due/target date. */
+function dateCountdown(dateStr: string): { label: string; sub: string; tone: Tone } {
+  const d = daysUntil(dateStr);
+  if (d < 0) {
+    const n = Math.abs(d);
+    return { label: n === 1 ? 'Overdue by 1 day' : `Overdue by ${n} days`, sub: 'This one is past due', tone: 'danger' };
+  }
+  if (d === 0) return { label: 'Due today', sub: "Don't let this one slip", tone: 'success' };
+  if (d === 1) return { label: 'Due tomorrow', sub: 'Coming up next', tone: 'warning' };
+  return { label: `In ${d} days`, sub: 'On the horizon', tone: d <= 7 ? 'warning' : 'primary' };
 }
 
 export function EntityDetail({
@@ -271,8 +336,8 @@ export function EntityDetail({
                 </Button>
               </div>
             </div>
-          ) : resource === 'reminders' ? (
-            <ReminderBody data={data} contactName={contactName} />
+          ) : RICH_RESOURCES.has(resource) ? (
+            <RichEntityBody resource={resource} data={data} contactName={contactName} />
           ) : (
             <dl class="entity-fields">
               {typeof data.contact_id === 'string' && data.contact_id && (
@@ -341,98 +406,382 @@ export function EntityDetail({
 }
 
 /**
- * Rich, reminder-specific read layout: a hero with the title, a status/frequency
- * badge row, a linked contact chip, a prominent due-date countdown, a grid of
- * key facts, an optional description, and a subtle metadata footer.
+ * Shared rich read layout used by every timeline entity. A resource-specific
+ * builder maps the raw record into this common shape: a gradient hero with an
+ * icon + title + badges, an optional highlight banner, a stat grid (the first
+ * slot reserved for the linked contact), an optional long-form body section,
+ * and a subtle metadata footer.
  */
-function ReminderBody({ data, contactName }: { data: Record_; contactName: string | null }) {
-  const title = typeof data.title === 'string' ? data.title : 'Reminder';
-  const reminderDate = typeof data.reminder_date === 'string' ? data.reminder_date : '';
-  const frequency = typeof data.frequency === 'string' ? data.frequency : 'one_time';
-  const status = data.status;
-  const description = typeof data.description === 'string' ? data.description : '';
-  const isAuto = Boolean(data.is_auto_generated);
+interface StatItem {
+  label: string;
+  value: ComponentChildren;
+  testid?: string;
+  href?: string;
+  cap?: boolean;
+}
+interface BadgeItem {
+  label: string;
+  tone: Tone;
+  testid?: string;
+}
+interface SectionItem {
+  label: string;
+  value: string;
+  testid?: string;
+}
+interface RichView {
+  icon: string;
+  title: string;
+  titleTestid?: string;
+  badges: BadgeItem[];
+  highlight?: { label: string; sub: string; tone: Tone };
+  stats: StatItem[];
+  sections: SectionItem[];
+}
+
+function RichEntityBody({
+  resource,
+  data,
+  contactName,
+}: {
+  resource: string;
+  data: Record_;
+  contactName: string | null;
+}) {
+  const builder = RICH_BUILDERS[resource];
+  const view = builder ? builder(data) : null;
+  if (!view) return null;
+
   const contactId = typeof data.contact_id === 'string' ? data.contact_id : '';
-  const countdown = reminderDate ? reminderCountdown(reminderDate) : null;
-  const recurring = frequency !== 'one_time';
 
   return (
-    <div class="reminder-detail" data-testid="reminder-detail">
-      <div class="reminder-detail__hero">
-        <span class="reminder-detail__icon" aria-hidden="true">🔔</span>
-        <div class="reminder-detail__heading">
-          <h2 class="reminder-detail__title" data-testid="entity-field-title">{title}</h2>
-          <div class="reminder-detail__badges">
-            <Badge tone={statusTone(status)}>{humanize(String(status ?? 'unknown'))}</Badge>
-            <Badge tone={recurring ? 'primary' : 'default'}>
-              {recurring ? `Repeats ${frequency}` : 'One-time'}
-            </Badge>
-            {isAuto && <Badge tone="default">Auto-generated</Badge>}
-          </div>
+    <div class="detail" data-testid={`${resource}-detail`}>
+      <div class="detail__hero">
+        <span class="detail__icon" aria-hidden="true">{view.icon}</span>
+        <div class="detail__heading">
+          <h2 class="detail__title" data-testid={view.titleTestid ?? 'entity-field-title'}>{view.title}</h2>
+          {view.badges.length > 0 && (
+            <div class="detail__badges">
+              {view.badges.map((b, i) => (
+                <span key={i} data-testid={b.testid}>
+                  <Badge tone={b.tone}>{b.label}</Badge>
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
-      {countdown && (
+      {view.highlight && (
         <div
-          class={`reminder-detail__countdown reminder-detail__countdown--${countdown.tone}`}
-          data-testid="reminder-countdown"
+          class={`detail__banner detail__banner--${view.highlight.tone}`}
+          data-testid="detail-highlight"
         >
-          <div class="reminder-detail__countdown-label">{countdown.label}</div>
-          <div class="reminder-detail__countdown-sub">
-            {countdown.sub} · {formatNiceDate(reminderDate)}
-          </div>
+          <div class="detail__banner-label">{view.highlight.label}</div>
+          <div class="detail__banner-sub">{view.highlight.sub}</div>
         </div>
       )}
 
-      <div class="reminder-detail__grid">
+      <div class="detail__grid">
         {contactId && (
           <Link
             href={`/contacts/${contactId}`}
-            class="reminder-detail__stat reminder-detail__stat--contact"
+            class="detail__stat detail__stat--contact"
             data-testid="entity-field-contact-link"
           >
-            <span class="reminder-detail__stat-label">Contact</span>
-            <span class="reminder-detail__contact">
+            <span class="detail__stat-label">Contact</span>
+            <span class="detail__contact">
               <Avatar name={contactName ?? '?'} size="sm" />
-              <span class="reminder-detail__stat-value">{contactName ?? contactId}</span>
+              <span class="detail__stat-value">{contactName ?? contactId}</span>
             </span>
           </Link>
         )}
-        <div class="reminder-detail__stat">
-          <span class="reminder-detail__stat-label">Next on</span>
-          <span class="reminder-detail__stat-value" data-testid="entity-field-reminder_date">
-            {formatNiceDate(reminderDate)}
-          </span>
-        </div>
-        <div class="reminder-detail__stat">
-          <span class="reminder-detail__stat-label">Frequency</span>
-          <span class="reminder-detail__stat-value" data-testid="entity-field-frequency">
-            {humanize(frequency)}
-          </span>
-        </div>
-        <div class="reminder-detail__stat">
-          <span class="reminder-detail__stat-label">Status</span>
-          <span class="reminder-detail__stat-value reminder-detail__stat-value--cap" data-testid="entity-field-status">
-            {String(status ?? 'unknown')}
-          </span>
-        </div>
-      </div>
-
-      <div class="reminder-detail__section">
-        <span class="reminder-detail__stat-label">Description</span>
-        {description ? (
-          <p class="reminder-detail__description">{description}</p>
-        ) : (
-          <p class="reminder-detail__description muted">No description added.</p>
+        {view.stats.map((s, i) =>
+          s.href ? (
+            <a
+              key={i}
+              href={s.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="detail__stat detail__stat--contact"
+              data-testid={s.testid}
+            >
+              <span class="detail__stat-label">{s.label}</span>
+              <span class={`detail__stat-value${s.cap ? ' detail__stat-value--cap' : ''}`}>{s.value}</span>
+            </a>
+          ) : (
+            <div key={i} class="detail__stat">
+              <span class="detail__stat-label">{s.label}</span>
+              <span class={`detail__stat-value${s.cap ? ' detail__stat-value--cap' : ''}`} data-testid={s.testid}>
+                {s.value}
+              </span>
+            </div>
+          ),
         )}
       </div>
 
-      <div class="reminder-detail__meta">
+      {view.sections.map((sec, i) => (
+        <div key={i} class="detail__section">
+          <span class="detail__stat-label">{sec.label}</span>
+          {sec.value ? (
+            <p class="detail__body" data-testid={sec.testid}>{sec.value}</p>
+          ) : (
+            <p class="detail__body muted" data-testid={sec.testid}>Nothing added.</p>
+          )}
+        </div>
+      ))}
+
+      <div class="detail__meta">
         <span>Created {formatTimestamp(data.created_at)}</span>
         <span aria-hidden="true">·</span>
         <span>Updated {formatTimestamp(data.updated_at)}</span>
       </div>
     </div>
   );
+}
+
+/** Icon per activity type. */
+const ACTIVITY_ICONS: Record<string, string> = {
+  phone_call: '📞',
+  video_call: '📹',
+  text_message: '💬',
+  in_person: '🤝',
+  email: '✉️',
+  activity: '🎉',
+  other: '📌',
+};
+
+/** Builders map a raw record into the shared RichView shape, one per resource. */
+const RICH_BUILDERS: Record<string, (data: Record_) => RichView> = {
+  activities(data) {
+    const type = typeof data.type === 'string' ? data.type : 'other';
+    const title = (typeof data.title === 'string' && data.title) || humanize(type);
+    const occurredAt = typeof data.occurred_at === 'string' ? data.occurred_at : '';
+    const duration = data.duration_minutes;
+    const location = typeof data.location === 'string' ? data.location : '';
+    const rel = relativeTime(occurredAt);
+    const badges: BadgeItem[] = [
+      { label: humanize(type), tone: 'primary', testid: 'entity-field-type' },
+    ];
+    if (typeof duration === 'number' && duration > 0) {
+      badges.push({ label: formatDuration(duration), tone: 'default' });
+    }
+    const stats: StatItem[] = [
+      { label: 'When', value: formatTimestamp(occurredAt), testid: 'entity-field-occurred_at' },
+    ];
+    if (typeof duration === 'number' && duration > 0) {
+      stats.push({ label: 'Duration', value: formatDuration(duration), testid: 'entity-field-duration_minutes' });
+    }
+    if (location) stats.push({ label: 'Location', value: location, testid: 'entity-field-location' });
+    return {
+      icon: ACTIVITY_ICONS[type] ?? '📌',
+      title,
+      badges,
+      highlight: occurredAt
+        ? { label: formatNiceDate(occurredAt), sub: rel ? `Happened ${rel}` : 'Logged interaction', tone: 'primary' }
+        : undefined,
+      stats,
+      sections: [
+        { label: 'Description', value: typeof data.description === 'string' ? data.description : '', testid: 'entity-field-description' },
+      ],
+    };
+  },
+
+  notes(data) {
+    const pinned = Boolean(data.is_pinned);
+    const badges: BadgeItem[] = [];
+    if (pinned) badges.push({ label: 'Pinned', tone: 'warning' });
+    return {
+      icon: pinned ? '📌' : '📝',
+      title: (typeof data.title === 'string' && data.title) || 'Note',
+      badges,
+      stats: [],
+      sections: [
+        { label: 'Note', value: typeof data.body === 'string' ? data.body : '', testid: 'entity-field-body' },
+      ],
+    };
+  },
+
+  'life-events'(data) {
+    const eventType = typeof data.event_type === 'string' ? data.event_type : '';
+    const occurredAt = typeof data.occurred_at === 'string' ? data.occurred_at : '';
+    const rel = relativeTime(occurredAt);
+    return {
+      icon: '🌟',
+      title: (typeof data.title === 'string' && data.title) || 'Life event',
+      badges: eventType
+        ? [{ label: humanize(eventType), tone: 'primary', testid: 'entity-field-event_type' }]
+        : [],
+      highlight: occurredAt
+        ? { label: formatNiceDate(occurredAt), sub: rel ? `${rel[0].toUpperCase()}${rel.slice(1)}` : 'A moment worth remembering', tone: 'primary' }
+        : undefined,
+      stats: occurredAt
+        ? [{ label: 'When', value: formatNiceDate(occurredAt), testid: 'entity-field-occurred_at' }]
+        : [],
+      sections: [
+        { label: 'Description', value: typeof data.description === 'string' ? data.description : '', testid: 'entity-field-description' },
+      ],
+    };
+  },
+
+  gifts(data) {
+    const direction = typeof data.direction === 'string' ? data.direction : '';
+    const status = typeof data.status === 'string' ? data.status : '';
+    const occasion = typeof data.occasion === 'string' ? data.occasion : '';
+    const url = typeof data.url === 'string' ? data.url : '';
+    const cost = data.estimated_cost;
+    const hasCost = typeof cost === 'number' && Number.isFinite(cost);
+    const badges: BadgeItem[] = [];
+    if (direction) {
+      badges.push({
+        label: direction === 'giving' ? 'Giving' : 'Receiving',
+        tone: 'primary',
+        testid: 'entity-field-direction',
+      });
+    }
+    if (status) badges.push({ label: humanize(status), tone: giftStatusTone(status) });
+    const stats: StatItem[] = [];
+    if (occasion) stats.push({ label: 'Occasion', value: occasion, testid: 'entity-field-occasion' });
+    if (data.date) stats.push({ label: 'Date', value: formatNiceDate(data.date), testid: 'entity-field-date' });
+    if (status) stats.push({ label: 'Status', value: humanize(status), testid: 'entity-field-status' });
+    if (url) stats.push({ label: 'Link', value: 'Open ↗', href: url, testid: 'entity-field-url' });
+    return {
+      icon: '🎁',
+      title: (typeof data.name === 'string' && data.name) || 'Gift',
+      badges,
+      highlight: hasCost
+        ? {
+            label: formatMoney(cost, data.currency),
+            sub: direction === 'giving' ? 'Estimated cost to give' : 'Estimated value received',
+            tone: 'success',
+          }
+        : undefined,
+      stats,
+      sections: [
+        { label: 'Description', value: typeof data.description === 'string' ? data.description : '', testid: 'entity-field-description' },
+      ],
+    };
+  },
+
+  debts(data) {
+    const direction = typeof data.direction === 'string' ? data.direction : '';
+    const status = typeof data.status === 'string' ? data.status : '';
+    const owedToMe = direction === 'they_owe_me';
+    const settled = status === 'settled';
+    const stats: StatItem[] = [];
+    if (status) stats.push({ label: 'Status', value: humanize(status), testid: 'entity-field-status', cap: true });
+    if (data.incurred_at) stats.push({ label: 'Incurred', value: formatNiceDate(data.incurred_at), testid: 'entity-field-incurred_at' });
+    if (data.settled_at) stats.push({ label: 'Settled', value: formatNiceDate(data.settled_at), testid: 'entity-field-settled_at' });
+    return {
+      icon: '💰',
+      title: (typeof data.reason === 'string' && data.reason) || 'Debt',
+      badges: [
+        {
+          label: owedToMe ? 'They owe me' : 'I owe them',
+          tone: owedToMe ? 'success' : 'warning',
+          testid: 'entity-field-direction',
+        },
+        { label: settled ? 'Settled' : 'Active', tone: settled ? 'default' : 'primary' },
+      ],
+      highlight: {
+        label: formatMoney(data.amount, data.currency),
+        sub: settled
+          ? 'This debt has been settled'
+          : owedToMe
+            ? 'Owed to you'
+            : 'You owe this amount',
+        tone: settled ? 'default' : owedToMe ? 'success' : 'warning',
+      },
+      stats,
+      sections: [],
+    };
+  },
+
+  tasks(data) {
+    const status = typeof data.status === 'string' ? data.status : 'pending';
+    const priority = typeof data.priority === 'string' ? data.priority : 'medium';
+    const dueDate = typeof data.due_date === 'string' ? data.due_date : '';
+    const done = status === 'completed';
+    const badges: BadgeItem[] = [
+      { label: humanize(status), tone: taskStatusTone(status), testid: 'entity-field-status' },
+      { label: `${humanize(priority)} priority`, tone: priorityTone(priority) },
+    ];
+    const stats: StatItem[] = [];
+    if (dueDate) stats.push({ label: 'Due', value: formatNiceDate(dueDate), testid: 'entity-field-due_date' });
+    stats.push({ label: 'Priority', value: humanize(priority), testid: 'entity-field-priority' });
+    if (data.completed_at) stats.push({ label: 'Completed', value: formatTimestamp(data.completed_at), testid: 'entity-field-completed_at' });
+    return {
+      icon: done ? '✅' : '📋',
+      title: (typeof data.title === 'string' && data.title) || 'Task',
+      badges,
+      highlight: dueDate && !done
+        ? (() => { const c = dateCountdown(dueDate); return { label: c.label, sub: `${c.sub} · ${formatNiceDate(dueDate)}`, tone: c.tone }; })()
+        : done
+          ? { label: 'Completed', sub: 'Nice work — this task is done', tone: 'success' }
+          : undefined,
+      stats,
+      sections: [
+        { label: 'Description', value: typeof data.description === 'string' ? data.description : '', testid: 'entity-field-description' },
+      ],
+    };
+  },
+
+  reminders(data) {
+    const reminderDate = typeof data.reminder_date === 'string' ? data.reminder_date : '';
+    const frequency = typeof data.frequency === 'string' ? data.frequency : 'one_time';
+    const status = data.status;
+    const isAuto = Boolean(data.is_auto_generated);
+    const recurring = frequency !== 'one_time';
+    const countdown = reminderDate ? dateCountdown(reminderDate) : undefined;
+    const badges: BadgeItem[] = [
+      { label: humanize(String(status ?? 'unknown')), tone: statusTone(status), testid: 'entity-field-status' },
+      { label: recurring ? `Repeats ${frequency}` : 'One-time', tone: recurring ? 'primary' : 'default' },
+    ];
+    if (isAuto) badges.push({ label: 'Auto-generated', tone: 'default' });
+    return {
+      icon: '🔔',
+      title: (typeof data.title === 'string' && data.title) || 'Reminder',
+      badges,
+      highlight: countdown
+        ? { label: countdown.label, sub: `${countdown.sub} · ${formatNiceDate(reminderDate)}`, tone: countdown.tone }
+        : undefined,
+      stats: [
+        { label: 'Next on', value: formatNiceDate(reminderDate), testid: 'entity-field-reminder_date' },
+        { label: 'Frequency', value: humanize(frequency), testid: 'entity-field-frequency' },
+      ],
+      sections: [
+        { label: 'Description', value: typeof data.description === 'string' ? data.description : '', testid: 'entity-field-description' },
+      ],
+    };
+  },
+};
+
+function giftStatusTone(status: string): Tone {
+  switch (status) {
+    case 'given':
+    case 'received':
+    case 'purchased':
+      return 'success';
+    case 'planned':
+      return 'primary';
+    default:
+      return 'default';
+  }
+}
+
+function taskStatusTone(status: string): Tone {
+  switch (status) {
+    case 'completed': return 'success';
+    case 'in_progress': return 'primary';
+    default: return 'default';
+  }
+}
+
+function priorityTone(priority: string): Tone {
+  switch (priority) {
+    case 'high': return 'danger';
+    case 'medium': return 'warning';
+    default: return 'default';
+  }
 }
 

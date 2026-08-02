@@ -23,7 +23,7 @@ test.describe('timeline entities', () => {
 
     await page.goto(`/app/activities/${activity.id}`);
     await expect(page.getByTestId('entity-detail')).toHaveAttribute('data-resource', 'activities');
-    await expect(page.getByTestId('entity-field-type')).toContainText('phone_call');
+    await expect(page.getByTestId('entity-field-type')).toContainText('Phone call');
 
     // Edit the title.
     const newTitle = `Edited call ${ts()}`;
@@ -65,7 +65,7 @@ test.describe('timeline entities', () => {
 
     await page.goto(`/app/life-events/${event.id}`);
     await expect(page.getByTestId('entity-detail')).toHaveAttribute('data-resource', 'life-events');
-    await expect(page.getByTestId('entity-field-event_type')).toContainText('milestone');
+    await expect(page.getByTestId('entity-field-event_type')).toContainText('Milestone');
 
     await page.getByTestId('entity-delete').click();
     await page.getByTestId('confirm-accept').click();
@@ -83,12 +83,12 @@ test.describe('timeline entities', () => {
 
     await page.goto(`/app/reminders/${reminder.id}`);
     await expect(page.getByTestId('entity-detail')).toHaveAttribute('data-resource', 'reminders');
-    await expect(page.getByTestId('entity-field-status')).not.toContainText('completed');
+    await expect(page.getByTestId('entity-field-status')).not.toContainText('Completed');
 
     // Complete it → status updates in place.
     await page.getByTestId('entity-complete').click();
     await expect(page.getByTestId('toast')).toBeVisible();
-    await expect(page.getByTestId('entity-field-status')).toContainText('completed');
+    await expect(page.getByTestId('entity-field-status')).toContainText('Completed');
   });
 
   test('gift: create, view, delete', async ({ page, seeder }) => {
@@ -101,7 +101,7 @@ test.describe('timeline entities', () => {
 
     await page.goto(`/app/gifts/${gift.id}`);
     await expect(page.getByTestId('entity-detail')).toHaveAttribute('data-resource', 'gifts');
-    await expect(page.getByTestId('entity-field-direction')).toContainText('giving');
+    await expect(page.getByTestId('entity-field-direction')).toContainText('Giving');
 
     await page.getByTestId('entity-delete').click();
     await page.getByTestId('confirm-accept').click();
@@ -119,7 +119,7 @@ test.describe('timeline entities', () => {
 
     await page.goto(`/app/debts/${debt.id}`);
     await expect(page.getByTestId('entity-detail')).toHaveAttribute('data-resource', 'debts');
-    await expect(page.getByTestId('entity-field-direction')).toContainText('they_owe_me');
+    await expect(page.getByTestId('entity-field-direction')).toContainText('They owe me');
 
     await page.getByTestId('entity-delete').click();
     await page.getByTestId('confirm-accept').click();
@@ -135,11 +135,11 @@ test.describe('timeline entities', () => {
 
     await page.goto(`/app/tasks/${task.id}`);
     await expect(page.getByTestId('entity-detail')).toHaveAttribute('data-resource', 'tasks');
-    await expect(page.getByTestId('entity-field-status')).toContainText('pending');
+    await expect(page.getByTestId('entity-field-status')).toContainText('Pending');
 
     // Complete it → status flips to completed in place.
     await page.getByTestId('entity-complete').click();
     await expect(page.getByTestId('toast')).toBeVisible();
-    await expect(page.getByTestId('entity-field-status')).toContainText('completed');
+    await expect(page.getByTestId('entity-field-status')).toContainText('Completed');
   });
 });
