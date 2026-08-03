@@ -60,8 +60,7 @@ function layout({ title, body, slug }) {
       </nav>
       <div class="sidebar-footer">
         <a href="/">Home</a>
-        <a class="header-button header-button--secondary" href="/app/">Sign in</a>
-        <a class="header-button header-button--primary" href="/auth/register?from=web">Sign up</a>
+        <a href="/app/">Open app</a>
         <a href="/api/v1/docs">REST reference</a>
       </div>
     </aside>
