@@ -131,7 +131,8 @@ test('relationships: link then unlink another contact', async ({ page, seeder })
 
   // Link
   await sec.getByRole('button', { name: '+ Add' }).click();
-  await page.getByTestId('rel-contact').selectOption({ label: relatedName });
+  await page.getByTestId('contact-picker-search').fill(relatedName);
+  await page.getByTestId('contact-picker-row').filter({ hasText: relatedName }).click();
   await page.getByTestId('rel-type').selectOption('sibling');
   await page.getByTestId('editor-save').click();
   await expect(sec.getByText(relatedName)).toBeVisible();

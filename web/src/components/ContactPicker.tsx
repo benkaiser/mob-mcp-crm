@@ -21,6 +21,8 @@ interface BasePickerProps {
   initialIds?: string[];
   /** Hint label shown above the search box. */
   label?: string;
+  /** Contact IDs to hide from the selectable list. */
+  excludeIds?: string[];
 }
 
 interface SinglePickerProps extends BasePickerProps {
@@ -61,9 +63,11 @@ export function ContactPicker(props: PickerProps) {
 
   const term = q.trim().toLowerCase();
   const filtered = useMemo(() => {
-    if (!term) return all;
-    return all.filter((c) => contactName(c).toLowerCase().includes(term));
-  }, [all, term]);
+    const excluded = new Set(props.excludeIds ?? []);
+    const available = all.filter((c) => !excluded.has(c.id));
+    if (!term) return available;
+    return available.filter((c) => contactName(c).toLowerCase().includes(term));
+  }, [all, props.excludeIds, term]);
 
   const selectedIds: string[] = props.mode === 'single'
     ? (props.value ? [props.value] : [])

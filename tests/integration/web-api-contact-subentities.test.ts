@@ -214,6 +214,35 @@ describe('Contact sub-entities internal API (/contacts)', () => {
     expect(data(del).deleted).toBe(true);
   });
 
+  it('returns a specific conflict error for duplicate relationships', async () => {
+    const { app, contactId, otherContactId } = await setup();
+    await raw(app, 'POST', `/contacts/${contactId}/relationships`, {
+      body: { related_contact_id: otherContactId, relationship_type: 'friend' },
+    });
+
+    const duplicate = await raw(app, 'POST', `/contacts/${contactId}/relationships`, {
+      body: { related_contact_id: otherContactId, relationship_type: 'friend' },
+    });
+    expect(duplicate.status).toBe(409);
+    const createError = JSON.parse(duplicate.body).error;
+    expect(createError.code).toBe('duplicate_relationship');
+    expect(createError.message).toContain('A "friend" relationship already exists between Chilli and Bingo');
+    expect(createError.message).not.toBe('An unexpected error occurred');
+
+    const secondType = await raw(app, 'POST', `/contacts/${contactId}/relationships`, {
+      body: { related_contact_id: otherContactId, relationship_type: 'colleague' },
+    });
+    expect(secondType.status).toBe(201);
+
+    const updateDuplicate = await raw(app, 'PATCH', `/contacts/${contactId}/relationships/${data(secondType).id}`, {
+      body: { relationship_type: 'friend' },
+    });
+    expect(updateDuplicate.status).toBe(409);
+    const updateError = JSON.parse(updateDuplicate.body).error;
+    expect(updateError.code).toBe('duplicate_relationship');
+    expect(updateError.message).toContain('A "friend" relationship already exists between Chilli and Bingo');
+  });
+
   it('assigns + lists + removes tags', async () => {
     const { app, contactId } = await setup();
     const create = await raw(app, 'POST', `/contacts/${contactId}/tags`, { body: { name: 'family', color: '#ff0000' } });

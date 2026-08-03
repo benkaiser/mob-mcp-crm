@@ -7,6 +7,7 @@ import type {
 } from '../../api/types';
 import { Modal, Button, Input, Select, Textarea, Field, showToast } from '../../ui';
 import { errorMessage, fieldErrors } from '../../lib/format';
+import { ContactPicker } from '../../components/ContactPicker';
 
 const METHOD_TYPES: ContactMethodType[] = [
   'email', 'phone', 'whatsapp', 'telegram', 'signal',
@@ -173,10 +174,7 @@ export function CustomFieldEditor({ contactId, existing, onClose, onSaved }: Edi
 
 // ─── Relationship editor ────────────────────────────────────────
 
-export function RelationshipEditor(
-  { contactId, existing, onClose, onSaved, contactOptions }:
-  EditorProps<Relationship> & { contactOptions: { id: string; name: string }[] },
-) {
+export function RelationshipEditor({ contactId, existing, onClose, onSaved }: EditorProps<Relationship>) {
   const [related, setRelated] = useState(existing?.related_contact_id ?? '');
   const [type, setType] = useState(existing?.relationship_type ?? '');
   const [notes, setNotes] = useState(existing?.notes ?? '');
@@ -234,14 +232,16 @@ export function RelationshipEditor(
       <form id="rel-form" class="stack" onSubmit={submit}>
         {error && <div class="field__error">{error}</div>}
         {!existing && (
-          <Field label="Related contact" error={errs.related_contact_id}>
-            <Select data-testid="rel-contact" value={related} onChange={(e) => setRelated((e.target as HTMLSelectElement).value)} required>
-              <option value="">Select a contact…</option>
-              {contactOptions.filter((c) => c.id !== contactId).map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </Select>
-          </Field>
+          <div class="field">
+            <ContactPicker
+              mode="single"
+              label="Related contact"
+              value={related || null}
+              onChange={(id) => setRelated(id ?? '')}
+              excludeIds={[contactId]}
+            />
+            {errs.related_contact_id && <div class="field__error">{errs.related_contact_id}</div>}
+          </div>
         )}
         <Field label="Relationship type" error={errs.relationship_type} hint={typesLoading ? 'Loading relationship types…' : 'Choose a canonical or custom type'}>
           <Select data-testid="rel-type" value={type} onChange={(e) => setType((e.target as HTMLSelectElement).value)} required disabled={typesLoading && options.length === 0}>

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type Database from 'better-sqlite3';
 import { z } from 'zod';
 import { ContactService } from '../../services/contacts.js';
-import { RelationshipService, isRelationshipTypeAllowedForUser } from '../../services/relationships.js';
+import { RelationshipService, isDuplicateRelationshipError, isRelationshipTypeAllowedForUser } from '../../services/relationships.js';
 import { asyncHandler, sendData, ApiError, parseBody, getUserId } from './helpers.js';
 
 // ─── Validation schemas ─────────────────────────────────────────
@@ -54,7 +54,15 @@ export function createContactRelationshipsRouter(db: Database.Database): Router 
     const input = parseBody(createRelationshipSchema, req);
     requireRelationshipType(userId, input.relationship_type);
     requireContact(userId, input.related_contact_id);
-    const created = relationships.add({ ...input, contact_id: contactId });
+    let created;
+    try {
+      created = relationships.add({ ...input, contact_id: contactId });
+    } catch (err) {
+      if (isDuplicateRelationshipError(err)) {
+        throw new ApiError(409, 'duplicate_relationship', err.message);
+      }
+      throw err;
+    }
     sendData(res, created, undefined, 201);
   }));
 
@@ -64,7 +72,15 @@ export function createContactRelationshipsRouter(db: Database.Database): Router 
     requireContact(userId, contactId);
     const input = parseBody(updateRelationshipSchema, req);
     if (input.relationship_type !== undefined) requireRelationshipType(userId, input.relationship_type);
-    const updated = relationships.updateForContact(contactId, param(req.params.relationshipId), input);
+    let updated;
+    try {
+      updated = relationships.updateForContact(contactId, param(req.params.relationshipId), input);
+    } catch (err) {
+      if (isDuplicateRelationshipError(err)) {
+        throw new ApiError(409, 'duplicate_relationship', err.message);
+      }
+      throw err;
+    }
     if (!updated) throw new ApiError(404, 'not_found', 'Relationship not found');
     sendData(res, updated);
   }));

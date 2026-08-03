@@ -163,6 +163,17 @@ export interface UpdateCustomRelationshipTypeInput {
   inverse_value?: string;
 }
 
+export class DuplicateRelationshipError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'DuplicateRelationshipError';
+  }
+}
+
+export function isDuplicateRelationshipError(err: unknown): err is DuplicateRelationshipError {
+  return err instanceof DuplicateRelationshipError;
+}
+
 export function getCanonicalRelationshipTypeOptions(): RelationshipTypeOption[] {
   return getRelationshipTypes().map((value) => ({
     value,
@@ -373,6 +384,7 @@ export class RelationshipService {
     const inverseId = generateId();
     const now = new Date().toISOString();
     const inverseType = getInverseTypeForUser(this.db, contact.user_id, input.relationship_type);
+    this.throwIfDuplicate(input.contact_id, input.related_contact_id, input.relationship_type);
 
     const insertStmt = this.db.prepare(`
       INSERT INTO relationships (id, contact_id, related_contact_id, relationship_type, notes, created_at, updated_at)
@@ -389,10 +401,8 @@ export class RelationshipService {
 
       transaction();
     } catch (err: any) {
-      if (err.message?.includes('UNIQUE constraint failed')) {
-        const contactName = [contact.first_name, contact.last_name].filter(Boolean).join(' ');
-        const relatedName = [related.first_name, related.last_name].filter(Boolean).join(' ');
-        throw new Error(`A "${input.relationship_type}" relationship already exists between ${contactName} and ${relatedName}. Use relationship_update to modify it, or relationship_list to see existing relationships.`);
+      if (this.isRelationshipUniqueConstraintError(err)) {
+        throw this.duplicateError(input.contact_id, input.related_contact_id, input.relationship_type);
       }
       throw err;
     }
@@ -453,7 +463,18 @@ export class RelationshipService {
       }
     });
 
-    transaction();
+    try {
+      transaction();
+    } catch (err) {
+      if (this.isRelationshipUniqueConstraintError(err)) {
+        throw this.duplicateError(
+          existing.contact_id,
+          existing.related_contact_id,
+          input.relationship_type ?? existing.relationship_type,
+        );
+      }
+      throw err;
+    }
 
     return this.getById(id);
   }
@@ -514,5 +535,33 @@ export class RelationshipService {
   private ownerOfContact(contactId: string): string | null {
     const row = this.db.prepare('SELECT user_id FROM contacts WHERE id = ?').get(contactId) as { user_id: string } | undefined;
     return row?.user_id ?? null;
+  }
+
+  private throwIfDuplicate(contactId: string, relatedContactId: string, relationshipType: string): void {
+    const existing = this.db.prepare(`
+      SELECT id FROM relationships
+      WHERE contact_id = ? AND related_contact_id = ? AND relationship_type = ?
+      LIMIT 1
+    `).get(contactId, relatedContactId, relationshipType);
+    if (existing) throw this.duplicateError(contactId, relatedContactId, relationshipType);
+  }
+
+  private duplicateError(contactId: string, relatedContactId: string, relationshipType: string): DuplicateRelationshipError {
+    const contactName = this.contactName(contactId);
+    const relatedName = this.contactName(relatedContactId);
+    return new DuplicateRelationshipError(`A "${relationshipType}" relationship already exists between ${contactName} and ${relatedName}. Use relationship_update to modify it, or relationship_list to see existing relationships.`);
+  }
+
+  private contactName(contactId: string): string {
+    const row = this.db.prepare('SELECT first_name, last_name FROM contacts WHERE id = ?')
+      .get(contactId) as { first_name: string; last_name: string | null } | undefined;
+    return row ? [row.first_name, row.last_name].filter(Boolean).join(' ') : contactId;
+  }
+
+  private isRelationshipUniqueConstraintError(err: unknown): boolean {
+    const sqliteError = err as { code?: string; message?: string };
+    return sqliteError.code === 'SQLITE_CONSTRAINT_UNIQUE'
+      || sqliteError.message?.includes('UNIQUE constraint failed: relationships.contact_id, relationships.related_contact_id, relationships.relationship_type') === true
+      || sqliteError.message?.includes('UNIQUE constraint failed') === true;
   }
 }

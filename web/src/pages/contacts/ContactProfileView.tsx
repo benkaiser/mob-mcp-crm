@@ -39,7 +39,6 @@ export function ContactProfileView({ id }: { id: string }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [favoriteSaving, setFavoriteSaving] = useState(false);
-  const [contactOptions, setContactOptions] = useState<{ id: string; name: string }[]>([]);
   const [deleteSub, setDeleteSub] = useState<{ path: string; label: string } | null>(null);
 
   const load = useCallback(() => {
@@ -52,13 +51,6 @@ export function ContactProfileView({ id }: { id: string }) {
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
-
-  // Lazy-load contact options for the relationship picker.
-  useEffect(() => {
-    apiGet<Contact[]>('/contacts?per_page=100&sort_by=name')
-      .then(({ data }) => setContactOptions(data.map((c) => ({ id: c.id, name: contactName(c) }))))
-      .catch(() => {});
-  }, []);
 
   function refresh() { setEditor(null); load(); }
 
@@ -420,7 +412,7 @@ export function ContactProfileView({ id }: { id: string }) {
         <CustomFieldEditor contactId={id} existing={editor.existing} onClose={() => setEditor(null)} onSaved={refresh} />
       )}
       {editor?.kind === 'relationship' && (
-        <RelationshipEditor contactId={id} existing={editor.existing} contactOptions={contactOptions}
+        <RelationshipEditor contactId={id} existing={editor.existing}
           onClose={() => setEditor(null)} onSaved={refresh} />
       )}
       {editor?.kind === 'food' && (
