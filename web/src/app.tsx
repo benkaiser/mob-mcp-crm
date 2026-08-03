@@ -17,7 +17,8 @@ import { Settings } from './pages/Settings';
 import { DataExport } from './pages/DataExport';
 import { ImportPage } from './pages/ImportPage';
 import { EntityDetail } from './pages/EntityDetail';
-import { NewNotePage, NewActivityPage, NewReminderPage, NewTaskPage } from './pages/quickCreate';
+import { EntityOverview } from './pages/EntityOverview';
+import { NewNotePage, NewActivityPage, NewReminderPage, NewTaskPage, NewGiftPage, NewDebtPage } from './pages/quickCreate';
 import { NotFound } from './pages/NotFound';
 
 /**
@@ -72,6 +73,16 @@ export function App() {
             <Route path="/activities/new" component={NewActivityPage} />
             <Route path="/reminders/new" component={NewReminderPage} />
             <Route path="/tasks/new" component={NewTaskPage} />
+            <Route path="/gifts/new" component={NewGiftPage} />
+            <Route path="/debts/new" component={NewDebtPage} />
+            {/* Overview pages — registered BEFORE /:id detail routes so base
+                resource paths render lists while /:id still renders details. */}
+            <Route path="/activities">{() => <EntityOverview resource="activities" />}</Route>
+            <Route path="/notes">{() => <EntityOverview resource="notes" />}</Route>
+            <Route path="/reminders">{() => <EntityOverview resource="reminders" />}</Route>
+            <Route path="/tasks">{() => <EntityOverview resource="tasks" />}</Route>
+            <Route path="/debts">{() => <EntityOverview resource="debts" />}</Route>
+            <Route path="/gifts">{() => <EntityOverview resource="gifts" />}</Route>
             <Route path="/activities/:id">{(p) => <EntityDetail resource="activities" label="Activity" id={p.id} />}</Route>
             <Route path="/reminders/:id">{(p) => <EntityDetail resource="reminders" label="Reminder" id={p.id} />}</Route>
             <Route path="/gifts/:id">{(p) => <EntityDetail resource="gifts" label="Gift" id={p.id} />}</Route>

@@ -46,6 +46,8 @@ export function Dashboard() {
         <Link href="/activities/new" class="btn btn--secondary btn--sm" data-testid="dashboard-new-activity">+ Activity</Link>
         <Link href="/reminders/new" class="btn btn--secondary btn--sm" data-testid="dashboard-new-reminder">+ Reminder</Link>
         <Link href="/tasks/new" class="btn btn--secondary btn--sm" data-testid="dashboard-new-task">+ Task</Link>
+        <Link href="/debts/new" class="btn btn--secondary btn--sm" data-testid="dashboard-new-debt">+ Debt</Link>
+        <Link href="/gifts/new" class="btn btn--secondary btn--sm" data-testid="dashboard-new-gift">+ Gift</Link>
       </Card>
 
       {loading ? (
@@ -57,17 +59,17 @@ export function Dashboard() {
           <div class="counts-row">
             <CountTile label="Contacts" num={data.counts.contacts} href="/contacts" />
             <CountTile label="Favorites" num={data.counts.favorite_contacts} href="/contacts?is_favorite=true" />
-            <CountTile label="Activities" num={data.counts.total_activities} />
-            <CountTile label="Notes" num={data.counts.total_notes} />
-            <CountTile label="Reminders" num={data.counts.pending_reminders} />
-            <CountTile label="Tasks" num={data.counts.pending_tasks} />
-            <CountTile label="Debts" num={data.counts.active_debts} />
-            <CountTile label="Gift ideas" num={data.counts.gift_ideas} />
+            <CountTile label="Activities" num={data.counts.total_activities} href="/activities" />
+            <CountTile label="Notes" num={data.counts.total_notes} href="/notes" />
+            <CountTile label="Reminders" num={data.counts.pending_reminders} href="/reminders" />
+            <CountTile label="Tasks" num={data.counts.pending_tasks} href="/tasks" />
+            <CountTile label="Debts" num={data.counts.active_debts} href="/debts" />
+            <CountTile label="Gift ideas" num={data.counts.gift_ideas} href="/gifts" />
           </div>
 
           <div class="grid-cards">
             <Card>
-              <h2>Upcoming reminders</h2>
+              <h2><Link href="/reminders">Upcoming reminders</Link></h2>
               {data.upcoming_reminders.length === 0 ? (
                 <p class="muted">Nothing due soon.</p>
               ) : (
@@ -107,7 +109,7 @@ export function Dashboard() {
             </Card>
 
             <Card>
-              <h2>Recent activities</h2>
+              <h2><Link href="/activities">Recent activities</Link></h2>
               {data.recent_activities.length === 0 ? (
                 <p class="muted">No activities logged yet.</p>
               ) : (
@@ -123,7 +125,7 @@ export function Dashboard() {
             </Card>
 
             <Card>
-              <h2>Open tasks</h2>
+              <h2><Link href="/tasks">Open tasks</Link></h2>
               {data.open_tasks.length === 0 ? (
                 <p class="muted">No open tasks.</p>
               ) : (
@@ -142,7 +144,7 @@ export function Dashboard() {
             </Card>
 
             <Card>
-              <h2>Debt summary</h2>
+              <h2><Link href="/debts">Debt summary</Link></h2>
               {data.debt_summary.by_currency.length === 0 ? (
                 <p class="muted">No active debts.</p>
               ) : (

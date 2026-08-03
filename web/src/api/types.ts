@@ -192,6 +192,8 @@ export interface Note {
   is_pinned: boolean;
   created_at: string;
   updated_at: string;
+  contact_name?: string;
+  body_truncated?: boolean;
 }
 
 export interface Activity {
@@ -205,6 +207,7 @@ export interface Activity {
   location: string | null;
   created_at: string;
   updated_at: string;
+  participants?: string[];
 }
 
 export interface LifeEvent {

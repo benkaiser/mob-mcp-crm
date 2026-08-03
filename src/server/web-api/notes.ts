@@ -25,8 +25,8 @@ const updateNoteSchema = createNoteSchema.partial();
 
 /**
  * Internal API router for notes, mounted at /web/api/notes.
- * List is per-contact (requires ?contact_id=...). Pinned-first ordering
- * is preserved by the service. Thin wrapper around NoteService.
+ * Supports both per-contact note lists (?contact_id=..., pinned first) and
+ * cross-contact overview/search lists. Thin wrapper around NoteService.
  */
 export function createNotesRouter(db: Database.Database): Router {
   const router = Router();
@@ -34,24 +34,35 @@ export function createNotesRouter(db: Database.Database): Router {
 
   const param = (v: unknown): string => (Array.isArray(v) ? v[0] : String(v ?? ''));
 
-  // GET /?contact_id=... — list a contact's notes (pinned first).
+  // GET / — list notes. With ?contact_id=... preserves pinned-first per-contact
+  // ordering; without contact_id returns a cross-contact overview list.
   router.get('/', asyncHandler((req, res) => {
     const userId = getUserId(req);
     const q = req.query;
-    if (typeof q.contact_id !== 'string' || q.contact_id.length === 0) {
-      throw new ApiError(422, 'validation_error', 'contact_id query parameter is required');
-    }
     const p = pageParams(req);
-    try {
-      const result = notes.listByContact(userId, q.contact_id, {
-        page: p.page,
-        per_page: p.perPage,
-        include_deleted: q.include_deleted === 'true',
-      });
-      sendData(res, result.data, pageMeta(result.total, p));
-    } catch {
-      throw new ApiError(404, 'not_found', 'Contact not found');
+    if (typeof q.contact_id === 'string' && q.contact_id.length > 0) {
+      try {
+        const result = notes.listByContact(userId, q.contact_id, {
+          page: p.page,
+          per_page: p.perPage,
+          include_deleted: q.include_deleted === 'true',
+        });
+        sendData(res, result.data, pageMeta(result.total, p));
+        return;
+      } catch {
+        throw new ApiError(404, 'not_found', 'Contact not found');
+      }
     }
+
+    const result = notes.searchNotes(userId, {
+      query: typeof q.q === 'string' ? q.q : undefined,
+      is_pinned: q.is_pinned === 'true' ? true : q.is_pinned === 'false' ? false : undefined,
+      sort_by: q.sort_by === 'created_at' ? 'created_at' : 'updated_at',
+      sort_order: q.sort_order === 'asc' ? 'asc' : 'desc',
+      page: p.page,
+      per_page: p.perPage,
+    });
+    sendData(res, result.data, pageMeta(result.total, p));
   }));
 
   // GET /:id

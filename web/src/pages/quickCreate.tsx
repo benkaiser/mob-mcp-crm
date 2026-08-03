@@ -6,7 +6,7 @@ import { ContactPicker } from '../components/ContactPicker';
 import { errorMessage, fieldErrors } from '../lib/format';
 
 /**
- * Focused-creation pages for the four "anywhere" entities surfaced from the
+ * Focused-creation pages for the timeline entities surfaced from the
  * sidebar + dashboard. Each page leads with the ContactPicker because the
  * common error path is forgetting which contact you meant; making picking
  * the first job avoids that footgun.
@@ -16,6 +16,7 @@ import { errorMessage, fieldErrors } from '../lib/format';
  *   `participant_contact_ids`).
  * - Reminders: 1 contact.
  * - Tasks: 0 or 1 contact (optional — task can stand alone).
+ * - Gifts / Debts: 1 contact.
  */
 
 function useQueryParam(name: string): string | undefined {
@@ -355,6 +356,196 @@ export function NewTaskPage() {
           <div class="row">
             <Button type="submit" disabled={saving} data-testid="new-task-submit">
               {saving ? 'Saving…' : 'Create task'}
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => window.history.back()} disabled={saving}>
+              Cancel
+            </Button>
+          </div>
+        </Card>
+      </form>
+    </div>
+  );
+}
+
+// ─── New gift ────────────────────────────────────────────────────
+
+const GIFT_STATUSES = ['idea', 'planned', 'purchased', 'given', 'received'] as const;
+const GIFT_DIRECTIONS = ['giving', 'receiving'] as const;
+type GiftStatus = typeof GIFT_STATUSES[number];
+type GiftDirection = typeof GIFT_DIRECTIONS[number];
+
+export function NewGiftPage() {
+  const [, navigate] = useLocation();
+  const initial = useQueryParam('contact_id');
+  const [contactId, setContactId] = useState<string | null>(initial ?? null);
+  const [name, setName] = useState('');
+  const [direction, setDirection] = useState<GiftDirection>('giving');
+  const [status, setStatus] = useState<GiftStatus>('idea');
+  const [description, setDescription] = useState('');
+  const [url, setUrl] = useState('');
+  const [cost, setCost] = useState('');
+  const [currency, setCurrency] = useState('USD');
+  const [occasion, setOccasion] = useState('');
+  const [date, setDate] = useState('');
+  const { saving, error, errs, run, setError } = useCreate();
+
+  function submit(e: Event) {
+    e.preventDefault();
+    if (!contactId) { setError('Pick a contact'); return; }
+    if (!name.trim()) { setError('Gift name is required'); return; }
+    const payload: Record<string, unknown> = { contact_id: contactId, name, direction, status };
+    if (description.trim()) payload.description = description.trim();
+    if (url.trim()) payload.url = url.trim();
+    if (occasion.trim()) payload.occasion = occasion.trim();
+    if (currency.trim()) payload.currency = currency.trim();
+    if (date) payload.date = date;
+    if (cost.trim()) {
+      const n = Number(cost);
+      if (Number.isNaN(n)) { setError('Estimated cost must be a number'); return; }
+      payload.estimated_cost = n;
+    }
+    run(
+      () => apiPost<{ id: string }>('/gifts', payload),
+      (result) => {
+        showToast('Gift created', 'success');
+        navigate(`/gifts/${result.data.id}`);
+      },
+    );
+  }
+
+  return (
+    <div class="stack" data-testid="page-new-gift">
+      <PageHeader title="New gift" />
+      {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
+      <form onSubmit={submit}>
+        <Card class="stack">
+          <ContactPicker mode="single" label="Who is this gift for/from?" value={contactId} onChange={setContactId} />
+          <Field label="Name" error={errs.name}>
+            <Input data-testid="new-gift-name" value={name}
+              onInput={(e) => setName((e.target as HTMLInputElement).value)} required />
+          </Field>
+          <div class="form-grid">
+            <Field label="Direction">
+              <Select data-testid="new-gift-direction" value={direction}
+                onChange={(e) => setDirection((e.target as HTMLSelectElement).value as GiftDirection)}>
+                {GIFT_DIRECTIONS.map((d) => <option key={d} value={d}>{d}</option>)}
+              </Select>
+            </Field>
+            <Field label="Status">
+              <Select data-testid="new-gift-status" value={status}
+                onChange={(e) => setStatus((e.target as HTMLSelectElement).value as GiftStatus)}>
+                {GIFT_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+              </Select>
+            </Field>
+            <Field label="Estimated cost">
+              <Input data-testid="new-gift-cost" type="number" min={0} step="0.01" value={cost}
+                onInput={(e) => setCost((e.target as HTMLInputElement).value)} />
+            </Field>
+            <Field label="Currency">
+              <Input data-testid="new-gift-currency" value={currency}
+                onInput={(e) => setCurrency((e.target as HTMLInputElement).value)} placeholder="USD" />
+            </Field>
+            <Field label="Occasion">
+              <Input data-testid="new-gift-occasion" value={occasion}
+                onInput={(e) => setOccasion((e.target as HTMLInputElement).value)} placeholder="birthday, holiday…" />
+            </Field>
+            <Field label="Date">
+              <Input data-testid="new-gift-date" type="date" value={date}
+                onInput={(e) => setDate((e.target as HTMLInputElement).value)} />
+            </Field>
+          </div>
+          <Field label="URL">
+            <Input data-testid="new-gift-url" type="url" value={url}
+              onInput={(e) => setUrl((e.target as HTMLInputElement).value)} placeholder="https://…" />
+          </Field>
+          <Field label="Description">
+            <Textarea data-testid="new-gift-description" value={description}
+              onInput={(e) => setDescription((e.target as HTMLTextAreaElement).value)} />
+          </Field>
+          <div class="row">
+            <Button type="submit" disabled={saving} data-testid="new-gift-submit">
+              {saving ? 'Saving…' : 'Create gift'}
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => window.history.back()} disabled={saving}>
+              Cancel
+            </Button>
+          </div>
+        </Card>
+      </form>
+    </div>
+  );
+}
+
+// ─── New debt ────────────────────────────────────────────────────
+
+const DEBT_DIRECTIONS = ['i_owe_them', 'they_owe_me'] as const;
+type DebtDirection = typeof DEBT_DIRECTIONS[number];
+
+export function NewDebtPage() {
+  const [, navigate] = useLocation();
+  const initial = useQueryParam('contact_id');
+  const [contactId, setContactId] = useState<string | null>(initial ?? null);
+  const [amount, setAmount] = useState('');
+  const [currency, setCurrency] = useState('USD');
+  const [direction, setDirection] = useState<DebtDirection>('they_owe_me');
+  const [reason, setReason] = useState('');
+  const [incurredAt, setIncurredAt] = useState('');
+  const { saving, error, errs, run, setError } = useCreate();
+
+  function submit(e: Event) {
+    e.preventDefault();
+    if (!contactId) { setError('Pick a contact'); return; }
+    const n = Number(amount);
+    if (!amount.trim() || Number.isNaN(n)) { setError('Amount must be a number'); return; }
+    const payload: Record<string, unknown> = { contact_id: contactId, amount: n, direction };
+    if (currency.trim()) payload.currency = currency.trim();
+    if (reason.trim()) payload.reason = reason.trim();
+    if (incurredAt) payload.incurred_at = incurredAt;
+    run(
+      () => apiPost<{ id: string }>('/debts', payload),
+      (result) => {
+        showToast('Debt created', 'success');
+        navigate(`/debts/${result.data.id}`);
+      },
+    );
+  }
+
+  return (
+    <div class="stack" data-testid="page-new-debt">
+      <PageHeader title="New debt" />
+      {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
+      <form onSubmit={submit}>
+        <Card class="stack">
+          <ContactPicker mode="single" label="Who is this debt with?" value={contactId} onChange={setContactId} />
+          <div class="form-grid">
+            <Field label="Direction">
+              <Select data-testid="new-debt-direction" value={direction}
+                onChange={(e) => setDirection((e.target as HTMLSelectElement).value as DebtDirection)}>
+                {DEBT_DIRECTIONS.map((d) => (
+                  <option key={d} value={d}>{d === 'they_owe_me' ? 'They owe me' : 'I owe them'}</option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Amount" error={errs.amount}>
+              <Input data-testid="new-debt-amount" type="number" min={0} step="0.01" value={amount}
+                onInput={(e) => setAmount((e.target as HTMLInputElement).value)} required />
+            </Field>
+            <Field label="Currency">
+              <Input data-testid="new-debt-currency" value={currency}
+                onInput={(e) => setCurrency((e.target as HTMLInputElement).value)} placeholder="USD" />
+            </Field>
+            <Field label="Incurred">
+              <Input data-testid="new-debt-incurred" type="date" value={incurredAt}
+                onInput={(e) => setIncurredAt((e.target as HTMLInputElement).value)} />
+            </Field>
+          </div>
+          <Field label="Reason">
+            <Input data-testid="new-debt-reason" value={reason}
+              onInput={(e) => setReason((e.target as HTMLInputElement).value)} placeholder="What's this for?" />
+          </Field>
+          <div class="row">
+            <Button type="submit" disabled={saving} data-testid="new-debt-submit">
+              {saving ? 'Saving…' : 'Create debt'}
             </Button>
             <Button type="button" variant="secondary" onClick={() => window.history.back()} disabled={saving}>
               Cancel

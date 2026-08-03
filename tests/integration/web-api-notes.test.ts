@@ -114,6 +114,24 @@ describe('Notes internal API (/web/api/notes)', () => {
     expect(restore.status).toBe(200);
   });
 
+
+
+  it('lists notes across contacts for the overview page', async () => {
+    server = createServer(persistent);
+    const c = await makeClient(server);
+    const bingoId = await makeContact(c, 'Bingo');
+    const chilliId = await makeContact(c, 'Chilli');
+    await c.mutate('POST', '/web/api/notes', { contact_id: bingoId, title: 'Bingo note', body: 'Likes creek walks' });
+    await c.mutate('POST', '/web/api/notes', { contact_id: chilliId, title: 'Chilli note', body: 'Likes hockey' });
+
+    const list = await c.get('/web/api/notes?per_page=10');
+    expect(list.status).toBe(200);
+    const body = JSON.parse(list.body);
+    expect(body.meta.total).toBe(2);
+    expect(body.data.map((n: any) => n.title)).toEqual(expect.arrayContaining(['Bingo note', 'Chilli note']));
+    expect(body.data.every((n: any) => typeof n.contact_name === 'string')).toBe(true);
+  });
+
   it('returns 404 for a missing note', async () => {
     server = createServer(persistent);
     const c = await makeClient(server);

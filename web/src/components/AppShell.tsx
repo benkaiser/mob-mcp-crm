@@ -40,6 +40,19 @@ const NAV: NavItem[] = [
       { href: '/contacts/duplicates', label: 'Duplicates', match: '/contacts/duplicates' },
     ],
   },
+  {
+    href: '/activities',
+    label: 'Timeline',
+    match: '/activities',
+    children: [
+      { href: '/activities', label: 'Activities', match: '/activities' },
+      { href: '/notes', label: 'Notes', match: '/notes' },
+      { href: '/reminders', label: 'Reminders', match: '/reminders' },
+      { href: '/tasks', label: 'Tasks', match: '/tasks' },
+      { href: '/debts', label: 'Debts', match: '/debts' },
+      { href: '/gifts', label: 'Gifts', match: '/gifts' },
+    ],
+  },
   { href: '/search', label: 'Search', match: '/search' },
   { href: '/import', label: 'Import', match: '/import' },
   { href: '/data', label: 'Data', match: '/data' },
@@ -413,6 +426,12 @@ export function AppShell({ children }: { children: ComponentChildren }) {
             </Link>
             <Link href="/tasks/new" class="sidebar__quick-link" data-testid="sidebar-new-task">
               <span aria-hidden="true">+</span> Task
+            </Link>
+            <Link href="/debts/new" class="sidebar__quick-link" data-testid="sidebar-new-debt">
+              <span aria-hidden="true">+</span> Debt
+            </Link>
+            <Link href="/gifts/new" class="sidebar__quick-link" data-testid="sidebar-new-gift">
+              <span aria-hidden="true">+</span> Gift
             </Link>
           </div>
           <nav class="sidebar__nav">
