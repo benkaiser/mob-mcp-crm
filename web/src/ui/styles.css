@@ -714,7 +714,9 @@ input[type="file"]::file-selector-button:hover { background: var(--color-hover);
 /* Dashboard grid. */
 .grid-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-4); }
 .counts-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--space-3); }
-.count-tile { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius); padding: var(--space-3); text-align: center; }
+.count-tile { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius); padding: var(--space-3); text-align: center; text-decoration: none; color: inherit; transition: border-color 0.15s, background 0.15s; }
+a.count-tile:hover { background: var(--color-hover); border-color: var(--color-primary); text-decoration: none; }
+a.count-tile:hover .count-tile__num, a.count-tile:hover .count-tile__label { text-decoration: none; }
 .count-tile__icon { display: inline-flex; color: var(--color-primary); margin-bottom: var(--space-1); }
 .count-tile__num { font-size: var(--text-xl); font-weight: 700; }
 .count-tile__label { font-size: var(--text-sm); color: var(--color-text-muted); }
