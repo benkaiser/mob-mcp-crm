@@ -15,6 +15,7 @@ import { ContactDuplicates } from './pages/contacts/ContactDuplicates';
 import { TagPage } from './pages/tags/TagPage';
 import { SearchPage } from './pages/Search';
 import { Settings } from './pages/Settings';
+import { AuditLogPage } from './pages/AuditLog';
 import { DataExport } from './pages/DataExport';
 import { ImportPage } from './pages/ImportPage';
 import { EntityDetail } from './pages/EntityDetail';
@@ -87,6 +88,7 @@ function RoutedContent() {
             <Route path="/import" component={ImportPage} />
             <Route path="/data" component={DataExport} />
             <Route path="/settings" component={Settings} />
+            <Route path="/activity-log" component={AuditLogPage} />
             {/* "+ New" pages — registered BEFORE the /:id routes so /notes/new
                 etc. match the focused-creation page, not the detail view. */}
             <Route path="/notes/new" component={NewNotePage} />

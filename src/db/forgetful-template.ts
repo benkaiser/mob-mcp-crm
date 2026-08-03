@@ -75,6 +75,7 @@ export class ForgetfulTemplate {
       'notifications',
       'tasks',
       'authorization_log',
+      'audit_logs',
     ];
 
     for (const table of tablesWithUserId) {

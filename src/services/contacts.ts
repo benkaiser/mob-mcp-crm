@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { generateId } from '../utils.js';
+import { recordAudit } from './audit-helper.js';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -252,7 +253,9 @@ export class ContactService {
       now, now,
     );
 
-    return this.get(userId, id)!;
+    const created = this.get(userId, id)!;
+    recordAudit(this.db, userId, 'contact', id, 'create', undefined, created);
+    return created;
   }
 
   get(userId: string, contactId: string): Contact | null {
@@ -344,15 +347,14 @@ export class ContactService {
       WHERE id = ? AND user_id = ? AND deleted_at IS NULL
     `).run(...values);
 
-    return this.get(userId, contactId);
+    const updated = this.get(userId, contactId);
+    if (updated) recordAudit(this.db, userId, 'contact', contactId, 'update', existing, updated);
+    return updated;
   }
 
   softDelete(userId: string, contactId: string): boolean {
     // Check if this is a self-contact (is_me = 1) — cannot be deleted
-    const contact = this.db.prepare(`
-      SELECT is_me FROM contacts
-      WHERE id = ? AND user_id = ? AND deleted_at IS NULL
-    `).get(contactId, userId) as { is_me: number } | undefined;
+    const contact = this.get(userId, contactId);
 
     if (contact && contact.is_me) {
       throw new Error('Cannot delete your own contact record');
@@ -364,7 +366,9 @@ export class ContactService {
       WHERE id = ? AND user_id = ? AND deleted_at IS NULL
     `).run(contactId, userId);
 
-    return result.changes > 0;
+    const deleted = result.changes > 0;
+    if (deleted && contact) recordAudit(this.db, userId, 'contact', contactId, 'delete', contact, undefined);
+    return deleted;
   }
 
   restore(userId: string, contactId: string): Contact {
@@ -939,6 +943,8 @@ export class ContactService {
     doMerge();
 
     const mergedContact = this.get(userId, primaryId)!;
+    recordAudit(this.db, userId, 'contact', primaryId, 'update', primary, mergedContact);
+    recordAudit(this.db, userId, 'contact', secondaryId, 'delete', secondary, undefined);
     return { contact: mergedContact, summary };
   }
 

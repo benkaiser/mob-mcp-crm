@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { generateId } from '../utils.js';
+import { recordAudit } from './audit-helper.js';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -70,7 +71,9 @@ export class TaskService {
       input.description ?? null, input.due_date ?? null,
       input.priority ?? 'medium', now, now);
 
-    return this.getById(userId, id)!;
+    const created = this.getById(userId, id)!;
+    recordAudit(this.db, userId, 'task', id, 'create', undefined, created);
+    return created;
   }
 
   get(userId: string, id: string): Task | null {
@@ -91,13 +94,16 @@ export class TaskService {
     if (input.priority !== undefined) { fields.push('priority = ?'); values.push(input.priority); }
     if (input.status !== undefined) { fields.push('status = ?'); values.push(input.status); }
 
-    if (fields.length > 0) {
+    const didChange = fields.length > 0;
+    if (didChange) {
       fields.push("updated_at = datetime('now')");
       values.push(id, userId);
       this.db.prepare(`UPDATE tasks SET ${fields.join(', ')} WHERE id = ? AND user_id = ? AND deleted_at IS NULL`).run(...values);
     }
 
-    return this.getById(userId, id);
+    const updated = this.getById(userId, id);
+    if (didChange && updated) recordAudit(this.db, userId, 'task', id, 'update', existing, updated);
+    return updated;
   }
 
   complete(userId: string, id: string): Task | null {
@@ -109,15 +115,22 @@ export class TaskService {
       WHERE id = ? AND user_id = ? AND deleted_at IS NULL
     `).run(id, userId);
 
-    return this.getById(userId, id);
+    const updated = this.getById(userId, id);
+    if (updated) recordAudit(this.db, userId, 'task', id, 'update', existing, updated);
+    return updated;
   }
 
   softDelete(userId: string, id: string): boolean {
+    const existing = this.getById(userId, id);
+    if (!existing) return false;
+
     const result = this.db.prepare(`
       UPDATE tasks SET deleted_at = datetime('now'), updated_at = datetime('now')
       WHERE id = ? AND user_id = ? AND deleted_at IS NULL
     `).run(id, userId);
-    return result.changes > 0;
+    const deleted = result.changes > 0;
+    if (deleted) recordAudit(this.db, userId, 'task', id, 'delete', existing, undefined);
+    return deleted;
   }
 
   restore(userId: string, id: string): Task {

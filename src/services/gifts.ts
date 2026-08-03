@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { generateId } from '../utils.js';
+import { recordAudit } from './audit-helper.js';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -84,7 +85,9 @@ export class GiftService {
       input.occasion ?? null, input.status ?? 'idea', input.direction,
       input.date ?? null, now, now);
 
-    return this.getById(userId, id)!;
+    const created = this.getById(userId, id)!;
+    recordAudit(this.db, userId, 'gift', id, 'create', undefined, created);
+    return created;
   }
 
   get(userId: string, id: string): Gift | null {
@@ -108,13 +111,16 @@ export class GiftService {
     if (input.direction !== undefined) { fields.push('direction = ?'); values.push(input.direction); }
     if (input.date !== undefined) { fields.push('date = ?'); values.push(input.date); }
 
-    if (fields.length > 0) {
+    const didChange = fields.length > 0;
+    if (didChange) {
       fields.push("updated_at = datetime('now')");
       values.push(id);
       this.db.prepare(`UPDATE gifts SET ${fields.join(', ')} WHERE id = ? AND deleted_at IS NULL`).run(...values);
     }
 
-    return this.getById(userId, id);
+    const updated = this.getById(userId, id);
+    if (didChange && updated) recordAudit(this.db, userId, 'gift', id, 'update', existing, updated);
+    return updated;
   }
 
   softDelete(userId: string, id: string): boolean {
@@ -126,7 +132,9 @@ export class GiftService {
       UPDATE gifts SET deleted_at = datetime('now'), updated_at = datetime('now')
       WHERE id = ? AND deleted_at IS NULL
     `).run(id);
-    return result.changes > 0;
+    const deleted = result.changes > 0;
+    if (deleted) recordAudit(this.db, userId, 'gift', id, 'delete', existing, undefined);
+    return deleted;
   }
 
   restore(userId: string, id: string): Gift {

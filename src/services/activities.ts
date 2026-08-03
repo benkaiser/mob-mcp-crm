@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { generateId } from '../utils.js';
+import { recordAudit } from './audit-helper.js';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -94,7 +95,9 @@ export class ActivityService {
     });
 
     transaction();
-    return this.get(userId, id)!;
+    const created = this.get(userId, id)!;
+    recordAudit(this.db, userId, 'activity', id, 'create', undefined, created);
+    return created;
   }
 
   get(userId: string, activityId: string): Activity | null {
@@ -122,6 +125,7 @@ export class ActivityService {
     if (input.location !== undefined) { fields.push('location = ?'); values.push(input.location); }
     if (input.activity_type_id !== undefined) { fields.push('activity_type_id = ?'); values.push(input.activity_type_id); }
 
+    const didChange = fields.length > 0 || input.participant_contact_ids !== undefined;
     const transaction = this.db.transaction(() => {
       if (fields.length > 0) {
         fields.push("updated_at = datetime('now')");
@@ -139,15 +143,22 @@ export class ActivityService {
     });
 
     transaction();
-    return this.get(userId, activityId);
+    const updated = this.get(userId, activityId);
+    if (didChange && updated) recordAudit(this.db, userId, 'activity', activityId, 'update', existing, updated);
+    return updated;
   }
 
   softDelete(userId: string, activityId: string): boolean {
+    const existing = this.get(userId, activityId);
+    if (!existing) return false;
+
     const result = this.db.prepare(`
       UPDATE activities SET deleted_at = datetime('now'), updated_at = datetime('now')
       WHERE id = ? AND user_id = ? AND deleted_at IS NULL
     `).run(activityId, userId);
-    return result.changes > 0;
+    const deleted = result.changes > 0;
+    if (deleted) recordAudit(this.db, userId, 'activity', activityId, 'delete', existing, undefined);
+    return deleted;
   }
 
   restore(userId: string, activityId: string): Activity {
@@ -347,7 +358,9 @@ export class ActivityTypeService {
       VALUES (?, ?, ?, ?, ?)
     `).run(id, userId, name, category ?? null, icon ?? null);
 
-    return this.db.prepare('SELECT * FROM activity_types WHERE id = ?').get(id) as ActivityType;
+    const created = this.db.prepare('SELECT * FROM activity_types WHERE id = ?').get(id) as ActivityType;
+    recordAudit(this.db, userId, 'activity_type', id, 'create', undefined, created);
+    return created;
   }
 
   list(userId: string): ActivityType[] {
@@ -376,7 +389,9 @@ export class ActivityTypeService {
       ).run(...values);
     }
 
-    return this.db.prepare('SELECT * FROM activity_types WHERE id = ?').get(typeId) as ActivityType;
+    const updated = this.db.prepare('SELECT * FROM activity_types WHERE id = ?').get(typeId) as ActivityType;
+    if (fields.length > 0) recordAudit(this.db, userId, 'activity_type', typeId, 'update', existing, updated);
+    return updated;
   }
 
   delete(userId: string, typeId: string): { deleted: boolean; warning?: string } {
@@ -392,6 +407,7 @@ export class ActivityTypeService {
     this.db.prepare(
       'DELETE FROM activity_types WHERE id = ? AND user_id = ?'
     ).run(typeId, userId);
+    recordAudit(this.db, userId, 'activity_type', typeId, 'delete', existing, undefined);
 
     const result: { deleted: boolean; warning?: string } = { deleted: true };
     if (usageCount > 0) {

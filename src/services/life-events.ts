@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { generateId } from '../utils.js';
+import { recordAudit } from './audit-helper.js';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -80,7 +81,9 @@ export class LifeEventService {
     });
 
     transaction();
-    return this.getById(userId, id)!;
+    const created = this.getById(userId, id)!;
+    recordAudit(this.db, userId, 'life_event', id, 'create', undefined, created);
+    return created;
   }
 
   get(userId: string, eventId: string): LifeEvent | null {
@@ -99,6 +102,7 @@ export class LifeEventService {
     if (input.description !== undefined) { fields.push('description = ?'); values.push(input.description); }
     if (input.occurred_at !== undefined) { fields.push('occurred_at = ?'); values.push(input.occurred_at); }
 
+    const didChange = fields.length > 0 || input.related_contact_ids !== undefined;
     const transaction = this.db.transaction(() => {
       if (fields.length > 0) {
         fields.push("updated_at = datetime('now')");
@@ -118,7 +122,9 @@ export class LifeEventService {
     });
 
     transaction();
-    return this.getById(userId, id);
+    const updated = this.getById(userId, id);
+    if (didChange && updated) recordAudit(this.db, userId, 'life_event', id, 'update', existing, updated);
+    return updated;
   }
 
   softDelete(userId: string, id: string): boolean {
@@ -130,7 +136,9 @@ export class LifeEventService {
       UPDATE life_events SET deleted_at = datetime('now'), updated_at = datetime('now')
       WHERE id = ? AND deleted_at IS NULL
     `).run(id);
-    return result.changes > 0;
+    const deleted = result.changes > 0;
+    if (deleted) recordAudit(this.db, userId, 'life_event', id, 'delete', existing, undefined);
+    return deleted;
   }
 
   restore(userId: string, id: string): LifeEvent {

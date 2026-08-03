@@ -69,6 +69,8 @@ export function Dashboard() {
           </div>
 
           <div class="grid-cards">
+            <StreakCard streak={data.streak} />
+
             <Card>
               <h2><Link href="/reminders">Upcoming reminders</Link></h2>
               {data.upcoming_reminders.length === 0 ? (
@@ -169,6 +171,41 @@ export function Dashboard() {
       )}
     </div>
   );
+}
+
+function StreakCard({ streak }: { streak: DashboardData['streak'] }) {
+  return (
+    <Card class="streak-card" data-testid="dashboard-streak-card">
+      <div class="streak-card__head">
+        <div>
+          <h2>Streak</h2>
+          <p class="muted">Days with CRM activity</p>
+        </div>
+        <div class="streak-card__number" data-testid="dashboard-streak-number">
+          <span aria-hidden="true">🔥</span>
+          <strong>{streak.current_streak}</strong>
+          <span>{streak.current_streak === 1 ? 'day streak' : 'day streak'}</span>
+        </div>
+      </div>
+      <div class="streak-chart" aria-label="Last 7 days activity">
+        {streak.days.map((day) => (
+          <div key={day.date} class="streak-chart__item">
+            <div
+              class={`streak-chart__cell${day.active ? ' streak-chart__cell--active' : ''}`}
+              title={`${weekdayLabel(day.date)} ${day.active ? 'active' : 'inactive'}`}
+              data-testid="dashboard-streak-day"
+              data-active={day.active ? 'true' : 'false'}
+            />
+            <span>{weekdayLabel(day.date)}</span>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function weekdayLabel(date: string): string {
+  return new Intl.DateTimeFormat(undefined, { weekday: 'short', timeZone: 'UTC' }).format(new Date(`${date}T00:00:00Z`));
 }
 
 function CountTile({ label, num, href, icon }: { label: string; num: number; href?: string; icon?: IconName }) {

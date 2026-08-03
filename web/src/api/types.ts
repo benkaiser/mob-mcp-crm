@@ -347,6 +347,16 @@ export interface DashboardCounts {
   gift_ideas: number;
 }
 
+export interface AuditStreakDay {
+  date: string;
+  active: boolean;
+}
+
+export interface AuditStreak {
+  days: AuditStreakDay[];
+  current_streak: number;
+}
+
 export interface DashboardData {
   upcoming_reminders: UpcomingReminder[];
   upcoming_birthdays: UpcomingBirthday[];
@@ -354,6 +364,22 @@ export interface DashboardData {
   open_tasks: Task[];
   debt_summary: { by_currency: DebtByCurrency[]; active_count: number };
   counts: DashboardCounts;
+  streak: AuditStreak;
+}
+
+// ─── Audit log payload ───────────────────────────────────────────
+
+export type AuditAction = 'create' | 'update' | 'delete';
+
+export interface AuditLogEntry {
+  id: string;
+  user_id: string;
+  entity_type: string;
+  entity_id: string;
+  action: AuditAction;
+  old_values: Record<string, unknown> | null;
+  new_values: Record<string, unknown> | null;
+  created_at: string;
 }
 
 // ─── Search payload ─────────────────────────────────────────────

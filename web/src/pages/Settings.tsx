@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'preact/hooks';
+import { Link } from 'wouter-preact';
 import { Card, Badge, Button, Spinner, EmptyState, ErrorBanner, Modal, ConfirmDialog, Field, Input, Select, CopyField, showToast } from '../ui';
 import { user } from '../store/session';
 import { loadSession } from '../store/session';
@@ -72,9 +73,24 @@ export function Settings() {
       <PushSection />
       <ConnectionsSection />
       <SessionsSection />
+      <ActivityLogSection />
       <ExportSection />
       <DangerZoneSection />
     </div>
+  );
+}
+
+function ActivityLogSection() {
+  return (
+    <Card class="section" data-testid="settings-activity-log">
+      <div class="section__head"><h2>Activity log</h2></div>
+      <p class="muted">
+        Review recent creates, updates and deletes across your CRM, including old values captured for future restore tools.
+      </p>
+      <Link href="/activity-log" class="btn btn--secondary" data-testid="settings-activity-log-link">
+        View activity log
+      </Link>
+    </Card>
   );
 }
 

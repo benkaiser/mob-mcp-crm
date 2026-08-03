@@ -718,6 +718,39 @@ input[type="file"]::file-selector-button:hover { background: var(--color-hover);
 .count-tile__icon { display: inline-flex; color: var(--color-primary); margin-bottom: var(--space-1); }
 .count-tile__num { font-size: var(--text-xl); font-weight: 700; }
 .count-tile__label { font-size: var(--text-sm); color: var(--color-text-muted); }
+.streak-card { display: flex; flex-direction: column; gap: var(--space-4); }
+.streak-card__head { display: flex; justify-content: space-between; gap: var(--space-3); align-items: flex-start; }
+.streak-card__head h2 { margin-bottom: var(--space-1); }
+.streak-card__head p { margin: 0; }
+.streak-card__number {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, var(--color-warning-bg), var(--color-primary-soft));
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  white-space: nowrap;
+}
+.streak-card__number strong { font-size: var(--text-xl); line-height: 1; }
+.streak-card__number span:last-child { color: var(--color-text-muted); font-size: var(--text-sm); font-weight: 700; }
+.streak-chart { display: grid; grid-template-columns: repeat(7, 1fr); gap: var(--space-2); }
+.streak-chart__item { display: flex; flex-direction: column; align-items: center; gap: var(--space-1); min-width: 0; }
+.streak-chart__cell {
+  width: 100%;
+  min-width: 1.6rem;
+  height: 3.2rem;
+  border-radius: var(--radius);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+}
+.streak-chart__cell--active {
+  background: var(--brand-gradient);
+  border-color: transparent;
+  box-shadow: 0 4px 12px var(--color-primary-shadow);
+}
+.streak-chart__item span { font-size: 0.75rem; color: var(--color-text-muted); font-weight: 700; }
 .warning-banner {
   background: var(--color-warning-bg); color: var(--color-warning);
   border: 1px solid var(--color-warning); border-radius: var(--radius);
@@ -857,6 +890,22 @@ input[type="file"]::file-selector-button:hover { background: var(--color-hover);
   font-size: var(--text-sm);
 }
 .delivery-row:last-child { border-bottom: none; }
+
+.audit-log-list { display: flex; flex-direction: column; gap: var(--space-2); }
+.audit-log-row {
+  display: grid;
+  grid-template-columns: minmax(9rem, 12rem) 1fr;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.audit-log-row:last-child { border-bottom: none; }
+.audit-log-row__time { color: var(--color-text-muted); font-size: var(--text-sm); }
+.audit-log-row__body { min-width: 0; }
+.audit-log-row__summary { margin-top: var(--space-1); font-size: var(--text-sm); }
+@media (max-width: 640px) {
+  .audit-log-row { grid-template-columns: 1fr; gap: var(--space-1); }
+}
 
 .field-checks { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); }
 .field-checks label { display: inline-flex; align-items: center; gap: var(--space-1); font-size: var(--text-sm); }

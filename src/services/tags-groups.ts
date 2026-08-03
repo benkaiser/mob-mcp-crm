@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { generateId } from '../utils.js';
+import { recordAudit, userIdForContact } from './audit-helper.js';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -32,7 +33,9 @@ export class TagService {
       VALUES (?, ?, ?)
     `).run(id, userId, name);
 
-    return this.db.prepare('SELECT * FROM tags WHERE id = ?').get(id) as Tag;
+    const created = this.db.prepare('SELECT * FROM tags WHERE id = ?').get(id) as Tag;
+    recordAudit(this.db, userId, 'tag', id, 'create', undefined, created);
+    return created;
   }
 
   update(userId: string, tagId: string, updates: { name?: string }): Tag | null {
@@ -51,14 +54,23 @@ export class TagService {
 
     values.push(tagId);
     this.db.prepare(`UPDATE tags SET ${fields.join(', ')} WHERE id = ?`).run(...values);
-    return this.db.prepare('SELECT * FROM tags WHERE id = ?').get(tagId) as Tag;
+    const updated = this.db.prepare('SELECT * FROM tags WHERE id = ?').get(tagId) as Tag;
+    recordAudit(this.db, userId, 'tag', tagId, 'update', existing, updated);
+    return updated;
   }
 
   delete(userId: string, tagId: string): boolean {
+    const existing = this.db.prepare(
+      'SELECT * FROM tags WHERE id = ? AND user_id = ?'
+    ).get(tagId, userId) as Tag | undefined;
+    if (!existing) return false;
+
     const result = this.db.prepare(
       'DELETE FROM tags WHERE id = ? AND user_id = ?'
     ).run(tagId, userId);
-    return result.changes > 0;
+    const deleted = result.changes > 0;
+    if (deleted) recordAudit(this.db, userId, 'tag', tagId, 'delete', existing, undefined);
+    return deleted;
   }
 
   list(userId: string): Tag[] {
@@ -82,6 +94,7 @@ export class TagService {
       this.db.prepare(
         'INSERT INTO contact_tags (contact_id, tag_id) VALUES (?, ?)'
       ).run(contactId, tag.id);
+      recordAudit(this.db, userId, 'contact_tag', `${contactId}:${tag.id}`, 'create', undefined, { contact_id: contactId, tag_id: tag.id });
     }
 
     return tag;
@@ -91,10 +104,16 @@ export class TagService {
    * Remove a tag from a contact.
    */
   untagContact(contactId: string, tagId: string): boolean {
+    const tag = this.db.prepare('SELECT * FROM tags WHERE id = ?').get(tagId) as Tag | undefined;
     const result = this.db.prepare(
       'DELETE FROM contact_tags WHERE contact_id = ? AND tag_id = ?'
     ).run(contactId, tagId);
-    return result.changes > 0;
+    const deleted = result.changes > 0;
+    const userId = userIdForContact(this.db, contactId);
+    if (deleted && userId) {
+      recordAudit(this.db, userId, 'contact_tag', `${contactId}:${tagId}`, 'delete', { contact_id: contactId, tag_id: tagId, tag_name: tag?.name }, undefined);
+    }
+    return deleted;
   }
 
   /**

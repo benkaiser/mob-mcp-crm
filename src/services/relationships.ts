@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { generateId } from '../utils.js';
+import { recordAudit, userIdForContact } from './audit-helper.js';
 
 // ─── Relationship Type Map ──────────────────────────────────────
 
@@ -271,12 +272,18 @@ export class CustomRelationshipTypeService {
       throw err;
     }
 
-    return this.get(userId, id)!;
+    const created = this.get(userId, id)!;
+    recordAudit(this.db, userId, 'custom_relationship_type', id, 'create', undefined, created);
+    return created;
   }
 
   delete(userId: string, id: string): boolean {
+    const existing = this.get(userId, id);
+    if (!existing) return false;
     const result = this.db.prepare('DELETE FROM custom_relationship_types WHERE id = ? AND user_id = ?').run(id, userId);
-    return result.changes > 0;
+    const deleted = result.changes > 0;
+    if (deleted) recordAudit(this.db, userId, 'custom_relationship_type', id, 'delete', existing, undefined);
+    return deleted;
   }
 
   update(userId: string, id: string, input: UpdateCustomRelationshipTypeInput): CustomRelationshipType | null {
@@ -309,7 +316,9 @@ export class CustomRelationshipTypeService {
       throw err;
     }
 
-    return this.get(userId, id);
+    const updated = this.get(userId, id);
+    if (updated) recordAudit(this.db, userId, 'custom_relationship_type', id, 'update', existing, updated);
+    return updated;
   }
 
 
@@ -407,7 +416,11 @@ export class RelationshipService {
       throw err;
     }
 
-    return this.getById(forwardId)!;
+    const forward = this.getById(forwardId)!;
+    const inverse = this.getById(inverseId)!;
+    recordAudit(this.db, contact.user_id, 'relationship', forwardId, 'create', undefined, forward);
+    recordAudit(this.db, contact.user_id, 'relationship', inverseId, 'create', undefined, inverse);
+    return forward;
   }
 
   /**
@@ -416,6 +429,11 @@ export class RelationshipService {
   update(id: string, input: UpdateRelationshipInput): Relationship | null {
     const existing = this.getById(id);
     if (!existing) return null;
+    const userId = userIdForContact(this.db, existing.contact_id);
+    const inverseExisting = this.db.prepare(`
+      SELECT * FROM relationships
+      WHERE contact_id = ? AND related_contact_id = ?
+    `).get(existing.related_contact_id, existing.contact_id) as Relationship | undefined;
 
     const fields: string[] = [];
     const values: any[] = [];
@@ -476,7 +494,13 @@ export class RelationshipService {
       throw err;
     }
 
-    return this.getById(id);
+    const updated = this.getById(id);
+    if (userId && updated) recordAudit(this.db, userId, 'relationship', id, 'update', existing, updated);
+    if (userId && inverseExisting) {
+      const inverseUpdated = this.getById(inverseExisting.id);
+      if (inverseUpdated) recordAudit(this.db, userId, 'relationship', inverseExisting.id, 'update', inverseExisting, inverseUpdated);
+    }
+    return updated;
   }
 
   updateForContact(contactId: string, id: string, input: UpdateRelationshipInput): Relationship | null {
@@ -491,6 +515,11 @@ export class RelationshipService {
   remove(id: string): boolean {
     const existing = this.getById(id);
     if (!existing) return false;
+    const userId = userIdForContact(this.db, existing.contact_id);
+    const inverseExisting = this.db.prepare(`
+      SELECT * FROM relationships
+      WHERE contact_id = ? AND related_contact_id = ?
+    `).get(existing.related_contact_id, existing.contact_id) as Relationship | undefined;
 
     const transaction = this.db.transaction(() => {
       // Remove forward
@@ -503,6 +532,12 @@ export class RelationshipService {
     });
 
     transaction();
+    if (userId) {
+      recordAudit(this.db, userId, 'relationship', id, 'delete', existing, undefined);
+      if (inverseExisting) {
+        recordAudit(this.db, userId, 'relationship', inverseExisting.id, 'delete', inverseExisting, undefined);
+      }
+    }
     return true;
   }
 

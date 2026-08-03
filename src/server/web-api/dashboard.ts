@@ -6,6 +6,7 @@ import { ActivityService } from '../../services/activities.js';
 import { TaskService } from '../../services/tasks.js';
 import { DebtService } from '../../services/debts.js';
 import { DataExportService } from '../../services/data-export.js';
+import { AuditService } from '../../services/audit.js';
 import { asyncHandler, sendData, getUserId } from './helpers.js';
 
 /**
@@ -23,6 +24,7 @@ export function createDashboardRouter(db: Database.Database): Router {
   const tasks = new TaskService(db);
   const debts = new DebtService(db);
   const exporter = new DataExportService(db);
+  const audit = new AuditService(db);
 
   // GET / — composed dashboard payload.
   router.get('/', asyncHandler((req, res) => {
@@ -54,6 +56,7 @@ export function createDashboardRouter(db: Database.Database): Router {
     }
 
     const stats = exporter.getStatistics(userId);
+    const streak = audit.getStreak(userId);
     const counts = {
       contacts: stats.total_contacts,
       active_contacts: stats.active_contacts,
@@ -76,6 +79,7 @@ export function createDashboardRouter(db: Database.Database): Router {
         active_count: activeDebts.length,
       },
       counts,
+      streak,
     });
   }));
 

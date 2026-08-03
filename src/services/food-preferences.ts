@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { generateId } from '../utils.js';
+import { recordAudit, userIdForContact } from './audit-helper.js';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -67,7 +68,20 @@ export class FoodPreferencesService {
       );
     }
 
-    return this.get(input.contact_id)!;
+    const saved = this.get(input.contact_id)!;
+    const userId = userIdForContact(this.db, input.contact_id);
+    if (userId) {
+      recordAudit(
+        this.db,
+        userId,
+        'food_preferences',
+        saved.id,
+        existing ? 'update' : 'create',
+        existing ?? undefined,
+        saved,
+      );
+    }
+    return saved;
   }
 
   private mapRow(row: any): FoodPreferences {

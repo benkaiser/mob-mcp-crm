@@ -70,6 +70,9 @@ describe('Dashboard / Search / Export internal API', () => {
     expect(data).toHaveProperty('recent_activities');
     expect(data).toHaveProperty('open_tasks');
     expect(data).toHaveProperty('debt_summary');
+    expect(data).toHaveProperty('streak');
+    expect(data.streak.days).toHaveLength(7);
+    expect(data.streak.current_streak).toBeGreaterThanOrEqual(1);
     expect(data.debt_summary).toHaveProperty('by_currency');
     expect(data.counts.contacts).toBe(before + 1);
   });

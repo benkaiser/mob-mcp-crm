@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { generateId } from '../utils.js';
+import { recordAudit } from './audit-helper.js';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -79,7 +80,9 @@ export class DebtService {
     `).run(id, input.contact_id, input.amount, input.currency ?? 'USD',
       input.direction, input.reason ?? null, input.incurred_at ?? null, now, now);
 
-    return this.getById(userId, id)!;
+    const created = this.getById(userId, id)!;
+    recordAudit(this.db, userId, 'debt', id, 'create', undefined, created);
+    return created;
   }
 
   get(userId: string, id: string): Debt | null {
@@ -99,13 +102,16 @@ export class DebtService {
     if (input.reason !== undefined) { fields.push('reason = ?'); values.push(input.reason); }
     if (input.incurred_at !== undefined) { fields.push('incurred_at = ?'); values.push(input.incurred_at); }
 
-    if (fields.length > 0) {
+    const didChange = fields.length > 0;
+    if (didChange) {
       fields.push("updated_at = datetime('now')");
       values.push(id);
       this.db.prepare(`UPDATE debts SET ${fields.join(', ')} WHERE id = ? AND deleted_at IS NULL`).run(...values);
     }
 
-    return this.getById(userId, id);
+    const updated = this.getById(userId, id);
+    if (didChange && updated) recordAudit(this.db, userId, 'debt', id, 'update', existing, updated);
+    return updated;
   }
 
   settle(userId: string, id: string): Debt | null {
@@ -129,7 +135,9 @@ export class DebtService {
       UPDATE debts SET deleted_at = datetime('now'), updated_at = datetime('now')
       WHERE id = ? AND deleted_at IS NULL
     `).run(id);
-    return result.changes > 0;
+    const deleted = result.changes > 0;
+    if (deleted) recordAudit(this.db, userId, 'debt', id, 'delete', existing, undefined);
+    return deleted;
   }
 
   restore(userId: string, id: string): Debt {

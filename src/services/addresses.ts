@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { generateId } from '../utils.js';
+import { recordAudit, userIdForContact } from './audit-helper.js';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -67,7 +68,10 @@ export class AddressService {
       input.is_primary ? 1 : 0, now, now,
     );
 
-    return this.getById(id)!;
+    const created = this.getById(id)!;
+    const userId = userIdForContact(this.db, input.contact_id);
+    if (userId) recordAudit(this.db, userId, 'address', id, 'create', undefined, created);
+    return created;
   }
 
   update(id: string, input: UpdateAddressInput): Address | null {
@@ -99,7 +103,10 @@ export class AddressService {
     values.push(id);
 
     this.db.prepare(`UPDATE addresses SET ${fields.join(', ')} WHERE id = ?`).run(...values);
-    return this.getById(id);
+    const updated = this.getById(id);
+    const userId = userIdForContact(this.db, existing.contact_id);
+    if (userId && updated) recordAudit(this.db, userId, 'address', id, 'update', existing, updated);
+    return updated;
   }
 
   updateForContact(contactId: string, id: string, input: UpdateAddressInput): Address | null {
@@ -109,13 +116,19 @@ export class AddressService {
   }
 
   remove(id: string): boolean {
+    const existing = this.getById(id);
+    if (!existing) return false;
     const result = this.db.prepare('DELETE FROM addresses WHERE id = ?').run(id);
-    return result.changes > 0;
+    const deleted = result.changes > 0;
+    const userId = userIdForContact(this.db, existing.contact_id);
+    if (deleted && userId) recordAudit(this.db, userId, 'address', id, 'delete', existing, undefined);
+    return deleted;
   }
 
   removeForContact(contactId: string, id: string): boolean {
-    const result = this.db.prepare('DELETE FROM addresses WHERE id = ? AND contact_id = ?').run(id, contactId);
-    return result.changes > 0;
+    const existing = this.getById(id);
+    if (!existing || existing.contact_id !== contactId) return false;
+    return this.remove(id);
   }
 
   listByContact(contactId: string): Address[] {

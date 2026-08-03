@@ -27,6 +27,7 @@ import { createContactRelationshipsRouter } from './contact-relationships.js';
 import { createRelationshipTypesRouter } from './relationship-types.js';
 import { createContactTagsRouter } from './contact-tags.js';
 import { createDashboardRouter } from './dashboard.js';
+import { createAuditLogRouter } from './audit-log.js';
 import { createSearchRouter } from './search.js';
 import { createExportRouter } from './export.js';
 import { createImportRouter } from './import.js';
@@ -147,6 +148,7 @@ export function createWebApiRouter(deps: WebApiDeps): Router {
   router.use('/tags', createTagsRouter(db));
   router.use('/relationship-types', createRelationshipTypesRouter(db, forgetful));
   router.use('/dashboard', createDashboardRouter(db));
+  router.use('/audit-log', createAuditLogRouter(db));
   router.use('/search', createSearchRouter(db));
   router.use('/export', createExportRouter(db));
   router.use('/import', createImportRouter(db, planService));

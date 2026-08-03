@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { generateId } from '../utils.js';
+import { recordAudit } from './audit-helper.js';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -57,7 +58,9 @@ export class NoteService {
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(id, input.contact_id, input.title ?? null, input.body, input.is_pinned ? 1 : 0, now, now);
 
-    return this.getById(userId, id)!;
+    const created = this.getById(userId, id)!;
+    recordAudit(this.db, userId, 'note', id, 'create', undefined, created);
+    return created;
   }
 
   get(userId: string, noteId: string): Note | null {
@@ -81,7 +84,9 @@ export class NoteService {
     values.push(id);
 
     this.db.prepare(`UPDATE notes SET ${fields.join(', ')} WHERE id = ? AND deleted_at IS NULL`).run(...values);
-    return this.getById(userId, id);
+    const updated = this.getById(userId, id);
+    if (updated) recordAudit(this.db, userId, 'note', id, 'update', existing, updated);
+    return updated;
   }
 
   softDelete(userId: string, id: string): boolean {
@@ -93,7 +98,9 @@ export class NoteService {
       UPDATE notes SET deleted_at = datetime('now'), updated_at = datetime('now')
       WHERE id = ? AND deleted_at IS NULL
     `).run(id);
-    return result.changes > 0;
+    const deleted = result.changes > 0;
+    if (deleted) recordAudit(this.db, userId, 'note', id, 'delete', existing, undefined);
+    return deleted;
   }
 
   restore(userId: string, id: string): Note {
