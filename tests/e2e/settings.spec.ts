@@ -84,8 +84,8 @@ test('tags: create, rename and delete from Settings', async ({ page, account }) 
   await expect(row).toBeVisible();
 
   await row.getByTestId('settings-tag-edit').click();
-  await row.getByTestId('settings-tag-edit-name').fill(renamed);
-  await row.getByTestId('settings-tag-save').click();
+  await section.getByTestId('settings-tag-edit-name').fill(renamed);
+  await section.getByTestId('settings-tag-save').click();
 
   const renamedRow = section.getByTestId('settings-tag-row').filter({ hasText: renamed });
   await expect(renamedRow).toBeVisible();
