@@ -6,6 +6,7 @@ import type { ContactProfile, Contact } from '../../api/types';
 import {
   Card, Spinner, EmptyState, ErrorBanner, Badge, Button, Avatar, ConfirmDialog, showToast,
 } from '../../ui';
+import { TagAutocomplete } from '../../components/TagAutocomplete';
 import { contactName, errorMessage, formatDate } from '../../lib/format';
 import {
   MethodEditor, AddressEditor, CustomFieldEditor, RelationshipEditor,
@@ -19,7 +20,7 @@ type Editor =
   | { kind: 'custom_field'; existing?: ContactProfile['custom_fields'][number] }
   | { kind: 'relationship'; existing?: ContactProfile['relationships'][number] }
   | { kind: 'food' }
-  | { kind: 'tag' }
+  | { kind: 'tag'; initialName?: string; lockName?: boolean }
   | { kind: 'note'; existing?: ContactProfile['recent_notes'][number] }
   | { kind: 'activity'; existing?: ContactProfile['recent_activities'][number] }
   | { kind: 'life_event'; existing?: ContactProfile['life_events'][number] }
@@ -203,20 +204,27 @@ export function ContactProfileView({ id }: { id: string }) {
           </Section>
 
           {/* Tags — each tag links to its tag page (all contacts with that tag). */}
-          <Section title="Tags" empty={p.tags.length === 0}
-            onAdd={() => setEditor({ kind: 'tag' })}>
-            {p.tags.length === 0 ? <Empty /> : (
-              <div class="tag-chips">
-                {p.tags.map((t) => (
-                  <span key={t.id} class="tag-chip" data-testid="profile-tag">
-                    <Link href={`/tags/${encodeURIComponent(t.name)}`} class="tag-chip__link"
-                      data-testid="profile-tag-link">{t.name}</Link>
-                    <button class="tag-chip__remove" title="Remove tag" aria-label={`Remove tag ${t.name}`}
-                      onClick={() => setDeleteSub({ path: `/contacts/${id}/tags/${t.id}`, label: 'tag' })}>×</button>
-                  </span>
-                ))}
-              </div>
-            )}
+          <Section title="Tags">
+            <div class="stack">
+              {p.tags.length === 0 ? <Empty /> : (
+                <div class="tag-chips">
+                  {p.tags.map((t) => (
+                    <span key={t.id} class="tag-chip" data-testid="profile-tag">
+                      <Link href={`/tags/${encodeURIComponent(t.name)}`} class="tag-chip__link"
+                        data-testid="profile-tag-link">{t.name}</Link>
+                      <button class="tag-chip__remove" title="Remove tag" aria-label={`Remove tag ${t.name}`}
+                        onClick={() => setDeleteSub({ path: `/contacts/${id}/tags/${t.id}`, label: 'tag' })}>×</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <TagAutocomplete
+                contactId={id}
+                currentTags={p.tags}
+                onAdded={load}
+                onCreateNew={(name) => setEditor({ kind: 'tag', initialName: name, lockName: true })}
+              />
+            </div>
           </Section>
 
           {/* Food preferences */}
@@ -419,7 +427,8 @@ export function ContactProfileView({ id }: { id: string }) {
         <FoodPreferencesEditor contactId={id} existing={p.food_preferences} onClose={() => setEditor(null)} onSaved={refresh} />
       )}
       {editor?.kind === 'tag' && (
-        <TagEditor contactId={id} onClose={() => setEditor(null)} onSaved={refresh} />
+        <TagEditor contactId={id} initialName={editor.initialName} lockName={editor.lockName}
+          onClose={() => setEditor(null)} onSaved={refresh} />
       )}
       {editor?.kind === 'note' && (
         <NoteEditor contactId={id} existing={editor.existing} onClose={() => setEditor(null)} onSaved={refresh} />

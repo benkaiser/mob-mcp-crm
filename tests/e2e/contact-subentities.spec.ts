@@ -143,19 +143,32 @@ test('relationships: link then unlink another contact', async ({ page, seeder })
   await expect(sec.getByText(relatedName)).toHaveCount(0);
 });
 
-test('tags: add then remove', async ({ page, seeder }) => {
-  const tagName = `tag-${Date.now()}`;
+test('tags: autocomplete existing, create new with color, then remove', async ({ page, seeder }) => {
+  const stamp = Date.now();
+  const existingTag = `existing-${stamp}`;
+  const newTag = `new-${stamp}`;
+  await seeder.post('/tags', { name: existingTag, color: '#14b8a6' });
   await openContact(page, seeder, `Tagged-${Date.now()}`);
   const sec = section(page, 'Tags');
 
-  // Add
-  await sec.getByRole('button', { name: '+ Add' }).click();
-  await page.getByTestId('tag-name').fill(tagName);
+  // Existing tag: selecting an autocomplete suggestion assigns it immediately.
+  await sec.getByTestId('tag-autocomplete-input').fill(existingTag.slice(0, 10));
+  await expect(sec.getByTestId('tag-autocomplete-option').filter({ hasText: existingTag })).toBeVisible();
+  await sec.getByTestId('tag-autocomplete-option').filter({ hasText: existingTag }).click();
+  await expect(page.getByTestId('modal')).toHaveCount(0);
+  await expect(sec.getByText(existingTag)).toBeVisible();
+
+  // Brand-new tag: confirming the typed name opens the color modal.
+  await sec.getByTestId('tag-autocomplete-input').fill(newTag);
+  await page.keyboard.press('Enter');
+  await expect(page.getByTestId('modal-title')).toHaveText('Choose tag color');
+  await expect(page.getByTestId('tag-name')).toHaveValue(newTag);
+  await page.getByTestId('tag-color').fill('#22c55e');
   await page.getByTestId('editor-save').click();
-  await expect(sec.getByText(tagName)).toBeVisible();
+  await expect(sec.getByText(newTag)).toBeVisible();
 
   // Remove (the × button's visible text is "×"; it carries title="Remove tag").
-  await sec.getByTitle('Remove tag').click();
+  await sec.getByTitle('Remove tag').last().click();
   await confirmRemove(page);
-  await expect(sec.getByText(tagName)).toHaveCount(0);
+  await expect(sec.getByText(newTag)).toHaveCount(0);
 });
