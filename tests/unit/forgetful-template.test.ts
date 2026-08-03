@@ -44,7 +44,7 @@ describe('ForgetfulTemplate', () => {
 
     // Activities should belong to the new user
     const activities = db.prepare('SELECT COUNT(*) as c FROM activities WHERE user_id = ?').get(userId) as any;
-    expect(activities.c).toBe(4);
+    expect(activities.c).toBe(7);
 
     db.close();
   });
@@ -107,11 +107,11 @@ describe('ForgetfulTemplate', () => {
 
     // Activities
     const acts = (db.prepare('SELECT COUNT(*) as c FROM activities WHERE user_id = ?').get(userId) as any).c;
-    expect(acts).toBe(4);
+    expect(acts).toBe(7);
 
     // Activity participants
     const parts = (db.prepare('SELECT COUNT(*) as c FROM activity_participants').get() as any).c;
-    expect(parts).toBe(12); // 3 + 3 + 1 + 5
+    expect(parts).toBe(15); // 3 + 3 + 1 + 5 + 3 recent (1 each)
 
     // Food preferences
     const fps = (db.prepare('SELECT COUNT(*) as c FROM food_preferences').get() as any).c;

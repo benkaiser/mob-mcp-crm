@@ -304,4 +304,72 @@ export function seedForgetfulData(db: Database.Database, userId: string): void {
 
   insertGift.run(generateId(), bingo, 'New Floppy bunny plush', 'idea', 'giving', 'Birthday');
   insertGift.run(generateId(), bandit, 'Surfboard', 'received', 'receiving', 'Birthday');
+
+  // ─── Tasks ──────────────────────────────────────────────────────
+  const insertTask = db.prepare(
+    'INSERT INTO tasks (id, user_id, contact_id, title, due_date, priority, status) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  );
+  const dueDate = (days: number) => new Date(now + days * DAY_MS).toISOString().slice(0, 10);
+  const taskMuffin = generateId();
+  insertTask.run(taskMuffin, userId, muffin, "Buy Muffin's birthday present", dueDate(5), 'high', 'pending');
+  const taskTramp = generateId();
+  insertTask.run(taskTramp, userId, bandit, 'Fix the trampoline net', dueDate(9), 'medium', 'pending');
+  insertTask.run(generateId(), userId, null, 'Plan the weekend camping trip', dueDate(14), 'low', 'pending');
+  insertTask.run(generateId(), userId, chilli, 'Return the casserole dish to Chilli', dueDate(-2), 'medium', 'pending');
+
+  // ─── Debts ──────────────────────────────────────────────────────
+  const insertDebt = db.prepare(
+    'INSERT INTO debts (id, contact_id, amount, currency, direction, reason, status) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  );
+  const debtMackenzie = generateId();
+  insertDebt.run(debtMackenzie, mackenzie, 15, 'AUD', 'they_owe_me', 'Covered the movie tickets', 'active');
+  const debtRad = generateId();
+  insertDebt.run(debtRad, rad, 50, 'AUD', 'i_owe_them', 'Chipped in for the group gift', 'active');
+
+  // ─── Upcoming birthdays (relative to now so the demo always has some) ──
+  const setBirthday = db.prepare(
+    "UPDATE contacts SET birthday_mode = 'month_day', birthday_month = ?, birthday_day = ? WHERE id = ?"
+  );
+  const soonBday = (days: number, contactId: string) => {
+    const d = new Date(now + days * DAY_MS);
+    setBirthday.run(d.getMonth() + 1, d.getDate(), contactId);
+  };
+  soonBday(6, muffin);
+  soonBday(13, honey);
+
+  // ─── Recent activities (today / yesterday / 2 days ago) ─────────────
+  const actToday = generateId();
+  insertActivity.run(actToday, userId, 'phone_call', 'Video call with Nana', new Date(now).toISOString(), null);
+  insertParticipant.run(actToday, chris);
+  const actYesterday = generateId();
+  insertActivity.run(actYesterday, userId, 'in_person', 'Bike ride with Bingo', new Date(now - 1 * DAY_MS).toISOString(), 'The park');
+  insertParticipant.run(actYesterday, bingo);
+  const actTwoAgo = generateId();
+  insertActivity.run(actTwoAgo, userId, 'in_person', 'Playdate with Honey', new Date(now - 2 * DAY_MS).toISOString(), "Honey's house");
+  insertParticipant.run(actTwoAgo, honey);
+
+  // ─── Audit log (drives the Activity Log page + a 3-day activity streak) ──
+  // Seeded relative to server start, so a fresh deploy shows a 3-day streak.
+  // Each row is anchored to a specific day's midday (start of day + day + time)
+  // so the entries land on exactly 3 consecutive calendar days.
+  const insertAudit = db.prepare(
+    "INSERT INTO audit_logs (id, user_id, entity_type, entity_id, action, new_values, created_at) VALUES (?, ?, ?, ?, ?, ?, datetime('now', 'start of day', ?, ?))"
+  );
+  const auditRows: Array<[string, string, 'create' | 'update', string, string, string]> = [
+    // Today
+    ['activity', actToday, 'create', '{"title":"Video call with Nana"}', '+0 days', '+9 hours'],
+    ['task', taskMuffin, 'create', '{"title":"Buy Muffin\'s birthday present"}', '+0 days', '+13 hours'],
+    ['contact', bandit, 'update', '{"work_notes":"Digging at a new site"}', '+0 days', '+16 hours'],
+    // Yesterday
+    ['activity', actYesterday, 'create', '{"title":"Bike ride with Bingo"}', '-1 days', '+10 hours'],
+    ['debt', debtMackenzie, 'create', '{"amount":15}', '-1 days', '+14 hours'],
+    ['task', taskTramp, 'create', '{"title":"Fix the trampoline net"}', '-1 days', '+17 hours'],
+    // Two days ago
+    ['activity', actTwoAgo, 'create', '{"title":"Playdate with Honey"}', '-2 days', '+11 hours'],
+    ['debt', debtRad, 'create', '{"amount":50}', '-2 days', '+15 hours'],
+    ['contact', chilli, 'update', '{"job_title":"Airport security"}', '-2 days', '+18 hours'],
+  ];
+  for (const [entityType, entityId, action, newValues, dayOffset, timeOffset] of auditRows) {
+    insertAudit.run(generateId(), userId, entityType, entityId, action, newValues, dayOffset, timeOffset);
+  }
 }

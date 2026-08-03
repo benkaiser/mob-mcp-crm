@@ -92,9 +92,9 @@ describe('seedForgetfulData', () => {
     expect(banditNote.body).toContain('Shadowlands');
   });
 
-  it('creates 4 activities with correct participants', () => {
+  it('creates 7 activities with correct participants', () => {
     const actCount = (db.prepare('SELECT COUNT(*) as c FROM activities WHERE user_id = ?').get(userId) as any).c;
-    expect(actCount).toBe(4);
+    expect(actCount).toBe(7);
 
     // Check "Played Keepy Uppy" has 3 participants
     const keepyUppy = db.prepare(
@@ -104,6 +104,23 @@ describe('seedForgetfulData', () => {
       'SELECT COUNT(*) as c FROM activity_participants WHERE activity_id = ?'
     ).get(keepyUppy.id) as any;
     expect(participants.c).toBe(3);
+  });
+
+  it('creates tasks and debts to populate the demo dashboard', () => {
+    const taskCount = (db.prepare('SELECT COUNT(*) as c FROM tasks WHERE user_id = ?').get(userId) as any).c;
+    expect(taskCount).toBe(4);
+    const debtCount = (db.prepare('SELECT COUNT(*) as c FROM debts').get() as any).c;
+    expect(debtCount).toBe(2);
+  });
+
+  it('seeds audit-log entries spanning the last 3 days (activity streak)', () => {
+    const auditCount = (db.prepare('SELECT COUNT(*) as c FROM audit_logs WHERE user_id = ?').get(userId) as any).c;
+    expect(auditCount).toBeGreaterThanOrEqual(9);
+    // Distinct local-ish days present in the seeded audit rows (>= 3 consecutive).
+    const distinctDays = (db.prepare(
+      "SELECT COUNT(DISTINCT date(created_at)) as c FROM audit_logs WHERE user_id = ?"
+    ).get(userId) as any).c;
+    expect(distinctDays).toBeGreaterThanOrEqual(3);
   });
 
   it('creates food preferences for Bingo and Muffin', () => {
