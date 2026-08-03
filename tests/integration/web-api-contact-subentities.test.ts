@@ -106,8 +106,13 @@ describe('Contact sub-entities internal API (/contacts)', () => {
     const missing = await raw(app, 'PATCH', `/contacts/${contactId}/methods/nope`, { body: { value: 'x' } });
     expect(missing.status).toBe(404);
 
-    // 422 validation (invalid type)
-    const bad = await raw(app, 'POST', `/contacts/${contactId}/methods`, { body: { type: 'bogus', value: 'x' } });
+    // Custom type strings are allowed.
+    const custom = await raw(app, 'POST', `/contacts/${contactId}/methods`, { body: { type: 'mastodon', value: '@chilli' } });
+    expect(custom.status).toBe(201);
+    expect(data(custom).type).toBe('mastodon');
+
+    // 422 validation (blank type)
+    const bad = await raw(app, 'POST', `/contacts/${contactId}/methods`, { body: { type: '', value: 'x' } });
     expect(bad.status).toBe(422);
     expect(JSON.parse(bad.body).error.code).toBe('validation_error');
   });

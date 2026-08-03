@@ -59,6 +59,7 @@ describe('Migrations', () => {
     expect(tableNames).toContain('users');
     expect(tableNames).toContain('contacts');
     expect(tableNames).toContain('contact_methods');
+    expect(tableNames).toContain('contact_method_types');
     expect(tableNames).toContain('addresses');
     expect(tableNames).toContain('food_preferences');
     expect(tableNames).toContain('custom_fields');
@@ -109,5 +110,24 @@ describe('Migrations', () => {
         VALUES ('test', 'nonexistent', 'Test')
       `).run();
     }).toThrow();
+  });
+
+  it('allows custom contact method types after migrations', () => {
+    db = createTestDatabase();
+    const userId = createTestUser(db);
+    db.prepare(`
+      INSERT INTO contacts (id, user_id, first_name)
+      VALUES ('contact-custom-method', ?, 'Custom')
+    `).run(userId);
+
+    expect(() => {
+      db.prepare(`
+        INSERT INTO contact_methods (id, contact_id, type, value)
+        VALUES ('method-custom-type', 'contact-custom-method', 'mastodon', '@custom')
+      `).run();
+    }).not.toThrow();
+
+    const row = db.prepare('SELECT type FROM contact_methods WHERE id = ?').get('method-custom-type') as { type: string };
+    expect(row.type).toBe('mastodon');
   });
 });

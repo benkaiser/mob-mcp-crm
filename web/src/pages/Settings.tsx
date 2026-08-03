@@ -30,6 +30,13 @@ import {
   type CustomRelationshipType,
 } from '../api/relationship-types';
 import {
+  listContactMethodTypes,
+  upsertContactMethodType,
+  updateContactMethodType,
+  deleteContactMethodType,
+  type ContactMethodTypeOption,
+} from '../api/contact-method-types';
+import {
   listTags,
   createTag,
   updateTag,
@@ -49,6 +56,7 @@ export function Settings() {
 
       <ProfileSection />
       <RelationshipTypesSection />
+      <ContactMethodTypesSection />
       <TagsSection />
 
       <Card class="section" data-testid="settings-plan">
@@ -77,6 +85,182 @@ export function Settings() {
       <ExportSection />
       <DangerZoneSection />
     </div>
+  );
+}
+
+function ContactMethodTypesSection() {
+  const [types, setTypes] = useState<ContactMethodTypeOption[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState<{ key: string; label: string; link_template: string } | null>(null);
+  const [deleting, setDeleting] = useState<ContactMethodTypeOption | null>(null);
+  const [newType, setNewType] = useState({ key: '', label: '', link_template: '' });
+
+  function load() {
+    setLoading(true);
+    setError(null);
+    listContactMethodTypes()
+      .then(({ data }) => setTypes(data))
+      .catch((err) => setError(errorMessage(err, 'Failed to load contact method types')))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(load, []);
+
+  async function saveEdit(e: Event) {
+    e.preventDefault();
+    if (!editing || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await updateContactMethodType(editing.key, {
+        label: editing.label.trim(),
+        link_template: editing.link_template.trim() || null,
+      }).catch(async (err) => {
+        if (err instanceof ApiError && err.status === 404) {
+          return upsertContactMethodType({
+            key: editing.key,
+            label: editing.label.trim(),
+            link_template: editing.link_template.trim() || null,
+          });
+        }
+        throw err;
+      });
+      setEditing(null);
+      showToast('Contact method type saved', 'success');
+      load();
+    } catch (err) {
+      setError(errorMessage(err, 'Failed to save contact method type'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function addCustom(e: Event) {
+    e.preventDefault();
+    if (!newType.key.trim() || !newType.label.trim() || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await upsertContactMethodType({
+        key: newType.key,
+        label: newType.label,
+        link_template: newType.link_template.trim() || null,
+      });
+      setNewType({ key: '', label: '', link_template: '' });
+      showToast('Contact method type added', 'success');
+      load();
+    } catch (err) {
+      setError(errorMessage(err, 'Failed to add contact method type'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmDelete() {
+    if (!deleting) return;
+    setBusy(true);
+    try {
+      await deleteContactMethodType(deleting.key);
+      showToast(deleting.is_built_in ? 'Contact method type reset' : 'Contact method type deleted', 'success');
+      setDeleting(null);
+      load();
+    } catch (err) {
+      showToast(errorMessage(err, 'Failed to delete contact method type'), 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card class="section" data-testid="settings-contact-method-types">
+      <div class="section__head"><h2>Contact method types</h2></div>
+      <p class="muted">Edit deep-link templates for built-ins or add custom types. Use <code>{'{value}'}</code> as the placeholder.</p>
+      {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
+      {loading ? (
+        <Spinner center />
+      ) : (
+        <div class="list" data-testid="contact-method-type-list">
+          {(types ?? []).map((type) => (
+            <div key={type.key} class="sub-row" data-testid="contact-method-type-row">
+              {editing?.key === type.key ? (
+                <form class="stack" onSubmit={saveEdit} style="flex:1;">
+                  <div class="form-grid">
+                    <Field label="Label">
+                      <Input data-testid="contact-method-type-edit-label" value={editing.label}
+                        onInput={(e) => setEditing({ ...editing, label: (e.target as HTMLInputElement).value })} required />
+                    </Field>
+                    <Field label="Link template" hint="Blank means no link. Include {value}.">
+                      <Input data-testid="contact-method-type-edit-template" value={editing.link_template}
+                        onInput={(e) => setEditing({ ...editing, link_template: (e.target as HTMLInputElement).value })} />
+                    </Field>
+                  </div>
+                  <div class="row">
+                    <Button type="submit" size="sm" disabled={busy || !editing.label.trim()} data-testid="contact-method-type-save">Save</Button>
+                    <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => setEditing(null)}>Cancel</Button>
+                  </div>
+                </form>
+              ) : (
+                <>
+                  <div class="sub-row__meta">
+                    <span>
+                      <strong>{type.label}</strong> <span class="mono muted">{type.key}</span>{' '}
+                      <Badge>{type.source}</Badge>
+                    </span>
+                    <span class="muted mono" data-testid="contact-method-type-template">{type.link_template || 'No link'}</span>
+                  </div>
+                  <span class="sub-row__actions">
+                    <Button size="sm" variant="ghost" data-testid="contact-method-type-edit"
+                      onClick={() => setEditing({ key: type.key, label: type.label, link_template: type.link_template ?? '' })}>Edit</Button>
+                    {type.source !== 'built-in' && (
+                      <Button size="sm" variant="danger" data-testid="contact-method-type-delete" onClick={() => setDeleting(type)}>
+                        {type.is_built_in ? 'Reset' : 'Delete'}
+                      </Button>
+                    )}
+                  </span>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <form class="stack" onSubmit={addCustom} style="margin-top:1rem;">
+        <div class="form-grid">
+          <Field label="Key" hint="Stored value, e.g. mastodon">
+            <Input data-testid="contact-method-type-key" value={newType.key}
+              onInput={(e) => setNewType({ ...newType, key: (e.target as HTMLInputElement).value })} required />
+          </Field>
+          <Field label="Label">
+            <Input data-testid="contact-method-type-label" value={newType.label}
+              onInput={(e) => setNewType({ ...newType, label: (e.target as HTMLInputElement).value })} required />
+          </Field>
+          <Field label="Link template" hint="Example: https://example.com/{value}">
+            <Input data-testid="contact-method-type-template-input" value={newType.link_template}
+              onInput={(e) => setNewType({ ...newType, link_template: (e.target as HTMLInputElement).value })} />
+          </Field>
+        </div>
+        <div>
+          <Button type="submit" disabled={busy || !newType.key.trim() || !newType.label.trim()} data-testid="contact-method-type-add">
+            {busy ? 'Adding…' : 'Add contact method type'}
+          </Button>
+        </div>
+      </form>
+
+      <ConfirmDialog
+        open={deleting !== null}
+        title={deleting?.is_built_in ? 'Reset contact method type?' : 'Delete contact method type?'}
+        message={deleting?.is_built_in
+          ? <>Reset <strong>{deleting?.label}</strong> to its built-in defaults?</>
+          : <>Delete <strong>{deleting?.label}</strong>? Existing contact methods keep their stored type.</>}
+        confirmLabel={deleting?.is_built_in ? 'Reset' : 'Delete'}
+        danger
+        busy={busy}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleting(null)}
+      />
+    </Card>
   );
 }
 

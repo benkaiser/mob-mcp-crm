@@ -7,20 +7,17 @@ import { asyncHandler, sendData, ApiError, parseBody, getUserId } from './helper
 
 // ─── Validation schemas ─────────────────────────────────────────
 
-const methodTypeEnum = z.enum([
-  'email', 'phone', 'whatsapp', 'telegram', 'signal',
-  'twitter', 'instagram', 'facebook', 'linkedin', 'website', 'other',
-]);
+const methodTypeSchema = z.string().trim().min(1, 'type is required');
 
 const createMethodSchema = z.object({
-  type: methodTypeEnum,
+  type: methodTypeSchema,
   value: z.string().min(1, 'value is required'),
   label: z.string().optional(),
   is_primary: z.boolean().optional(),
 }).strict();
 
 const updateMethodSchema = z.object({
-  type: methodTypeEnum.optional(),
+  type: methodTypeSchema.optional(),
   value: z.string().min(1).optional(),
   label: z.string().optional(),
   is_primary: z.boolean().optional(),

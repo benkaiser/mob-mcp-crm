@@ -66,6 +66,42 @@ test('relationship types: creates custom type from label with optional inverse',
   await expect(row).toHaveCount(0);
 });
 
+test('contact method types: custom type and template override render profile links', async ({ page, account, seeder }) => {
+  void account;
+  await gotoSettings(page);
+
+  const section = page.getByTestId('settings-contact-method-types');
+  await expect(section).toBeVisible();
+
+  const phoneRow = section.getByTestId('contact-method-type-row').filter({ hasText: 'phone' });
+  await phoneRow.getByTestId('contact-method-type-edit').click();
+  await section.getByTestId('contact-method-type-edit-template').fill('sms:{value}');
+  await section.getByTestId('contact-method-type-save').click();
+  await expect(section.getByTestId('contact-method-type-row').filter({ hasText: 'phone' })).toContainText('sms:{value}');
+
+  const stamp = Date.now();
+  const key = `e2e_custom_${stamp}`;
+  const label = `E2E Custom ${stamp}`;
+  const template = 'https://profiles.example/{value}';
+  await section.getByTestId('contact-method-type-key').fill(key);
+  await section.getByTestId('contact-method-type-label').fill(label);
+  await section.getByTestId('contact-method-type-template-input').fill(template);
+  await section.getByTestId('contact-method-type-add').click();
+  await expect(section.getByTestId('contact-method-type-row').filter({ hasText: label })).toBeVisible();
+
+  const contact = await seeder.createContact({ first_name: `DeepLink-${stamp}` });
+  await page.goto(`/app/contacts/${contact.id}`);
+  const methods = page.locator('.section', { has: page.getByRole('heading', { name: 'Contact methods', exact: true }) });
+  await methods.getByRole('button', { name: '+ Add' }).click();
+  await page.getByTestId('method-type').selectOption(key);
+  await page.getByTestId('method-value').fill('bandit heeler');
+  await page.getByTestId('editor-save').click();
+
+  const link = methods.getByTestId('contact-method-link').filter({ hasText: 'bandit heeler' });
+  await expect(link).toBeVisible();
+  await expect(link).toHaveAttribute('href', 'https://profiles.example/bandit%20heeler');
+});
+
 test('tags: create, rename and delete from Settings', async ({ page, account }) => {
   void account;
   await gotoSettings(page);

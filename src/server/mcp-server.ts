@@ -322,8 +322,8 @@ export function createMcpServer(db: Database.Database): McpServer {
       action: z.enum(['add', 'update', 'remove']).describe('Action to perform'),
       contact_id: z.string().optional().describe('The contact ID (required for "add")'),
       id: z.string().optional().describe('The contact method ID (required for "update" and "remove")'),
-      type: z.enum(['email', 'phone', 'whatsapp', 'telegram', 'signal', 'twitter', 'instagram', 'facebook', 'linkedin', 'website', 'other'])
-        .optional().describe('Type of contact method (required for "add")'),
+      type: z.string().trim().min(1)
+        .optional().describe('Type of contact method (required for "add"). Built-ins: email, phone, whatsapp, telegram, signal, twitter, instagram, facebook, linkedin, website, other. Custom values defined in Settings are also accepted.'),
       value: z.string().optional().describe('The value — email, phone number, handle (required for "add")'),
       label: z.string().optional().describe('Label (e.g. "Personal", "Work")'),
       is_primary: z.boolean().optional().describe('Set as primary for this type'),

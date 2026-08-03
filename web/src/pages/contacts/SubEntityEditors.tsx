@@ -1,18 +1,15 @@
 import { useEffect, useState } from 'preact/hooks';
 import { apiPost, apiPatch } from '../../api/client';
 import { listRelationshipTypes } from '../../api/relationship-types';
+import { listContactMethodTypes } from '../../api/contact-method-types';
 import type {
   ContactMethod, Address, CustomField, Relationship, FoodPreferences, ContactMethodType,
-  Note, Activity, LifeEvent, Reminder, Task, Gift, Debt, RelationshipTypeOption,
+  Note, Activity, LifeEvent, Reminder, Task, Gift, Debt, RelationshipTypeOption, ContactMethodTypeOption,
 } from '../../api/types';
 import { Modal, Button, Input, Select, Textarea, Field, showToast } from '../../ui';
 import { errorMessage, fieldErrors } from '../../lib/format';
 import { ContactPicker } from '../../components/ContactPicker';
-
-const METHOD_TYPES: ContactMethodType[] = [
-  'email', 'phone', 'whatsapp', 'telegram', 'signal',
-  'twitter', 'instagram', 'facebook', 'linkedin', 'website', 'other',
-];
+import { BUILT_IN_CONTACT_METHOD_TYPES } from '../../lib/contact-method-links';
 
 interface EditorProps<T> {
   contactId: string;
@@ -48,7 +45,23 @@ export function MethodEditor({ contactId, existing, onClose, onSaved }: EditorPr
   const [value, setValue] = useState(existing?.value ?? '');
   const [label, setLabel] = useState(existing?.label ?? '');
   const [isPrimary, setIsPrimary] = useState(existing?.is_primary ?? false);
+  const [typeOptions, setTypeOptions] = useState<ContactMethodTypeOption[]>(BUILT_IN_CONTACT_METHOD_TYPES);
+  const [typesLoading, setTypesLoading] = useState(true);
   const { saving, error, errs, run } = useSave();
+
+  useEffect(() => {
+    let cancelled = false;
+    setTypesLoading(true);
+    listContactMethodTypes()
+      .then(({ data }) => { if (!cancelled) setTypeOptions(data); })
+      .catch(() => { if (!cancelled) setTypeOptions(BUILT_IN_CONTACT_METHOD_TYPES); })
+      .finally(() => { if (!cancelled) setTypesLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const options = existing?.type && !typeOptions.some((o) => o.key === existing.type)
+    ? [{ id: null, key: existing.type, label: existing.type, link_template: null, default_link_template: null, source: 'custom' as const, is_built_in: false }, ...typeOptions]
+    : typeOptions;
 
   function submit(e: Event) {
     e.preventDefault();
@@ -67,9 +80,10 @@ export function MethodEditor({ contactId, existing, onClose, onSaved }: EditorPr
       footer={<EditorFooter saving={saving} onClose={onClose} form="method-form" />}>
       <form id="method-form" class="stack" onSubmit={submit}>
         {error && <div class="field__error">{error}</div>}
-        <Field label="Type">
-          <Select data-testid="method-type" value={type} onChange={(e) => setType((e.target as HTMLSelectElement).value as ContactMethodType)}>
-            {METHOD_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+        <Field label="Type" hint={typesLoading ? 'Loading contact method types…' : 'Choose a built-in or custom type'}>
+          <Select data-testid="method-type" value={type} onChange={(e) => setType((e.target as HTMLSelectElement).value as ContactMethodType)}
+            disabled={typesLoading && options.length === 0}>
+            {options.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
           </Select>
         </Field>
         <Field label="Value" error={errs.value}>

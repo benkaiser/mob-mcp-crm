@@ -4,9 +4,7 @@ import { recordAudit, userIdForContact } from './audit-helper.js';
 
 // ─── Types ──────────────────────────────────────────────────────
 
-export type ContactMethodType =
-  | 'email' | 'phone' | 'whatsapp' | 'telegram' | 'signal'
-  | 'twitter' | 'instagram' | 'facebook' | 'linkedin' | 'website' | 'other';
+export type ContactMethodType = string;
 
 export interface ContactMethod {
   id: string;

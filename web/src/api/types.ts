@@ -98,9 +98,7 @@ export interface Contact {
 
 // ─── Contact sub-entities ───────────────────────────────────────
 
-export type ContactMethodType =
-  | 'email' | 'phone' | 'whatsapp' | 'telegram' | 'signal'
-  | 'twitter' | 'instagram' | 'facebook' | 'linkedin' | 'website' | 'other';
+export type ContactMethodType = string;
 
 export interface ContactMethod {
   id: string;
@@ -148,6 +146,27 @@ export interface Relationship {
   related_contact_name?: string;
   created_at: string;
   updated_at: string;
+}
+
+
+export interface ContactMethodTypeConfig {
+  id: string;
+  user_id: string;
+  key: string;
+  label: string;
+  link_template: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ContactMethodTypeOption {
+  id: string | null;
+  key: string;
+  label: string;
+  link_template: string | null;
+  default_link_template: string | null;
+  source: 'built-in' | 'custom' | 'override';
+  is_built_in: boolean;
 }
 
 export interface RelationshipTypeOption {

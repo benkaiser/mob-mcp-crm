@@ -2,7 +2,8 @@ import type { ComponentChildren } from 'preact';
 import { useEffect, useState, useCallback } from 'preact/hooks';
 import { Link, useLocation } from 'wouter-preact';
 import { apiGet, apiDelete, apiPatch } from '../../api/client';
-import type { ContactProfile, Contact } from '../../api/types';
+import type { ContactProfile, Contact, ContactMethodTypeOption } from '../../api/types';
+import { listContactMethodTypes } from '../../api/contact-method-types';
 import {
   Card, Spinner, EmptyState, ErrorBanner, Badge, Button, Avatar, ConfirmDialog, showToast,
 } from '../../ui';
@@ -13,6 +14,7 @@ import {
   FoodPreferencesEditor,
   NoteEditor, ActivityEditor, LifeEventEditor, ReminderEditor, TaskEditor, GiftEditor, DebtEditor,
 } from './SubEntityEditors';
+import { buildContactMethodLink, BUILT_IN_CONTACT_METHOD_TYPES } from '../../lib/contact-method-links';
 
 type Editor =
   | { kind: 'method'; existing?: ContactProfile['contact_methods'][number] }
@@ -39,6 +41,7 @@ export function ContactProfileView({ id }: { id: string }) {
   const [deleting, setDeleting] = useState(false);
   const [favoriteSaving, setFavoriteSaving] = useState(false);
   const [deleteSub, setDeleteSub] = useState<{ path: string; label: string } | null>(null);
+  const [methodTypes, setMethodTypes] = useState<ContactMethodTypeOption[]>(BUILT_IN_CONTACT_METHOD_TYPES);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -50,6 +53,14 @@ export function ContactProfileView({ id }: { id: string }) {
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    let cancelled = false;
+    listContactMethodTypes()
+      .then(({ data }) => { if (!cancelled) setMethodTypes(data); })
+      .catch(() => { if (!cancelled) setMethodTypes(BUILT_IN_CONTACT_METHOD_TYPES); });
+    return () => { cancelled = true; };
+  }, []);
 
   function refresh() { setEditor(null); load(); }
 
@@ -160,19 +171,27 @@ export function ContactProfileView({ id }: { id: string }) {
           {/* Contact methods */}
           <Section title="Contact methods" empty={p.contact_methods.length === 0}
             onAdd={() => setEditor({ kind: 'method' })}>
-            {p.contact_methods.length === 0 ? <Empty /> : p.contact_methods.map((m) => (
-              <div key={m.id} class="sub-row">
-                <span>
-                  <strong>{m.type}</strong>: {m.value}
-                  {m.label && <span class="muted"> ({m.label})</span>}
-                  {m.is_primary && <Badge tone="primary">primary</Badge>}
-                </span>
-                <RowActions
-                  onEdit={() => setEditor({ kind: 'method', existing: m })}
-                  onDelete={() => setDeleteSub({ path: `/contacts/${id}/methods/${m.id}`, label: 'contact method' })}
-                />
-              </div>
-            ))}
+            {p.contact_methods.length === 0 ? <Empty /> : p.contact_methods.map((m) => {
+              const typeOption = methodTypes.find((t) => t.key === m.type);
+              const href = buildContactMethodLink(m.type, m.value, typeOption?.link_template);
+              const typeLabel = typeOption?.label ?? m.type;
+              return (
+                <div key={m.id} class="sub-row">
+                  <span>
+                    <strong>{typeLabel}</strong>:{' '}
+                    {href ? (
+                      <a href={href} target="_blank" rel="noopener noreferrer" data-testid="contact-method-link">{m.value}</a>
+                    ) : m.value}
+                    {m.label && <span class="muted"> ({m.label})</span>}
+                    {m.is_primary && <Badge tone="primary">primary</Badge>}
+                  </span>
+                  <RowActions
+                    onEdit={() => setEditor({ kind: 'method', existing: m })}
+                    onDelete={() => setDeleteSub({ path: `/contacts/${id}/methods/${m.id}`, label: 'contact method' })}
+                  />
+                </div>
+              );
+            })}
           </Section>
 
           {/* Addresses */}
