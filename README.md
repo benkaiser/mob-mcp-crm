@@ -1,4 +1,4 @@
-# <img src="web/public/icons/icon.svg" width="80" alt="Mob"> Mob
+<h1><img src="docs/assets/logo.png" alt="Mob" height="64"></h1>
 
 **Mob is an AI-first personal CRM for caring for the people in your life.** Tell your AI assistant what happened, who matters, and what you want to remember; Mob turns natural language into structured relationship memory through MCP.
 
@@ -14,15 +14,6 @@
 ## Why Mob
 
 Relationships are full of details: birthdays, family ties, dietary needs, last conversations, gift ideas, follow-ups, and the context that helps you show up well. Mob keeps those details organized without making you maintain another spreadsheet or click through a dashboard.
-
-Use it naturally:
-
-```text
-Add Sarah Chen. She works at Google and I met her at Lina's birthday dinner.
-Log coffee with Mike yesterday; he is training for a marathon.
-Remind me to message Priya before her trip next Friday.
-Who have I not caught up with lately?
-```
 
 <p align="center">
   <img src="docs/assets/mcp-card.png" alt="Connect your AI assistant to Mob over MCP" width="760">
