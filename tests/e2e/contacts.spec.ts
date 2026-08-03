@@ -12,7 +12,7 @@ import { test, expect } from './fixtures';
  *   - contacts-pagination, contacts-page-prev, contacts-page-next, contacts-page-info
  *   - contact-form-first-name, contact-form-last-name, contact-form-company,
  *     contact-form-status, contact-form-favorite, contact-form-submit
- *   - profile-name, profile-work, contact-edit, contact-delete
+ *   - profile-name, profile-work, favorite-toggle, contact-edit, contact-delete
  */
 
 const unique = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
@@ -117,6 +117,34 @@ test('mark favourite and change status are reflected in list filters', async ({ 
   await page.getByTestId('contacts-filter-status').selectOption('active');
   await expect(page.getByTestId('contacts-row-name').filter({ hasText: `Fav-${tag}` })).toHaveCount(0);
   await expect(page.getByTestId('contacts-row-name').filter({ hasText: `Plain-${tag}` })).toHaveCount(1);
+});
+
+test('toggle favourite directly from the contact profile header', async ({ page, seeder }) => {
+  const tag = unique();
+  const { id } = await seeder.createContact({ first_name: `Star-${tag}`, last_name: 'Toggle' });
+
+  await page.goto(`/app/contacts/${id}`);
+  const toggle = page.getByTestId('favorite-toggle');
+
+  await expect(toggle).toHaveText('☆');
+  await expect(toggle).toHaveAttribute('title', 'Add to favorites');
+
+  await toggle.click();
+  await expect(toggle).toHaveText('★');
+  await expect(toggle).toHaveAttribute('title', 'Remove from favorites');
+  await expect(page.getByTestId('profile-name')).toContainText('★ Favorite');
+  await expect(page.getByTestId('toast').filter({ hasText: 'Added to favorites' })).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByTestId('favorite-toggle')).toHaveText('★');
+
+  await page.getByTestId('favorite-toggle').click();
+  await expect(page.getByTestId('favorite-toggle')).toHaveText('☆');
+  await expect(page.getByTestId('favorite-toggle')).toHaveAttribute('title', 'Add to favorites');
+  await expect(page.getByTestId('toast').filter({ hasText: 'Removed from favorites' })).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByTestId('favorite-toggle')).toHaveText('☆');
 });
 
 test('delete a contact via the confirm dialog removes it from the list', async ({ page, seeder }) => {

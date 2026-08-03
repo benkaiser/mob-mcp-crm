@@ -1,7 +1,7 @@
 import type { ComponentChildren } from 'preact';
 import { useEffect, useState, useCallback } from 'preact/hooks';
 import { Link, useLocation } from 'wouter-preact';
-import { apiGet, apiDelete } from '../../api/client';
+import { apiGet, apiDelete, apiPatch } from '../../api/client';
 import type { ContactProfile, Contact } from '../../api/types';
 import {
   Card, Spinner, EmptyState, ErrorBanner, Badge, Button, Avatar, ConfirmDialog, showToast,
@@ -37,6 +37,7 @@ export function ContactProfileView({ id }: { id: string }) {
   const [editor, setEditor] = useState<Editor>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [favoriteSaving, setFavoriteSaving] = useState(false);
   const [contactOptions, setContactOptions] = useState<{ id: string; name: string }[]>([]);
   const [deleteSub, setDeleteSub] = useState<{ path: string; label: string } | null>(null);
 
@@ -73,6 +74,25 @@ export function ContactProfileView({ id }: { id: string }) {
     }
   }
 
+  async function toggleFavorite() {
+    if (!profile || favoriteSaving) return;
+
+    const previous = profile.is_favorite;
+    const next = !previous;
+    setFavoriteSaving(true);
+    setProfile((current) => current ? { ...current, is_favorite: next } : current);
+
+    try {
+      await apiPatch<Contact>(`/contacts/${id}`, { is_favorite: next });
+      showToast(next ? 'Added to favorites' : 'Removed from favorites', 'success');
+    } catch (err) {
+      setProfile((current) => current ? { ...current, is_favorite: previous } : current);
+      showToast(errorMessage(err, 'Failed to update favorite'), 'error');
+    } finally {
+      setFavoriteSaving(false);
+    }
+  }
+
   async function doDeleteSub() {
     if (!deleteSub) return;
     try {
@@ -92,6 +112,7 @@ export function ContactProfileView({ id }: { id: string }) {
 
   const p = profile;
   const name = contactName(p);
+  const favoriteLabel = p.is_favorite ? 'Remove from favorites' : 'Add to favorites';
 
   return (
     <div class="stack">
@@ -110,7 +131,20 @@ export function ContactProfileView({ id }: { id: string }) {
         <Avatar name={name} url={p.avatar_url} size="lg" />
         <div class="profile-hero__body">
           <h1 class="profile-hero__name" data-testid="profile-name">
-            {name}{' '}
+            {name}
+            <Button
+              type="button"
+              variant="ghost"
+              class={`favorite-toggle${p.is_favorite ? ' favorite-toggle--active' : ''}`}
+              aria-label={favoriteLabel}
+              title={favoriteLabel}
+              aria-pressed={p.is_favorite}
+              disabled={favoriteSaving}
+              onClick={toggleFavorite}
+              data-testid="favorite-toggle"
+            >
+              <span aria-hidden="true">{p.is_favorite ? '★' : '☆'}</span>
+            </Button>{' '}
             {p.is_favorite && <Badge tone="warning">★ Favorite</Badge>}{' '}
             {p.status !== 'active' && <Badge>{p.status}</Badge>}
           </h1>

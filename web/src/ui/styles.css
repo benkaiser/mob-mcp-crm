@@ -1144,3 +1144,32 @@ input[type="file"]::file-selector-button:hover { background: var(--color-hover);
   padding-top: var(--space-3); border-top: 1px solid var(--color-border);
 }
 
+
+/* ─── Favorite toggle ─────────────────────────────────────────── */
+.favorite-toggle {
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border-radius: 999px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.35);
+  font-size: 1.35rem;
+  line-height: 1;
+}
+.favorite-toggle:hover {
+  background: rgba(255, 255, 255, 0.28);
+  text-decoration: none;
+}
+.favorite-toggle--active {
+  color: #fbbf24;
+  background: rgba(255, 255, 255, 0.24);
+}
+:root[data-theme="dark"] .favorite-toggle {
+  color: var(--color-text);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+:root[data-theme="dark"] .favorite-toggle--active {
+  color: var(--color-warning);
+}
