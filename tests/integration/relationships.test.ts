@@ -155,6 +155,41 @@ describe('RelationshipService', () => {
     expect(service.listByContact(contactB)).toHaveLength(0);
   });
 
+  it('should remove only the selected relationship and inverse when multiple relationships exist between two contacts', () => {
+    const parentRel = service.add({
+      contact_id: contactA,
+      related_contact_id: contactB,
+      relationship_type: 'parent',
+    });
+    service.add({
+      contact_id: contactA,
+      related_contact_id: contactB,
+      relationship_type: 'colleague',
+    });
+
+    const success = service.remove(parentRel.id);
+    expect(success).toBe(true);
+
+    const aRels = service.listByContact(contactA);
+    const bRels = service.listByContact(contactB);
+
+    expect(aRels).toHaveLength(1);
+    expect(aRels[0]).toMatchObject({
+      contact_id: contactA,
+      related_contact_id: contactB,
+      relationship_type: 'colleague',
+    });
+    expect(aRels.map((rel) => rel.relationship_type)).not.toContain('parent');
+
+    expect(bRels).toHaveLength(1);
+    expect(bRels[0]).toMatchObject({
+      contact_id: contactB,
+      related_contact_id: contactA,
+      relationship_type: 'colleague',
+    });
+    expect(bRels.map((rel) => rel.relationship_type)).not.toContain('child');
+  });
+
   it('should return false for removing non-existent relationship', () => {
     expect(service.remove('nonexistent')).toBe(false);
   });

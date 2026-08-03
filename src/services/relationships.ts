@@ -527,8 +527,8 @@ export class RelationshipService {
       // Remove inverse
       this.db.prepare(`
         DELETE FROM relationships
-        WHERE contact_id = ? AND related_contact_id = ?
-      `).run(existing.related_contact_id, existing.contact_id);
+        WHERE contact_id = ? AND related_contact_id = ? AND relationship_type = ?
+      `).run(existing.related_contact_id, existing.contact_id, getInverseType(existing.relationship_type));
     });
 
     transaction();
