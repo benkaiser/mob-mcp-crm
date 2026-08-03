@@ -437,7 +437,6 @@ Tags are lightweight labels for flexible contact organization.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `name` | string | ✅ | Tag name (e.g., "family", "coworker", "berlin", "close-friend") |
-| `color` | string | ❌ | Hex color code for future UI display |
 
 - A contact can have **multiple tags**.
 - Tags are created on-the-fly when first used.

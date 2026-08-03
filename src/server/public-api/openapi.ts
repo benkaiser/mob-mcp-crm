@@ -288,7 +288,6 @@ export function buildOpenApiSpec(): object {
           required: ['name'],
           properties: {
             name: { type: 'string' },
-            color: { type: 'string' },
           },
         },
         Activity: {
@@ -395,7 +394,6 @@ export function buildOpenApiSpec(): object {
           required: ['name'],
           properties: {
             name: { type: 'string' },
-            color: { type: 'string' },
           },
         },
       },

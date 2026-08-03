@@ -173,11 +173,6 @@ describe('Batch Operations', () => {
       expect(result.tag.id).toBe(existingTag.id);
     });
 
-    it('should handle tagging with color', () => {
-      const result = tagService.batchTagContacts(userId, 'vip', [contactA], '#ff0000');
-      expect(result.tag.name).toBe('vip');
-    });
-
     it('should handle a single contact', () => {
       const result = tagService.batchTagContacts(userId, 'solo', [contactA]);
       expect(result.tagged_contact_ids).toHaveLength(1);

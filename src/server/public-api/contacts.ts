@@ -102,7 +102,6 @@ const createRelationshipSchema = z.object({
 
 const assignTagSchema = z.object({
   name: z.string().min(1, 'name is required'),
-  color: z.string().optional(),
 }).strict();
 
 /**
@@ -336,7 +335,7 @@ export function createContactsRouter(db: Database.Database, planService: PlanSer
     const userId = getApiUserId(req);
     requireContact(userId, param(req.params.id));
     const input = parseBody(assignTagSchema, req);
-    const tag = tags.tagContact(userId, param(req.params.id), input.name, input.color);
+    const tag = tags.tagContact(userId, param(req.params.id), input.name);
     sendData(res, tag, undefined, 201);
   }));
 

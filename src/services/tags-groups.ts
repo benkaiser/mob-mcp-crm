@@ -7,7 +7,6 @@ export interface Tag {
   id: string;
   user_id: string;
   name: string;
-  color: string | null;
   created_at: string;
 }
 
@@ -20,7 +19,7 @@ export class TagService {
    * Create a new tag. If a tag with the same name already exists for the user,
    * returns the existing tag (on-the-fly creation).
    */
-  create(userId: string, name: string, color?: string): Tag {
+  create(userId: string, name: string): Tag {
     const existing = this.db.prepare(
       'SELECT * FROM tags WHERE user_id = ? AND name = ?'
     ).get(userId, name) as Tag | undefined;
@@ -29,14 +28,14 @@ export class TagService {
 
     const id = generateId();
     this.db.prepare(`
-      INSERT INTO tags (id, user_id, name, color)
-      VALUES (?, ?, ?, ?)
-    `).run(id, userId, name, color ?? null);
+      INSERT INTO tags (id, user_id, name)
+      VALUES (?, ?, ?)
+    `).run(id, userId, name);
 
     return this.db.prepare('SELECT * FROM tags WHERE id = ?').get(id) as Tag;
   }
 
-  update(userId: string, tagId: string, updates: { name?: string; color?: string }): Tag | null {
+  update(userId: string, tagId: string, updates: { name?: string }): Tag | null {
     const existing = this.db.prepare(
       'SELECT * FROM tags WHERE id = ? AND user_id = ?'
     ).get(tagId, userId) as Tag | undefined;
@@ -47,7 +46,6 @@ export class TagService {
     const values: any[] = [];
 
     if (updates.name !== undefined) { fields.push('name = ?'); values.push(updates.name); }
-    if (updates.color !== undefined) { fields.push('color = ?'); values.push(updates.color); }
 
     if (fields.length === 0) return existing;
 
@@ -72,8 +70,8 @@ export class TagService {
   /**
    * Tag a contact. Creates the tag if it doesn't exist.
    */
-  tagContact(userId: string, contactId: string, tagName: string, color?: string): Tag {
-    const tag = this.create(userId, tagName, color);
+  tagContact(userId: string, contactId: string, tagName: string): Tag {
+    const tag = this.create(userId, tagName);
 
     // Check if already tagged
     const existing = this.db.prepare(
@@ -103,7 +101,7 @@ export class TagService {
    * Tag multiple contacts with the same tag in one call.
    * Creates the tag if it doesn't exist.
    */
-  batchTagContacts(userId: string, tagName: string, contactIds: string[], color?: string): { tag: Tag; tagged_contact_ids: string[] } {
+  batchTagContacts(userId: string, tagName: string, contactIds: string[]): { tag: Tag; tagged_contact_ids: string[] } {
     if (contactIds.length > 50) {
       throw new Error('Batch size exceeds maximum of 50 items');
     }
@@ -111,11 +109,11 @@ export class TagService {
     const taggedIds: string[] = [];
 
     const transaction = this.db.transaction(() => {
-      const tag = this.create(userId, tagName, color);
+      const tag = this.create(userId, tagName);
 
       for (let i = 0; i < contactIds.length; i++) {
         try {
-          this.tagContact(userId, contactIds[i], tagName, color);
+          this.tagContact(userId, contactIds[i], tagName);
           taggedIds.push(contactIds[i]);
         } catch (err: any) {
           throw new Error(`Failed to tag contact at index ${i} (${contactIds[i]}): ${err.message}`);

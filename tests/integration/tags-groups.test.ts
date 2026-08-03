@@ -25,11 +25,6 @@ describe('TagService', () => {
     expect(tag.user_id).toBe(userId);
   });
 
-  it('should create a tag with color', () => {
-    const tag = service.create(userId, 'Important', '#ff0000');
-    expect(tag.color).toBe('#ff0000');
-  });
-
   it('should return existing tag if name matches (on-the-fly)', () => {
     const tag1 = service.create(userId, 'Friends');
     const tag2 = service.create(userId, 'Friends');
@@ -38,9 +33,8 @@ describe('TagService', () => {
 
   it('should update a tag', () => {
     const tag = service.create(userId, 'Old Name');
-    const updated = service.update(userId, tag.id, { name: 'New Name', color: '#00ff00' });
+    const updated = service.update(userId, tag.id, { name: 'New Name' });
     expect(updated!.name).toBe('New Name');
-    expect(updated!.color).toBe('#00ff00');
   });
 
   it('should delete a tag', () => {

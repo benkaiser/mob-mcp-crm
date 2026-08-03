@@ -8,7 +8,6 @@ interface TagAutocompleteProps {
   contactId: string;
   currentTags: Tag[];
   onAdded: () => void;
-  onCreateNew: (name: string) => void;
 }
 
 const MAX_SUGGESTIONS = 8;
@@ -17,7 +16,7 @@ function normalise(name: string): string {
   return name.trim().toLowerCase();
 }
 
-export function TagAutocomplete({ contactId, currentTags, onAdded, onCreateNew }: TagAutocompleteProps) {
+export function TagAutocomplete({ contactId, currentTags, onAdded }: TagAutocompleteProps) {
   const [allTags, setAllTags] = useState<Tag[]>([]);
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
@@ -114,8 +113,18 @@ export function TagAutocomplete({ contactId, currentTags, onAdded, onCreateNew }
       return;
     }
 
-    setOpen(false);
-    onCreateNew(name);
+    setSaving(true);
+    try {
+      await apiPost(`/contacts/${contactId}/tags`, { name });
+      showToast('Tag added', 'success');
+      setQuery('');
+      setOpen(false);
+      onAdded();
+    } catch (err) {
+      showToast(errorMessage(err, 'Failed to add tag'), 'error');
+    } finally {
+      setSaving(false);
+    }
   }
 
   function onFocus() {
@@ -190,7 +199,6 @@ export function TagAutocomplete({ contactId, currentTags, onAdded, onCreateNew }
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => { void assignExisting(tag); }}
                 >
-                  <span class="tag-autocomplete__swatch" style={{ backgroundColor: tag.color ?? '#94a3b8' }} aria-hidden="true" />
                   <span>{tag.name}</span>
                 </button>
               ))

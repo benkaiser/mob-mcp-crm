@@ -66,6 +66,35 @@ test('relationship types: creates custom type from label with optional inverse',
   await expect(row).toHaveCount(0);
 });
 
+test('tags: create, rename and delete from Settings', async ({ page, account }) => {
+  void account;
+  await gotoSettings(page);
+
+  const section = page.getByTestId('settings-tags');
+  await expect(section).toBeVisible();
+
+  const stamp = Date.now();
+  const name = `settings-tag-${stamp}`;
+  const renamed = `settings-renamed-${stamp}`;
+
+  await section.getByTestId('settings-tag-create-name').fill(name);
+  await section.getByTestId('settings-tag-create').click();
+
+  const row = section.getByTestId('settings-tag-row').filter({ hasText: name });
+  await expect(row).toBeVisible();
+
+  await row.getByTestId('settings-tag-edit').click();
+  await row.getByTestId('settings-tag-edit-name').fill(renamed);
+  await row.getByTestId('settings-tag-save').click();
+
+  const renamedRow = section.getByTestId('settings-tag-row').filter({ hasText: renamed });
+  await expect(renamedRow).toBeVisible();
+
+  await renamedRow.getByTestId('settings-tag-delete').click();
+  await page.getByTestId('confirm-accept').click();
+  await expect(section.getByTestId('settings-tag-row').filter({ hasText: renamed })).toHaveCount(0);
+});
+
 test('password section rejects a wrong current password', async ({ page, account }) => {
   void account;
   await gotoSettings(page);

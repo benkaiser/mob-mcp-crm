@@ -622,16 +622,15 @@ export function createMcpServer(db: Database.Database): McpServer {
   server.registerTool('tag_manage', {
     description: 'Manage tags and contact tagging.\n' +
       '• action="list": List all tags for the authenticated user. No additional fields required.\n' +
-      '• action="create": Create a new tag (or return existing if name already exists). Requires name. Optional color.\n' +
-      '• action="update": Update a tag name or color. Requires id. Optional name and color.\n' +
+      '• action="create": Create a new tag (or return existing if name already exists). Requires name.\n' +
+      '• action="update": Update a tag name. Requires id and name.\n' +
       '• action="delete": Delete a tag. Requires id.\n' +
-      '• action="tag_contact": Tag a contact. Creates the tag if it doesn\'t exist. Requires name (the tag name) and contact_id. Optional color (only used if creating new tag).\n' +
+      '• action="tag_contact": Tag a contact. Creates the tag if it doesn\'t exist. Requires name (the tag name) and contact_id.\n' +
       '• action="untag_contact": Remove a tag from a contact. Requires id (the tag ID) and contact_id.',
     inputSchema: {
       action: z.enum(['list', 'create', 'update', 'delete', 'tag_contact', 'untag_contact']).describe('Action to perform'),
       id: z.string().optional().describe('The tag ID (required for update, delete, untag_contact)'),
       name: z.string().optional().describe('Tag name (required for create and tag_contact)'),
-      color: z.string().optional().describe('Tag color hex code (optional for create, update, tag_contact)'),
       contact_id: z.string().optional().describe('The contact ID (required for tag_contact and untag_contact)'),
     },
   }, (args, extra) => {
@@ -642,11 +641,11 @@ export function createMcpServer(db: Database.Database): McpServer {
         return textResult(result);
       } else if (args.action === 'create') {
         if (!args.name) return errorResult('name is required for "create"');
-        const tag = tags.create(userId, args.name, args.color);
+        const tag = tags.create(userId, args.name);
         return textResult(tag);
       } else if (args.action === 'update') {
-        if (!args.id) return errorResult('id is required for "update"');
-        const tag = tags.update(userId, args.id, { name: args.name, color: args.color });
+        if (!args.id || !args.name) return errorResult('id and name are required for "update"');
+        const tag = tags.update(userId, args.id, { name: args.name });
         if (!tag) return errorResult('Tag not found');
         return textResult(tag);
       } else if (args.action === 'delete') {
@@ -656,7 +655,7 @@ export function createMcpServer(db: Database.Database): McpServer {
         return textResult({ success: true, message: 'Tag deleted' });
       } else if (args.action === 'tag_contact') {
         if (!args.name || !args.contact_id) return errorResult('name and contact_id are required for "tag_contact"');
-        const tag = tags.tagContact(userId, args.contact_id, args.name, args.color);
+        const tag = tags.tagContact(userId, args.contact_id, args.name);
         return textResult(tag);
       } else {
         // untag_contact
@@ -1560,12 +1559,11 @@ export function createMcpServer(db: Database.Database): McpServer {
     inputSchema: {
       tag_name: z.string().describe('Tag name to apply'),
       contact_ids: z.array(z.string()).describe('Array of contact IDs to tag (max 50)'),
-      color: z.string().optional().describe('Tag color (only used if creating new tag)'),
     },
   }, (args, extra) => {
     try {
       const userId = getUserId(extra);
-      const result = tags.batchTagContacts(userId, args.tag_name, args.contact_ids, args.color);
+      const result = tags.batchTagContacts(userId, args.tag_name, args.contact_ids);
       return textResult(result);
     } catch (err: any) {
       return errorResult(err.message);

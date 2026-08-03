@@ -245,7 +245,7 @@ describe('Contact sub-entities internal API (/contacts)', () => {
 
   it('assigns + lists + removes tags', async () => {
     const { app, contactId } = await setup();
-    const create = await raw(app, 'POST', `/contacts/${contactId}/tags`, { body: { name: 'family', color: '#ff0000' } });
+    const create = await raw(app, 'POST', `/contacts/${contactId}/tags`, { body: { name: 'family' } });
     expect(create.status).toBe(201);
     const tagId = data(create).id;
     const list = await raw(app, 'GET', `/contacts/${contactId}/tags`);

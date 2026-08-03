@@ -308,43 +308,6 @@ export function FoodPreferencesEditor(
   );
 }
 
-// ─── Tag editor ─────────────────────────────────────────────────
-
-interface TagEditorProps extends EditorProps<never> {
-  initialName?: string;
-  lockName?: boolean;
-}
-
-export function TagEditor({ contactId, initialName = '', lockName = false, onClose, onSaved }: TagEditorProps) {
-  const [name, setName] = useState(initialName);
-  const [color, setColor] = useState(lockName ? '#2563eb' : '');
-  const { saving, error, errs, run } = useSave();
-
-  function submit(e: Event) {
-    e.preventDefault();
-    const body: Record<string, unknown> = { name: name.trim() };
-    if (color.trim()) body.color = color.trim();
-    run(
-      () => apiPost(`/contacts/${contactId}/tags`, body),
-      () => { showToast('Tag added', 'success'); onSaved(); },
-    );
-  }
-
-  return (
-    <Modal open title={lockName ? 'Choose tag color' : 'Add tag'} onClose={onClose}
-      footer={<EditorFooter saving={saving} onClose={onClose} form="tag-form" />}>
-      <form id="tag-form" class="stack" onSubmit={submit}>
-        {error && <div class="field__error">{error}</div>}
-        <Field label="Tag name" error={errs.name}>
-          <Input data-testid="tag-name" value={name} readOnly={lockName}
-            onInput={(e) => setName((e.target as HTMLInputElement).value)} required />
-        </Field>
-        <Field label="Color (optional)"><Input data-testid="tag-color" type="color" value={color || '#2563eb'} onInput={(e) => setColor((e.target as HTMLInputElement).value)} /></Field>
-      </form>
-    </Modal>
-  );
-}
-
 function EditorFooter({ saving, onClose, form }: { saving: boolean; onClose: () => void; form: string }) {
   return (
     <>

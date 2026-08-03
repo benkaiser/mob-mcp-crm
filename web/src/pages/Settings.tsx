@@ -28,6 +28,13 @@ import {
   deleteCustomRelationshipType,
   type CustomRelationshipType,
 } from '../api/relationship-types';
+import {
+  listTags,
+  createTag,
+  updateTag,
+  deleteTag,
+  type Tag,
+} from '../api/tags';
 
 export function Settings() {
   const me = user.value;
@@ -41,6 +48,7 @@ export function Settings() {
 
       <ProfileSection />
       <RelationshipTypesSection />
+      <TagsSection />
 
       <Card class="section" data-testid="settings-plan">
         <div class="section__head"><h2>Plan &amp; usage</h2></div>
@@ -67,6 +75,145 @@ export function Settings() {
       <ExportSection />
       <DangerZoneSection />
     </div>
+  );
+}
+
+function TagsSection() {
+  const [tags, setTags] = useState<Tag[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
+  const [deleting, setDeleting] = useState<Tag | null>(null);
+
+  function load() {
+    setLoading(true);
+    setError(null);
+    listTags()
+      .then(({ data }) => setTags(data))
+      .catch((err) => setError(errorMessage(err, 'Failed to load tags')))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(load, []);
+
+  async function submit(e: Event) {
+    e.preventDefault();
+    const trimmed = name.trim();
+    if (!trimmed || busy) return;
+
+    setBusy(true);
+    setError(null);
+    try {
+      await createTag({ name: trimmed });
+      setName('');
+      showToast('Tag added', 'success');
+      load();
+    } catch (err) {
+      setError(errorMessage(err, 'Failed to add tag'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveEdit(e: Event) {
+    e.preventDefault();
+    if (!editing || !editing.name.trim() || busy) return;
+
+    setBusy(true);
+    setError(null);
+    try {
+      await updateTag(editing.id, { name: editing.name.trim() });
+      setEditing(null);
+      showToast('Tag renamed', 'success');
+      load();
+    } catch (err) {
+      setError(errorMessage(err, 'Failed to rename tag'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmDelete() {
+    if (!deleting) return;
+    setBusy(true);
+    try {
+      await deleteTag(deleting.id);
+      showToast('Tag deleted', 'success');
+      setDeleting(null);
+      load();
+    } catch (err) {
+      showToast(errorMessage(err, 'Failed to delete tag'), 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card class="section" data-testid="settings-tags">
+      <div class="section__head"><h2>Tags</h2></div>
+      <p class="muted">Manage reusable contact tags. Deleting a tag removes it from contacts that use it.</p>
+      {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
+      {loading ? (
+        <Spinner center />
+      ) : !tags || tags.length === 0 ? (
+        <EmptyState title="No tags yet" description="Create tags here or add them from a contact profile." />
+      ) : (
+        <div class="list" data-testid="settings-tag-list">
+          {tags.map((tag) => (
+            <div key={tag.id} class="sub-row" data-testid="settings-tag-row">
+              {editing?.id === tag.id ? (
+                <form class="row" onSubmit={saveEdit} style="flex:1;">
+                  <Input
+                    data-testid="settings-tag-edit-name"
+                    value={editing.name}
+                    onInput={(e) => setEditing({ id: tag.id, name: (e.target as HTMLInputElement).value })}
+                    required
+                  />
+                  <Button type="submit" size="sm" disabled={busy || !editing.name.trim()} data-testid="settings-tag-save">
+                    Save
+                  </Button>
+                  <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => setEditing(null)} data-testid="settings-tag-cancel">
+                    Cancel
+                  </Button>
+                </form>
+              ) : (
+                <>
+                  <strong data-testid="settings-tag-name">{tag.name}</strong>
+                  <span class="sub-row__actions">
+                    <Button size="sm" variant="ghost" data-testid="settings-tag-edit" onClick={() => setEditing({ id: tag.id, name: tag.name })}>Rename</Button>
+                    <Button size="sm" variant="danger" data-testid="settings-tag-delete" onClick={() => setDeleting(tag)}>Delete</Button>
+                  </span>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <form class="stack" onSubmit={submit} style="margin-top:1rem;">
+        <Field label="Tag name">
+          <Input data-testid="settings-tag-create-name" value={name} placeholder="Close friends" onInput={(e) => setName((e.target as HTMLInputElement).value)} required />
+        </Field>
+        <div>
+          <Button type="submit" disabled={busy || !name.trim()} data-testid="settings-tag-create">
+            {busy ? 'Adding…' : 'Add tag'}
+          </Button>
+        </div>
+      </form>
+
+      <ConfirmDialog
+        open={deleting !== null}
+        title="Delete tag?"
+        message={<>Delete <strong>{deleting?.name}</strong>? It will be removed from any tagged contacts.</>}
+        confirmLabel="Delete"
+        danger
+        busy={busy}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleting(null)}
+      />
+    </Card>
   );
 }
 

@@ -9,7 +9,6 @@ import { asyncHandler, sendData, ApiError, parseBody, getUserId } from './helper
 
 const tagContactSchema = z.object({
   name: z.string().min(1, 'name is required'),
-  color: z.string().optional(),
 }).strict();
 
 /**
@@ -39,7 +38,7 @@ export function createContactTagsRouter(db: Database.Database): Router {
     const contactId = param(req.params.contactId);
     requireContact(userId, contactId);
     const input = parseBody(tagContactSchema, req);
-    const tag = tags.tagContact(userId, contactId, input.name, input.color);
+    const tag = tags.tagContact(userId, contactId, input.name);
     sendData(res, tag, undefined, 201);
   }));
 

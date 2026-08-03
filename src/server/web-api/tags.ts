@@ -14,12 +14,10 @@ import {
 
 const createTagSchema = z.object({
   name: z.string().min(1, 'name is required'),
-  color: z.string().optional(),
 }).strict();
 
 const updateTagSchema = z.object({
   name: z.string().optional(),
-  color: z.string().optional(),
 }).strict();
 
 /**
@@ -42,7 +40,7 @@ export function createTagsRouter(db: Database.Database): Router {
   router.post('/', asyncHandler((req, res) => {
     const userId = getUserId(req);
     const input = parseBody(createTagSchema, req);
-    const tag = tags.create(userId, input.name, input.color);
+    const tag = tags.create(userId, input.name);
     sendData(res, tag, undefined, 201);
   }));
 

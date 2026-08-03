@@ -13,12 +13,10 @@ import { getApiUserId } from './middleware.js';
 
 const createTagSchema = z.object({
   name: z.string().min(1, 'name is required'),
-  color: z.string().optional(),
 }).strict();
 
 const updateTagSchema = z.object({
   name: z.string().optional(),
-  color: z.string().optional(),
 }).strict();
 
 /** Public REST API router for tags (mounted at /api/v1/tags). */
@@ -33,7 +31,7 @@ export function createTagsRouter(db: Database.Database): Router {
   router.post('/', asyncHandler((req, res) => {
     const userId = getApiUserId(req);
     const input = parseBody(createTagSchema, req);
-    sendData(res, tags.create(userId, input.name, input.color), undefined, 201);
+    sendData(res, tags.create(userId, input.name), undefined, 201);
   }));
 
   router.patch('/:id', asyncHandler((req, res) => {

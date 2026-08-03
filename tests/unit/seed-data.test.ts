@@ -19,13 +19,9 @@ describe('seedForgetfulData', () => {
   });
 
   it('creates 4 tags (Family, Friends, School, Neighbours)', () => {
-    const tags = db.prepare('SELECT name, color FROM tags WHERE user_id = ? ORDER BY name').all(userId) as any[];
+    const tags = db.prepare('SELECT name FROM tags WHERE user_id = ? ORDER BY name').all(userId) as any[];
     expect(tags).toHaveLength(4);
     expect(tags.map(t => t.name)).toEqual(['Family', 'Friends', 'Neighbours', 'School']);
-    expect(tags.find(t => t.name === 'Family').color).toBe('#E74C3C');
-    expect(tags.find(t => t.name === 'Friends').color).toBe('#3498DB');
-    expect(tags.find(t => t.name === 'School').color).toBe('#2ECC71');
-    expect(tags.find(t => t.name === 'Neighbours').color).toBe('#F39C12');
   });
 
   it('tags contacts correctly', () => {

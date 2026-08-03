@@ -16,12 +16,12 @@ export function seedForgetfulData(db: Database.Database, userId: string): void {
   const tagNeighbours = generateId();
 
   const insertTag = db.prepare(
-    'INSERT INTO tags (id, user_id, name, color) VALUES (?, ?, ?, ?)'
+    'INSERT INTO tags (id, user_id, name) VALUES (?, ?, ?)'
   );
-  insertTag.run(tagFamily, userId, 'Family', '#E74C3C');
-  insertTag.run(tagFriends, userId, 'Friends', '#3498DB');
-  insertTag.run(tagSchool, userId, 'School', '#2ECC71');
-  insertTag.run(tagNeighbours, userId, 'Neighbours', '#F39C12');
+  insertTag.run(tagFamily, userId, 'Family');
+  insertTag.run(tagFriends, userId, 'Friends');
+  insertTag.run(tagSchool, userId, 'School');
+  insertTag.run(tagNeighbours, userId, 'Neighbours');
 
   // ─── Contacts ───────────────────────────────────────────────────
   const insertContact = db.prepare(`

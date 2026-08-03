@@ -68,11 +68,6 @@ async function makeClient(srv: ReturnType<typeof createServer>, email = 'auth@te
   return new Client(srv.app, session, csrf);
 }
 
-async function makeContact(c: Client, first = 'Bingo'): Promise<string> {
-  const r = await c.mutate('POST', '/web/api/contacts', { first_name: first });
-  return JSON.parse(r.body).data.id;
-}
-
 describe('Tags internal API (/web/api/tags)', () => {
   let server: ReturnType<typeof createServer> | null = null;
   afterEach(() => { if (server) { server.stop(); server = null; } });
@@ -87,7 +82,7 @@ describe('Tags internal API (/web/api/tags)', () => {
     server = createServer(persistent);
     const c = await makeClient(server);
 
-    const create = await c.mutate('POST', '/web/api/tags', { name: 'family', color: '#ff0000' });
+    const create = await c.mutate('POST', '/web/api/tags', { name: 'family' });
     expect(create.status).toBe(201);
     const id = JSON.parse(create.body).data.id;
 
@@ -95,26 +90,48 @@ describe('Tags internal API (/web/api/tags)', () => {
     expect(list.status).toBe(200);
     expect(JSON.parse(list.body).data.some((t: { id: string }) => t.id === id)).toBe(true);
 
-    const upd = await c.mutate('PATCH', `/web/api/tags/${id}`, { color: '#00ff00' });
+    const upd = await c.mutate('PATCH', `/web/api/tags/${id}`, { name: 'close family' });
     expect(upd.status).toBe(200);
-    expect(JSON.parse(upd.body).data.color).toBe('#00ff00');
+    expect(JSON.parse(upd.body).data.name).toBe('close family');
 
     const del = await c.mutate('DELETE', `/web/api/tags/${id}`);
     expect(del.status).toBe(200);
     expect(JSON.parse(del.body).data.deleted).toBe(true);
   });
 
+  it('supports Settings tag-management CRUD endpoints', async () => {
+    server = createServer(persistent);
+    const c = await makeClient(server);
+
+    const create = await c.mutate('POST', '/web/api/tags', { name: 'settings-tag' });
+    expect(create.status).toBe(201);
+    const tag = JSON.parse(create.body).data as { id: string; name: string };
+    expect(tag.name).toBe('settings-tag');
+
+    const rename = await c.mutate('PATCH', `/web/api/tags/${tag.id}`, { name: 'settings-renamed' });
+    expect(rename.status).toBe(200);
+    expect(JSON.parse(rename.body).data.name).toBe('settings-renamed');
+
+    const list = await c.get('/web/api/tags');
+    expect(JSON.parse(list.body).data.some((t: { id: string; name: string }) => t.id === tag.id && t.name === 'settings-renamed')).toBe(true);
+
+    const del = await c.mutate('DELETE', `/web/api/tags/${tag.id}`);
+    expect(del.status).toBe(200);
+    const after = await c.get('/web/api/tags');
+    expect(JSON.parse(after.body).data.some((t: { id: string }) => t.id === tag.id)).toBe(false);
+  });
+
   it('returns 404 when updating a missing tag', async () => {
     server = createServer(persistent);
     const c = await makeClient(server);
-    const res = await c.mutate('PATCH', '/web/api/tags/nope', { color: '#000' });
+    const res = await c.mutate('PATCH', '/web/api/tags/nope', { name: 'missing' });
     expect(res.status).toBe(404);
   });
 
   it('returns 422 on validation error (missing name)', async () => {
     server = createServer(persistent);
     const c = await makeClient(server);
-    const res = await c.mutate('POST', '/web/api/tags', { color: '#fff' });
+    const res = await c.mutate('POST', '/web/api/tags', {});
     expect(res.status).toBe(422);
   });
 });

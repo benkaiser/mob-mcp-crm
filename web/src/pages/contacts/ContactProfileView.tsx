@@ -10,7 +10,7 @@ import { TagAutocomplete } from '../../components/TagAutocomplete';
 import { contactName, errorMessage, formatDate } from '../../lib/format';
 import {
   MethodEditor, AddressEditor, CustomFieldEditor, RelationshipEditor,
-  FoodPreferencesEditor, TagEditor,
+  FoodPreferencesEditor,
   NoteEditor, ActivityEditor, LifeEventEditor, ReminderEditor, TaskEditor, GiftEditor, DebtEditor,
 } from './SubEntityEditors';
 
@@ -20,7 +20,6 @@ type Editor =
   | { kind: 'custom_field'; existing?: ContactProfile['custom_fields'][number] }
   | { kind: 'relationship'; existing?: ContactProfile['relationships'][number] }
   | { kind: 'food' }
-  | { kind: 'tag'; initialName?: string; lockName?: boolean }
   | { kind: 'note'; existing?: ContactProfile['recent_notes'][number] }
   | { kind: 'activity'; existing?: ContactProfile['recent_activities'][number] }
   | { kind: 'life_event'; existing?: ContactProfile['life_events'][number] }
@@ -214,7 +213,6 @@ export function ContactProfileView({ id }: { id: string }) {
                 contactId={id}
                 currentTags={p.tags}
                 onAdded={load}
-                onCreateNew={(name) => setEditor({ kind: 'tag', initialName: name, lockName: true })}
               />
             </div>
           </Section>
@@ -417,10 +415,6 @@ export function ContactProfileView({ id }: { id: string }) {
       )}
       {editor?.kind === 'food' && (
         <FoodPreferencesEditor contactId={id} existing={p.food_preferences} onClose={() => setEditor(null)} onSaved={refresh} />
-      )}
-      {editor?.kind === 'tag' && (
-        <TagEditor contactId={id} initialName={editor.initialName} lockName={editor.lockName}
-          onClose={() => setEditor(null)} onSaved={refresh} />
       )}
       {editor?.kind === 'note' && (
         <NoteEditor contactId={id} existing={editor.existing} onClose={() => setEditor(null)} onSaved={refresh} />
