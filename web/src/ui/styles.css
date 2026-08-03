@@ -753,6 +753,7 @@ input[type="file"]::file-selector-button:hover { background: var(--color-hover);
 .stack { display: flex; flex-direction: column; gap: var(--space-4); }
 .row { display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; }
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-5); }
+.page-header__icon { display: inline-flex; vertical-align: -0.2em; color: currentColor; }
 
 /* ─── Copy field ─────────────────────────────────────────────── */
 .copy-field { width: 100%; }
@@ -1096,6 +1097,7 @@ input[type="file"]::file-selector-button:hover { background: var(--color-hover);
   font-size: 1.5rem; border-radius: 50%;
   background: rgba(255, 255, 255, 0.22);
 }
+.detail__icon .icon { display: block; }
 .detail__heading { min-width: 0; }
 .detail__title { margin: 0; font-size: var(--text-xl); color: inherit; overflow-wrap: anywhere; }
 .detail__badges { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }

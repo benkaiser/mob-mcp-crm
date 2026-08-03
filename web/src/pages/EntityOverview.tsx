@@ -2,7 +2,8 @@ import { useEffect, useState } from 'preact/hooks';
 import { Link } from 'wouter-preact';
 import { apiGet } from '../api/client';
 import type { Activity, Debt, Gift, Note, Reminder, Task, PageMeta } from '../api/types';
-import { Badge, Card, EmptyState, ErrorBanner, Spinner } from '../ui';
+import { Badge, Card, EmptyState, ErrorBanner, Icon, Spinner } from '../ui';
+import type { IconName } from '../ui';
 import { errorMessage, formatDate } from '../lib/format';
 import { humanize } from '../lib/humanize';
 
@@ -13,7 +14,7 @@ interface OverviewConfig<T extends Row = Row> {
   resource: OverviewResource;
   label: string;
   pluralLabel: string;
-  icon: string;
+  icon: IconName;
   newLabel: string;
   emptyTitle: string;
   emptyBody: string;
@@ -22,7 +23,7 @@ interface OverviewConfig<T extends Row = Row> {
 
 const configs: Record<OverviewResource, OverviewConfig> = {
   activities: {
-    resource: 'activities', label: 'Activity', pluralLabel: 'Activities', icon: '📌', newLabel: 'New Activity',
+    resource: 'activities', label: 'Activity', pluralLabel: 'Activities', icon: 'activity', newLabel: 'New Activity',
     emptyTitle: 'No activities yet', emptyBody: 'Log an activity to start building your relationship timeline.',
     render: (item) => {
       const a = item as Activity;
@@ -34,7 +35,7 @@ const configs: Record<OverviewResource, OverviewConfig> = {
     },
   },
   notes: {
-    resource: 'notes', label: 'Note', pluralLabel: 'Notes', icon: '📝', newLabel: 'New Note',
+    resource: 'notes', label: 'Note', pluralLabel: 'Notes', icon: 'file-text', newLabel: 'New Note',
     emptyTitle: 'No notes yet', emptyBody: 'Create a note to remember important details about a contact.',
     render: (item) => {
       const n = item as Note & { contact_name?: string; body_truncated?: boolean };
@@ -46,7 +47,7 @@ const configs: Record<OverviewResource, OverviewConfig> = {
     },
   },
   reminders: {
-    resource: 'reminders', label: 'Reminder', pluralLabel: 'Reminders', icon: '🔔', newLabel: 'New Reminder',
+    resource: 'reminders', label: 'Reminder', pluralLabel: 'Reminders', icon: 'bell', newLabel: 'New Reminder',
     emptyTitle: 'No reminders yet', emptyBody: 'Create a reminder so important follow-ups do not slip.',
     render: (item) => {
       const r = item as Reminder;
@@ -58,7 +59,7 @@ const configs: Record<OverviewResource, OverviewConfig> = {
     },
   },
   tasks: {
-    resource: 'tasks', label: 'Task', pluralLabel: 'Tasks', icon: '📋', newLabel: 'New Task',
+    resource: 'tasks', label: 'Task', pluralLabel: 'Tasks', icon: 'list-checks', newLabel: 'New Task',
     emptyTitle: 'No tasks yet', emptyBody: 'Create a task for a contact or for yourself.',
     render: (item) => {
       const t = item as Task;
@@ -70,7 +71,7 @@ const configs: Record<OverviewResource, OverviewConfig> = {
     },
   },
   debts: {
-    resource: 'debts', label: 'Debt', pluralLabel: 'Debts', icon: '💰', newLabel: 'New Debt',
+    resource: 'debts', label: 'Debt', pluralLabel: 'Debts', icon: 'wallet', newLabel: 'New Debt',
     emptyTitle: 'No debts yet', emptyBody: 'Track money owed to or from contacts.',
     render: (item) => {
       const d = item as Debt;
@@ -85,7 +86,7 @@ const configs: Record<OverviewResource, OverviewConfig> = {
     },
   },
   gifts: {
-    resource: 'gifts', label: 'Gift', pluralLabel: 'Gifts', icon: '🎁', newLabel: 'New Gift',
+    resource: 'gifts', label: 'Gift', pluralLabel: 'Gifts', icon: 'gift', newLabel: 'New Gift',
     emptyTitle: 'No gifts yet', emptyBody: 'Capture gift ideas, purchases, and gifts received.',
     render: (item) => {
       const g = item as Gift;
@@ -126,7 +127,7 @@ export function EntityOverview({ resource }: { resource: OverviewResource }) {
   return (
     <div class="stack" data-testid={`overview-${resource}`}>
       <div class="page-header">
-        <h1><span aria-hidden="true">{config.icon}</span> {config.pluralLabel}</h1>
+        <h1><span class="page-header__icon" aria-hidden="true"><Icon name={config.icon} size={24} /></span> {config.pluralLabel}</h1>
         <Link href={`/${resource}/new`} class="btn" data-testid={`overview-new-${resource}`}>{config.newLabel}</Link>
       </div>
 

@@ -14,3 +14,5 @@ export { Avatar } from './Avatar';
 export { Tabs } from './Tabs';
 export { Field } from './Field';
 export { CopyField } from './CopyField';
+export { Icon } from './Icon';
+export type { IconName } from './Icon';

@@ -15,7 +15,9 @@ import {
   showToast,
   Badge,
   Avatar,
+  Icon,
 } from '../ui';
+import type { IconName } from '../ui';
 import { humanize } from '../lib/humanize';
 
 /**
@@ -425,7 +427,7 @@ interface SectionItem {
   testid?: string;
 }
 interface RichView {
-  icon: string;
+  icon: IconName;
   title: string;
   titleTestid?: string;
   badges: BadgeItem[];
@@ -452,7 +454,7 @@ function RichEntityBody({
   return (
     <div class="detail" data-testid={`${resource}-detail`}>
       <div class="detail__hero">
-        <span class="detail__icon" aria-hidden="true">{view.icon}</span>
+        <span class="detail__icon" aria-hidden="true"><Icon name={view.icon} size={26} /></span>
         <div class="detail__heading">
           <h2 class="detail__title" data-testid={view.titleTestid ?? 'entity-field-title'}>{view.title}</h2>
           {view.badges.length > 0 && (
@@ -536,14 +538,14 @@ function RichEntityBody({
 }
 
 /** Icon per activity type. */
-const ACTIVITY_ICONS: Record<string, string> = {
-  phone_call: '📞',
-  video_call: '📹',
-  text_message: '💬',
-  in_person: '🤝',
-  email: '✉️',
-  activity: '🎉',
-  other: '📌',
+const ACTIVITY_ICONS: Record<string, IconName> = {
+  phone_call: 'phone',
+  video_call: 'video',
+  text_message: 'message-circle',
+  in_person: 'users',
+  email: 'mail',
+  activity: 'sparkles',
+  other: 'pin',
 };
 
 /** Builders map a raw record into the shared RichView shape, one per resource. */
@@ -569,7 +571,7 @@ const RICH_BUILDERS: Record<string, (data: Record_) => RichView> = {
     }
     if (location) stats.push({ label: 'Location', value: location, testid: 'entity-field-location' });
     return {
-      icon: ACTIVITY_ICONS[type] ?? '📌',
+      icon: ACTIVITY_ICONS[type] ?? 'pin',
       title,
       badges,
       highlight: occurredAt
@@ -587,7 +589,7 @@ const RICH_BUILDERS: Record<string, (data: Record_) => RichView> = {
     const badges: BadgeItem[] = [];
     if (pinned) badges.push({ label: 'Pinned', tone: 'warning' });
     return {
-      icon: pinned ? '📌' : '📝',
+      icon: pinned ? 'pin' : 'file-text',
       title: (typeof data.title === 'string' && data.title) || 'Note',
       badges,
       stats: [],
@@ -602,7 +604,7 @@ const RICH_BUILDERS: Record<string, (data: Record_) => RichView> = {
     const occurredAt = typeof data.occurred_at === 'string' ? data.occurred_at : '';
     const rel = relativeTime(occurredAt);
     return {
-      icon: '🌟',
+      icon: 'star',
       title: (typeof data.title === 'string' && data.title) || 'Life event',
       badges: eventType
         ? [{ label: humanize(eventType), tone: 'primary', testid: 'entity-field-event_type' }]
@@ -641,7 +643,7 @@ const RICH_BUILDERS: Record<string, (data: Record_) => RichView> = {
     if (status) stats.push({ label: 'Status', value: humanize(status), testid: 'entity-field-status' });
     if (url) stats.push({ label: 'Link', value: 'Open ↗', href: url, testid: 'entity-field-url' });
     return {
-      icon: '🎁',
+      icon: 'gift',
       title: (typeof data.name === 'string' && data.name) || 'Gift',
       badges,
       highlight: hasCost
@@ -668,7 +670,7 @@ const RICH_BUILDERS: Record<string, (data: Record_) => RichView> = {
     if (data.incurred_at) stats.push({ label: 'Incurred', value: formatNiceDate(data.incurred_at), testid: 'entity-field-incurred_at' });
     if (data.settled_at) stats.push({ label: 'Settled', value: formatNiceDate(data.settled_at), testid: 'entity-field-settled_at' });
     return {
-      icon: '💰',
+      icon: 'wallet',
       title: (typeof data.reason === 'string' && data.reason) || 'Debt',
       badges: [
         {
@@ -706,7 +708,7 @@ const RICH_BUILDERS: Record<string, (data: Record_) => RichView> = {
     stats.push({ label: 'Priority', value: humanize(priority), testid: 'entity-field-priority' });
     if (data.completed_at) stats.push({ label: 'Completed', value: formatTimestamp(data.completed_at), testid: 'entity-field-completed_at' });
     return {
-      icon: done ? '✅' : '📋',
+      icon: done ? 'circle-check-big' : 'list-checks',
       title: (typeof data.title === 'string' && data.title) || 'Task',
       badges,
       highlight: dueDate && !done
@@ -734,7 +736,7 @@ const RICH_BUILDERS: Record<string, (data: Record_) => RichView> = {
     ];
     if (isAuto) badges.push({ label: 'Auto-generated', tone: 'default' });
     return {
-      icon: '🔔',
+      icon: 'bell',
       title: (typeof data.title === 'string' && data.title) || 'Reminder',
       badges,
       highlight: countdown
@@ -779,4 +781,3 @@ function priorityTone(priority: string): Tone {
     default: return 'default';
   }
 }
-
