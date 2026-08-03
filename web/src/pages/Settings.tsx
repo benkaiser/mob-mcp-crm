@@ -22,6 +22,12 @@ import {
   deleteAccount,
   type Connection, type WebSession,
 } from '../api/account';
+import {
+  listCustomRelationshipTypes,
+  createCustomRelationshipType,
+  deleteCustomRelationshipType,
+  type CustomRelationshipType,
+} from '../api/relationship-types';
 
 export function Settings() {
   const me = user.value;
@@ -34,6 +40,7 @@ export function Settings() {
       <div class="page-header"><h1>Settings</h1></div>
 
       <ProfileSection />
+      <RelationshipTypesSection />
 
       <Card class="section" data-testid="settings-plan">
         <div class="section__head"><h2>Plan &amp; usage</h2></div>
@@ -60,6 +67,120 @@ export function Settings() {
       <ExportSection />
       <DangerZoneSection />
     </div>
+  );
+}
+
+function RelationshipTypesSection() {
+  const [types, setTypes] = useState<CustomRelationshipType[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [value, setValue] = useState('');
+  const [label, setLabel] = useState('');
+  const [inverse, setInverse] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState<CustomRelationshipType | null>(null);
+
+  function load() {
+    setLoading(true);
+    setError(null);
+    listCustomRelationshipTypes()
+      .then(({ data }) => setTypes(data))
+      .catch((err) => setError(errorMessage(err, 'Failed to load custom relationship types')))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(load, []);
+
+  async function submit(e: Event) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await createCustomRelationshipType({
+        value,
+        label: label.trim() || undefined,
+        inverse_value: inverse,
+      });
+      setValue('');
+      setLabel('');
+      setInverse('');
+      showToast('Relationship type added', 'success');
+      load();
+    } catch (err) {
+      setError(errorMessage(err, 'Failed to add relationship type'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmDelete() {
+    if (!deleting) return;
+    setBusy(true);
+    try {
+      await deleteCustomRelationshipType(deleting.id);
+      showToast('Relationship type deleted', 'success');
+      setDeleting(null);
+      load();
+    } catch (err) {
+      showToast(errorMessage(err, 'Failed to delete relationship type'), 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card class="section" data-testid="settings-relationship-types">
+      <div class="section__head"><h2>Relationship types</h2></div>
+      <p class="muted">Add custom relationship types and their inverse for automatic bidirectional relationships.</p>
+      {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
+      {loading ? (
+        <Spinner center />
+      ) : !types || types.length === 0 ? (
+        <EmptyState title="No custom relationship types" description="Built-in types like spouse, sibling and colleague are always available." />
+      ) : (
+        <div class="list" data-testid="relationship-type-list">
+          {types.map((t) => (
+            <div key={t.id} class="sub-row" data-testid="relationship-type-row">
+              <div class="sub-row__meta">
+                <span><strong>{t.label || t.value}</strong> <span class="mono muted">{t.value}</span></span>
+                <span class="muted">inverse: <span class="mono">{t.inverse_value}</span></span>
+              </div>
+              <Button variant="danger" size="sm" data-testid="relationship-type-delete" onClick={() => setDeleting(t)}>Delete</Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <form class="stack" onSubmit={submit} style="margin-top:1rem;">
+        <div class="form-grid">
+          <Field label="Value" hint="Stored as snake_case">
+            <Input data-testid="relationship-type-value" value={value} placeholder="mentor_external" onInput={(e) => setValue((e.target as HTMLInputElement).value)} required />
+          </Field>
+          <Field label="Label (optional)">
+            <Input data-testid="relationship-type-label" value={label} placeholder="External mentor" onInput={(e) => setLabel((e.target as HTMLInputElement).value)} />
+          </Field>
+          <Field label="Inverse value" hint="May be the same for symmetric types">
+            <Input data-testid="relationship-type-inverse" value={inverse} placeholder="mentee_external" onInput={(e) => setInverse((e.target as HTMLInputElement).value)} required />
+          </Field>
+        </div>
+        <div>
+          <Button type="submit" disabled={busy || !value.trim() || !inverse.trim()} data-testid="relationship-type-add">
+            {busy ? 'Adding…' : 'Add relationship type'}
+          </Button>
+        </div>
+      </form>
+
+      <ConfirmDialog
+        open={deleting !== null}
+        title="Delete relationship type?"
+        message={<>Delete <strong>{deleting?.label || deleting?.value}</strong>? Existing relationships keep their stored value.</>}
+        confirmLabel="Delete"
+        danger
+        busy={busy}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleting(null)}
+      />
+    </Card>
   );
 }
 

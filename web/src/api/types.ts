@@ -148,6 +148,24 @@ export interface Relationship {
   updated_at: string;
 }
 
+export interface RelationshipTypeOption {
+  value: string;
+  label: string;
+  inverse_value: string;
+  category: string;
+  source: 'canonical' | 'custom';
+}
+
+export interface CustomRelationshipType {
+  id: string;
+  user_id: string;
+  value: string;
+  label: string | null;
+  inverse_value: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface FoodPreferences {
   id: string;
   contact_id: string;

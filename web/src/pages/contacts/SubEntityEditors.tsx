@@ -1,8 +1,9 @@
-import { useState } from 'preact/hooks';
+import { useEffect, useState } from 'preact/hooks';
 import { apiPost, apiPatch } from '../../api/client';
+import { listRelationshipTypes } from '../../api/relationship-types';
 import type {
   ContactMethod, Address, CustomField, Relationship, FoodPreferences, ContactMethodType,
-  Note, Activity, LifeEvent, Reminder, Task, Gift, Debt,
+  Note, Activity, LifeEvent, Reminder, Task, Gift, Debt, RelationshipTypeOption,
 } from '../../api/types';
 import { Modal, Button, Input, Select, Textarea, Field, showToast } from '../../ui';
 import { errorMessage, fieldErrors } from '../../lib/format';
@@ -179,7 +180,40 @@ export function RelationshipEditor(
   const [related, setRelated] = useState(existing?.related_contact_id ?? '');
   const [type, setType] = useState(existing?.relationship_type ?? '');
   const [notes, setNotes] = useState(existing?.notes ?? '');
+  const [typeOptions, setTypeOptions] = useState<RelationshipTypeOption[]>([]);
+  const [typesLoading, setTypesLoading] = useState(true);
   const { saving, error, errs, run } = useSave();
+
+  useEffect(() => {
+    let cancelled = false;
+    setTypesLoading(true);
+    listRelationshipTypes()
+      .then(({ data }) => {
+        if (!cancelled) setTypeOptions(data);
+      })
+      .catch(() => {
+        if (!cancelled) setTypeOptions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setTypesLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  const options = existing?.relationship_type && !typeOptions.some((o) => o.value === existing.relationship_type)
+    ? [{
+      value: existing.relationship_type,
+      label: existing.relationship_type.replace(/_/g, ' '),
+      inverse_value: existing.relationship_type,
+      category: 'Current value',
+      source: 'custom' as const,
+    }, ...typeOptions]
+    : typeOptions;
+
+  const groupedTypes = options.reduce<Record<string, RelationshipTypeOption[]>>((acc, option) => {
+    (acc[option.category] ??= []).push(option);
+    return acc;
+  }, {});
 
   function submit(e: Event) {
     e.preventDefault();
@@ -209,8 +243,17 @@ export function RelationshipEditor(
             </Select>
           </Field>
         )}
-        <Field label="Relationship type" error={errs.relationship_type} hint="e.g. spouse, sibling, colleague">
-          <Input data-testid="rel-type" value={type} onInput={(e) => setType((e.target as HTMLInputElement).value)} required />
+        <Field label="Relationship type" error={errs.relationship_type} hint={typesLoading ? 'Loading relationship types…' : 'Choose a canonical or custom type'}>
+          <Select data-testid="rel-type" value={type} onChange={(e) => setType((e.target as HTMLSelectElement).value)} required disabled={typesLoading && options.length === 0}>
+            <option value="">Select a relationship type…</option>
+            {Object.entries(groupedTypes).map(([category, items]) => (
+              <optgroup key={category} label={category}>
+                {items.map((item) => (
+                  <option key={item.value} value={item.value}>{item.label}</option>
+                ))}
+              </optgroup>
+            ))}
+          </Select>
         </Field>
         <Field label="Notes (optional)">
           <Textarea data-testid="rel-notes" value={notes} onInput={(e) => setNotes((e.target as HTMLTextAreaElement).value)} />

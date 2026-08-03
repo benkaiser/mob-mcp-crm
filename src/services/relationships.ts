@@ -45,6 +45,36 @@ const INVERSE_MAP: Record<string, string> = {
   protege: 'mentor',
 };
 
+const CANONICAL_CATEGORIES: Record<string, string> = {
+  significant_other: 'Love',
+  spouse: 'Love',
+  date: 'Love',
+  lover: 'Love',
+  in_love_with: 'Love',
+  secret_lover: 'Love',
+  ex_boyfriend_girlfriend: 'Love',
+  ex_husband_wife: 'Love',
+  parent: 'Family',
+  child: 'Family',
+  sibling: 'Family',
+  grandparent: 'Family',
+  grandchild: 'Family',
+  uncle_aunt: 'Family',
+  nephew_niece: 'Family',
+  cousin: 'Family',
+  godparent: 'Family',
+  godchild: 'Family',
+  step_parent: 'Family',
+  step_child: 'Family',
+  friend: 'Friend',
+  best_friend: 'Friend',
+  colleague: 'Work',
+  boss: 'Work',
+  subordinate: 'Work',
+  mentor: 'Work',
+  protege: 'Work',
+};
+
 /**
  * Get the inverse of a relationship type.
  * For custom/unknown types, returns the same type (symmetric).
@@ -58,6 +88,37 @@ export function getInverseType(type: string): string {
  */
 export function getRelationshipTypes(): string[] {
   return Object.keys(INVERSE_MAP);
+}
+
+function labelForValue(value: string): string {
+  return value.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+export function normalizeRelationshipTypeValue(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .replace(/_+/g, '_');
+}
+
+export interface RelationshipTypeOption {
+  value: string;
+  label: string;
+  inverse_value: string;
+  category: string;
+  source: 'canonical' | 'custom';
+}
+
+export interface CustomRelationshipType {
+  id: string;
+  user_id: string;
+  value: string;
+  label: string | null;
+  inverse_value: string;
+  created_at: string;
+  updated_at: string;
 }
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -89,6 +150,181 @@ export interface UpdateRelationshipInput {
   notes?: string;
 }
 
+export interface CreateCustomRelationshipTypeInput {
+  value: string;
+  label?: string;
+  inverse_value: string;
+}
+
+export interface UpdateCustomRelationshipTypeInput {
+  value?: string;
+  label?: string | null;
+  inverse_value?: string;
+}
+
+export function getCanonicalRelationshipTypeOptions(): RelationshipTypeOption[] {
+  return getRelationshipTypes().map((value) => ({
+    value,
+    label: labelForValue(value),
+    inverse_value: getInverseType(value),
+    category: CANONICAL_CATEGORIES[value] ?? 'Other',
+    source: 'canonical',
+  }));
+}
+
+export function getRelationshipTypeOptionsForUser(db: Database.Database, userId: string): RelationshipTypeOption[] {
+  const options = getCanonicalRelationshipTypeOptions();
+  const seen = new Set(options.map((o) => o.value));
+  const custom = new CustomRelationshipTypeService(db).list(userId);
+
+  for (const type of custom) {
+    const forward: RelationshipTypeOption = {
+      value: type.value,
+      label: type.label ?? labelForValue(type.value),
+      inverse_value: type.inverse_value,
+      category: 'Custom',
+      source: 'custom',
+    };
+    if (!seen.has(forward.value)) {
+      options.push(forward);
+      seen.add(forward.value);
+    }
+
+    if (!seen.has(type.inverse_value)) {
+      options.push({
+        value: type.inverse_value,
+        label: labelForValue(type.inverse_value),
+        inverse_value: type.value,
+        category: 'Custom',
+        source: 'custom',
+      });
+      seen.add(type.inverse_value);
+    }
+  }
+
+  return options;
+}
+
+export function getRelationshipTypesForUser(db: Database.Database, userId: string): string[] {
+  return getRelationshipTypeOptionsForUser(db, userId).map((o) => o.value);
+}
+
+export function isRelationshipTypeAllowedForUser(db: Database.Database, userId: string, type: string): boolean {
+  return getRelationshipTypesForUser(db, userId).includes(type);
+}
+
+export function getInverseTypeForUser(db: Database.Database, userId: string, type: string): string {
+  if (INVERSE_MAP[type]) return INVERSE_MAP[type];
+
+  const row = db.prepare(`
+    SELECT value, inverse_value
+    FROM custom_relationship_types
+    WHERE user_id = ? AND (value = ? OR inverse_value = ?)
+    ORDER BY CASE WHEN value = ? THEN 0 ELSE 1 END
+    LIMIT 1
+  `).get(userId, type, type, type) as { value: string; inverse_value: string } | undefined;
+
+  if (!row) return type;
+  return row.value === type ? row.inverse_value : row.value;
+}
+
+export class CustomRelationshipTypeService {
+  constructor(private db: Database.Database) {}
+
+  list(userId: string): CustomRelationshipType[] {
+    return this.db.prepare(`
+      SELECT * FROM custom_relationship_types
+      WHERE user_id = ?
+      ORDER BY label COLLATE NOCASE, value COLLATE NOCASE
+    `).all(userId) as CustomRelationshipType[];
+  }
+
+  create(userId: string, input: CreateCustomRelationshipTypeInput): CustomRelationshipType {
+    const value = normalizeRelationshipTypeValue(input.value);
+    const inverseValue = normalizeRelationshipTypeValue(input.inverse_value);
+    const label = input.label?.trim() || null;
+
+    if (!value) throw new Error('value is required');
+    if (!inverseValue) throw new Error('inverse_value is required');
+    if (INVERSE_MAP[value]) throw new Error(`"${value}" is a built-in relationship type`);
+
+    const id = generateId();
+    try {
+      this.db.prepare(`
+        INSERT INTO custom_relationship_types (id, user_id, value, label, inverse_value)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(id, userId, value, label, inverseValue);
+    } catch (err: any) {
+      if (err.message?.includes('UNIQUE constraint failed')) {
+        throw new Error(`Custom relationship type "${value}" already exists`);
+      }
+      throw err;
+    }
+
+    return this.get(userId, id)!;
+  }
+
+  delete(userId: string, id: string): boolean {
+    const result = this.db.prepare('DELETE FROM custom_relationship_types WHERE id = ? AND user_id = ?').run(id, userId);
+    return result.changes > 0;
+  }
+
+  update(userId: string, id: string, input: UpdateCustomRelationshipTypeInput): CustomRelationshipType | null {
+    const existing = this.get(userId, id);
+    if (!existing) return null;
+
+    const fields: string[] = [];
+    const values: unknown[] = [];
+
+    if (input.value !== undefined) {
+      const value = normalizeRelationshipTypeValue(input.value);
+      if (!value) throw new Error('value is required');
+      if (INVERSE_MAP[value]) throw new Error(`"${value}" is a built-in relationship type`);
+      fields.push('value = ?');
+      values.push(value);
+    }
+    if (input.label !== undefined) {
+      fields.push('label = ?');
+      values.push(input.label?.trim() || null);
+    }
+    if (input.inverse_value !== undefined) {
+      const inverseValue = normalizeRelationshipTypeValue(input.inverse_value);
+      if (!inverseValue) throw new Error('inverse_value is required');
+      fields.push('inverse_value = ?');
+      values.push(inverseValue);
+    }
+
+    if (fields.length === 0) return existing;
+    fields.push("updated_at = datetime('now')");
+    values.push(id, userId);
+
+    try {
+      this.db.prepare(`
+        UPDATE custom_relationship_types
+        SET ${fields.join(', ')}
+        WHERE id = ? AND user_id = ?
+      `).run(...values);
+    } catch (err: any) {
+      if (err.message?.includes('UNIQUE constraint failed')) {
+        throw new Error('Custom relationship type already exists');
+      }
+      throw err;
+    }
+
+    return this.get(userId, id);
+  }
+
+  get(userId: string, id: string): CustomRelationshipType | null {
+    const row = this.db.prepare('SELECT * FROM custom_relationship_types WHERE id = ? AND user_id = ?')
+      .get(id, userId) as CustomRelationshipType | undefined;
+    return row ?? null;
+  }
+
+  mergedList(userId: string): RelationshipTypeOption[] {
+    return getRelationshipTypeOptionsForUser(this.db, userId);
+  }
+}
+
 // ─── Service ────────────────────────────────────────────────────
 
 export class RelationshipService {
@@ -101,8 +337,8 @@ export class RelationshipService {
    */
   add(input: CreateRelationshipInput): Relationship {
     // Validate both contact IDs exist before attempting insert
-    const contact = this.db.prepare('SELECT id, first_name, last_name FROM contacts WHERE id = ?').get(input.contact_id) as { id: string; first_name: string; last_name: string | null } | undefined;
-    const related = this.db.prepare('SELECT id, first_name, last_name FROM contacts WHERE id = ?').get(input.related_contact_id) as { id: string; first_name: string; last_name: string | null } | undefined;
+    const contact = this.db.prepare('SELECT id, user_id, first_name, last_name FROM contacts WHERE id = ?').get(input.contact_id) as { id: string; user_id: string; first_name: string; last_name: string | null } | undefined;
+    const related = this.db.prepare('SELECT id, user_id, first_name, last_name FROM contacts WHERE id = ?').get(input.related_contact_id) as { id: string; user_id: string; first_name: string; last_name: string | null } | undefined;
 
     // Check if the invalid ID is actually the user's own ID (common mistake)
     const isUserIdCheck = (id: string) => {
@@ -133,7 +369,7 @@ export class RelationshipService {
     const forwardId = generateId();
     const inverseId = generateId();
     const now = new Date().toISOString();
-    const inverseType = getInverseType(input.relationship_type);
+    const inverseType = getInverseTypeForUser(this.db, contact.user_id, input.relationship_type);
 
     const insertStmt = this.db.prepare(`
       INSERT INTO relationships (id, contact_id, related_contact_id, relationship_type, notes, created_at, updated_at)
@@ -195,7 +431,8 @@ export class RelationshipService {
 
       if (input.relationship_type !== undefined) {
         inverseFields.push('relationship_type = ?');
-        inverseValues.push(getInverseType(input.relationship_type));
+        const owner = this.ownerOfContact(existing.contact_id);
+        inverseValues.push(owner ? getInverseTypeForUser(this.db, owner, input.relationship_type) : getInverseType(input.relationship_type));
       }
       if (input.notes !== undefined) {
         inverseFields.push('notes = ?');
@@ -269,5 +506,10 @@ export class RelationshipService {
 
   private getById(id: string): Relationship | null {
     return this.db.prepare('SELECT * FROM relationships WHERE id = ?').get(id) as Relationship | undefined ?? null;
+  }
+
+  private ownerOfContact(contactId: string): string | null {
+    const row = this.db.prepare('SELECT user_id FROM contacts WHERE id = ?').get(contactId) as { user_id: string } | undefined;
+    return row?.user_id ?? null;
   }
 }

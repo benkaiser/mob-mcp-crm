@@ -1,6 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import Database from 'better-sqlite3';
-import { RelationshipService, getInverseType, getRelationshipTypes } from '../../src/services/relationships.js';
+import {
+  RelationshipService,
+  CustomRelationshipTypeService,
+  getInverseType,
+  getInverseTypeForUser,
+  getRelationshipTypeOptionsForUser,
+  getRelationshipTypes,
+} from '../../src/services/relationships.js';
 import { createTestDatabase, createTestUser, createTestContact } from '../fixtures/test-helpers.js';
 import { closeDatabase } from '../../src/db/connection.js';
 
@@ -154,5 +161,56 @@ describe('RelationshipService', () => {
 
     const rels = service.listByContact(contactA);
     expect(rels).toHaveLength(2);
+  });
+
+  it('should create custom relationship types and include them in merged options', () => {
+    const customTypes = new CustomRelationshipTypeService(db);
+    const created = customTypes.create(userId, {
+      value: 'External Mentor',
+      label: 'External mentor',
+      inverse_value: 'External Mentee',
+    });
+
+    expect(created.value).toBe('external_mentor');
+    expect(created.inverse_value).toBe('external_mentee');
+
+    const options = getRelationshipTypeOptionsForUser(db, userId);
+    expect(options).toEqual(expect.arrayContaining([
+      expect.objectContaining({ value: 'parent', category: 'Family', source: 'canonical' }),
+      expect.objectContaining({ value: 'external_mentor', label: 'External mentor', category: 'Custom', source: 'custom' }),
+      expect.objectContaining({ value: 'external_mentee', inverse_value: 'external_mentor', category: 'Custom', source: 'custom' }),
+    ]));
+
+    const updated = customTypes.update(userId, created.id, {
+      label: 'Board mentor',
+      inverse_value: 'board_mentee',
+    });
+    expect(updated).toMatchObject({ value: 'external_mentor', label: 'Board mentor', inverse_value: 'board_mentee' });
+
+    expect(customTypes.delete(userId, created.id)).toBe(true);
+    expect(customTypes.get(userId, created.id)).toBeNull();
+  });
+
+  it('should resolve custom inverse types for create and update', () => {
+    const customTypes = new CustomRelationshipTypeService(db);
+    customTypes.create(userId, {
+      value: 'coach',
+      label: 'Coach',
+      inverse_value: 'player',
+    });
+
+    expect(getInverseTypeForUser(db, userId, 'coach')).toBe('player');
+    expect(getInverseTypeForUser(db, userId, 'player')).toBe('coach');
+
+    const rel = service.add({
+      contact_id: contactA,
+      related_contact_id: contactB,
+      relationship_type: 'coach',
+    });
+    expect(service.listByContact(contactB)[0].relationship_type).toBe('player');
+
+    service.update(rel.id, { relationship_type: 'player' });
+    expect(service.listByContact(contactA)[0].relationship_type).toBe('player');
+    expect(service.listByContact(contactB)[0].relationship_type).toBe('coach');
   });
 });

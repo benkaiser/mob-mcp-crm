@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type Database from 'better-sqlite3';
 import { z } from 'zod';
 import { ContactService } from '../../services/contacts.js';
-import { RelationshipService } from '../../services/relationships.js';
+import { RelationshipService, isRelationshipTypeAllowedForUser } from '../../services/relationships.js';
 import { asyncHandler, sendData, ApiError, parseBody, getUserId } from './helpers.js';
 
 // ─── Validation schemas ─────────────────────────────────────────
@@ -33,6 +33,12 @@ export function createContactRelationshipsRouter(db: Database.Database): Router 
     if (!contacts.get(userId, contactId)) throw new ApiError(404, 'not_found', 'Contact not found');
   };
 
+  const requireRelationshipType = (userId: string, type: string): void => {
+    if (!isRelationshipTypeAllowedForUser(db, userId, type)) {
+      throw new ApiError(422, 'validation_error', `Unknown relationship type "${type}"`);
+    }
+  };
+
   router.get('/:contactId/relationships', asyncHandler((req, res) => {
     const userId = getUserId(req);
     const contactId = param(req.params.contactId);
@@ -46,6 +52,7 @@ export function createContactRelationshipsRouter(db: Database.Database): Router 
     requireContact(userId, contactId);
     // The related contact must also belong to the user.
     const input = parseBody(createRelationshipSchema, req);
+    requireRelationshipType(userId, input.relationship_type);
     requireContact(userId, input.related_contact_id);
     const created = relationships.add({ ...input, contact_id: contactId });
     sendData(res, created, undefined, 201);
@@ -56,6 +63,7 @@ export function createContactRelationshipsRouter(db: Database.Database): Router 
     const contactId = param(req.params.contactId);
     requireContact(userId, contactId);
     const input = parseBody(updateRelationshipSchema, req);
+    if (input.relationship_type !== undefined) requireRelationshipType(userId, input.relationship_type);
     const updated = relationships.updateForContact(contactId, param(req.params.relationshipId), input);
     if (!updated) throw new ApiError(404, 'not_found', 'Relationship not found');
     sendData(res, updated);

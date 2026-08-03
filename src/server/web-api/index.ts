@@ -24,6 +24,7 @@ import { createContactAddressesRouter } from './contact-addresses.js';
 import { createContactCustomFieldsRouter } from './contact-custom-fields.js';
 import { createContactFoodPreferencesRouter } from './contact-food-preferences.js';
 import { createContactRelationshipsRouter } from './contact-relationships.js';
+import { createRelationshipTypesRouter } from './relationship-types.js';
 import { createContactTagsRouter } from './contact-tags.js';
 import { createDashboardRouter } from './dashboard.js';
 import { createSearchRouter } from './search.js';
@@ -143,6 +144,7 @@ export function createWebApiRouter(deps: WebApiDeps): Router {
   router.use('/debts', createDebtsRouter(db));
   router.use('/tasks', createTasksRouter(db));
   router.use('/tags', createTagsRouter(db));
+  router.use('/relationship-types', createRelationshipTypesRouter(db, forgetful));
   router.use('/dashboard', createDashboardRouter(db));
   router.use('/search', createSearchRouter(db));
   router.use('/export', createExportRouter(db));

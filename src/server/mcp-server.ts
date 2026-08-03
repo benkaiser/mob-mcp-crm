@@ -9,7 +9,7 @@ import { ContactMethodService } from '../services/contact-methods.js';
 import { AddressService } from '../services/addresses.js';
 import { FoodPreferencesService } from '../services/food-preferences.js';
 import { CustomFieldService } from '../services/custom-fields.js';
-import { RelationshipService, getRelationshipTypes } from '../services/relationships.js';
+import { RelationshipService, getRelationshipTypes, isRelationshipTypeAllowedForUser } from '../services/relationships.js';
 import { NoteService } from '../services/notes.js';
 import { TagService } from '../services/tags-groups.js';
 import { ActivityService, ActivityTypeService } from '../services/activities.js';
@@ -478,7 +478,7 @@ export function createMcpServer(db: Database.Database): McpServer {
 
   // ─── Relationship Tools ─────────────────────────────────────
 
-  const relationshipTypeEnum = z.enum(getRelationshipTypes() as [string, ...string[]]);
+  const canonicalRelationshipTypes = getRelationshipTypes();
 
   server.registerTool('relationship_manage', {
     description: 'Add, update, remove, or list relationships between contacts.\n' +
@@ -494,7 +494,8 @@ export function createMcpServer(db: Database.Database): McpServer {
       contact_id: z.string().optional().describe('The source contact ID (required for "add" and "list")'),
       related_contact_id: z.string().optional().describe('The related contact ID (required for "add")'),
       id: z.string().optional().describe('The relationship ID (required for "update" and "remove")'),
-      relationship_type: relationshipTypeEnum.optional().describe('Type of relationship (required for "add", optional for "update")'),
+      relationship_type: z.string().optional()
+       .describe(`Type of relationship (required for "add", optional for "update"). Canonical values: ${canonicalRelationshipTypes.join(', ')}. Custom values defined in Settings are also accepted.`),
       notes: z.string().optional().describe('Notes about this relationship (optional for "add" and "update")'),
     },
   }, (args, extra) => {
@@ -504,11 +505,13 @@ export function createMcpServer(db: Database.Database): McpServer {
         if (!args.contact_id || !args.related_contact_id || !args.relationship_type) return errorResult('contact_id, related_contact_id, and relationship_type are required for "add"');
         verifyContactOwnership(db, userId, args.contact_id);
         verifyContactOwnership(db, userId, args.related_contact_id);
+        if (!isRelationshipTypeAllowedForUser(db, userId, args.relationship_type)) return errorResult(`Unknown relationship_type "${args.relationship_type}". Use one of the canonical types or a custom type defined in Settings.`);
         const rel = relationships.add({ contact_id: args.contact_id, related_contact_id: args.related_contact_id, relationship_type: args.relationship_type, notes: args.notes });
         return textResult(rel);
       } else if (args.action === 'update') {
         if (!args.id) return errorResult('id is required for "update"');
         verifyRecordOwnership(db, userId, 'relationships', args.id);
+        if (args.relationship_type && !isRelationshipTypeAllowedForUser(db, userId, args.relationship_type)) return errorResult(`Unknown relationship_type "${args.relationship_type}". Use one of the canonical types or a custom type defined in Settings.`);
         const { action, contact_id, related_contact_id, id, ...updates } = args;
         const rel = relationships.update(id, updates);
         if (!rel) return errorResult('Relationship not found');

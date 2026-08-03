@@ -7,6 +7,7 @@ export interface ExportData {
   version: string;
   contacts: any[];
   relationships: any[];
+  custom_relationship_types: any[];
   notes: any[];
   activities: any[];
   life_events: any[];
@@ -54,6 +55,10 @@ export class DataExportService {
         `SELECT * FROM relationships WHERE contact_id IN (${contactIds.map(() => '?').join(',')})`)
         .all(...contactIds)
       : [];
+
+    const customRelationshipTypes = this.db.prepare(
+      'SELECT * FROM custom_relationship_types WHERE user_id = ?'
+    ).all(userId);
 
     // Get notes
     const notes = contactIds.length > 0
@@ -129,6 +134,7 @@ export class DataExportService {
       version: '1.0',
       contacts,
       relationships,
+      custom_relationship_types: customRelationshipTypes,
       notes,
       activities: activitiesWithParticipants,
       life_events: lifeEvents,
