@@ -107,6 +107,8 @@ export interface ContactMethod {
   value: string;
   label: string | null;
   is_primary: boolean;
+  /** Resolved deep link for this method (tel:, mailto:, https://…) or null. */
+  link?: string | null;
   created_at: string;
   updated_at: string;
 }

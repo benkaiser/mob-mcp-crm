@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3';
 import { ContactService, type Contact } from './contacts.js';
 import { ContactMethodService } from './contact-methods.js';
+import { ContactMethodTypeService, buildContactMethodLink } from './contact-method-types.js';
 import { AddressService } from './addresses.js';
 import { FoodPreferencesService } from './food-preferences.js';
 import { CustomFieldService } from './custom-fields.js';
@@ -30,6 +31,7 @@ export function getContactProfile(
   if (!contact) return null;
 
   const contactMethods = new ContactMethodService(db);
+  const contactMethodTypes = new ContactMethodTypeService(db);
   const addresses = new AddressService(db);
   const foodPreferences = new FoodPreferencesService(db);
   const customFields = new CustomFieldService(db);
@@ -73,9 +75,20 @@ export function getContactProfile(
   const activeDebts = debtService.list(userId, { contact_id: contactId, status: 'active' });
   const debtSummary = debtService.summary(userId, contactId);
 
+  // Resolve a deep link for each contact method (honouring the user's
+  // built-in/override/custom link templates) so MCP `contact_get` and the web
+  // API both surface ready-to-use links (e.g. tel:, mailto:, https://m.me/…).
+  const methodLinkTemplates = new Map(
+    contactMethodTypes.mergedList(userId).map((option) => [option.key, option.link_template]),
+  );
+  const enrichedContactMethods = contactMethods.listByContact(contactId).map((method) => ({
+    ...method,
+    link: buildContactMethodLink(method.type, method.value, methodLinkTemplates.get(method.type)),
+  }));
+
   return {
     ...contact,
-    contact_methods: contactMethods.listByContact(contactId),
+    contact_methods: enrichedContactMethods,
     addresses: addresses.listByContact(contactId),
     food_preferences: foodPreferences.get(contactId),
     custom_fields: customFields.listByContact(contactId),
