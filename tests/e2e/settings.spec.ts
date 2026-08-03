@@ -39,6 +39,33 @@ test('profile section shows editable name, email and plan; name save persists', 
   await expect(page.getByTestId('settings-plan')).toBeVisible();
 });
 
+
+test('relationship types: creates custom type from label with optional inverse', async ({ page, account }) => {
+  void account;
+  await gotoSettings(page);
+
+  const section = page.getByTestId('settings-relationship-types');
+  await expect(section).toBeVisible();
+  await expect(section.getByTestId('relationship-type-value')).toHaveCount(0);
+
+  const label = `External Mentor ${Date.now()}`;
+  const labelInput = section.getByTestId('relationship-type-label');
+  const addButton = section.getByTestId('relationship-type-add');
+
+  await expect(addButton).toBeDisabled();
+  await labelInput.fill(label);
+  await expect(addButton).toBeEnabled();
+  await addButton.click();
+
+  const row = section.getByTestId('relationship-type-row').filter({ hasText: label });
+  await expect(row).toBeVisible();
+  await expect(row).toContainText('Inverse: external mentor');
+
+  await row.getByTestId('relationship-type-delete').click();
+  await page.getByTestId('confirm-accept').click();
+  await expect(row).toHaveCount(0);
+});
+
 test('password section rejects a wrong current password', async ({ page, account }) => {
   void account;
   await gotoSettings(page);

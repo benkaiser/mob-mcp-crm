@@ -7,6 +7,7 @@ import {
   getInverseTypeForUser,
   getRelationshipTypeOptionsForUser,
   getRelationshipTypes,
+  slugify,
 } from '../../src/services/relationships.js';
 import { createTestDatabase, createTestUser, createTestContact } from '../fixtures/test-helpers.js';
 import { closeDatabase } from '../../src/db/connection.js';
@@ -30,6 +31,15 @@ describe('getInverseType', () => {
 
   it('should return same type for unknown/custom types', () => {
     expect(getInverseType('custom_type')).toBe('custom_type');
+  });
+});
+
+describe('slugify', () => {
+  it('normalizes relationship labels to snake_case identifiers', () => {
+    expect(slugify('External Mentor!')).toBe('external_mentor');
+    expect(slugify('  Coach---Advisor  ')).toBe('coach_advisor');
+    expect(slugify('Family & Friends')).toBe('family_friends');
+    expect(slugify('!!!')).toBe('');
   });
 });
 
@@ -166,12 +176,12 @@ describe('RelationshipService', () => {
   it('should create custom relationship types and include them in merged options', () => {
     const customTypes = new CustomRelationshipTypeService(db);
     const created = customTypes.create(userId, {
-      value: 'External Mentor',
       label: 'External mentor',
       inverse_value: 'External Mentee',
     });
 
     expect(created.value).toBe('external_mentor');
+    expect(created.label).toBe('External mentor');
     expect(created.inverse_value).toBe('external_mentee');
 
     const options = getRelationshipTypeOptionsForUser(db, userId);
@@ -183,20 +193,45 @@ describe('RelationshipService', () => {
 
     const updated = customTypes.update(userId, created.id, {
       label: 'Board mentor',
-      inverse_value: 'board_mentee',
+      inverse_value: 'Board Mentee',
     });
-    expect(updated).toMatchObject({ value: 'external_mentor', label: 'Board mentor', inverse_value: 'board_mentee' });
+    expect(updated).toMatchObject({ value: 'board_mentor', label: 'Board mentor', inverse_value: 'board_mentee' });
 
     expect(customTypes.delete(userId, created.id)).toBe(true);
     expect(customTypes.get(userId, created.id)).toBeNull();
   });
 
+  it('should default inverse value to the derived label value when blank', () => {
+    const customTypes = new CustomRelationshipTypeService(db);
+    const created = customTypes.create(userId, { label: 'Accountability Buddy', inverse_value: '   ' });
+
+    expect(created).toMatchObject({
+      value: 'accountability_buddy',
+      label: 'Accountability Buddy',
+      inverse_value: 'accountability_buddy',
+    });
+    expect(getInverseTypeForUser(db, userId, 'accountability_buddy')).toBe('accountability_buddy');
+  });
+
+  it('should reject labels that do not produce a relationship type value', () => {
+    const customTypes = new CustomRelationshipTypeService(db);
+
+    expect(() => customTypes.create(userId, { label: '!!!' })).toThrow('Label must include at least one letter or number');
+  });
+
+  it('should return a friendly error when derived custom values collide', () => {
+    const customTypes = new CustomRelationshipTypeService(db);
+    customTypes.create(userId, { label: 'External Mentor' });
+
+    expect(() => customTypes.create(userId, { label: 'external mentor!!!' }))
+      .toThrow('A relationship type with a similar name already exists');
+  });
+
   it('should resolve custom inverse types for create and update', () => {
     const customTypes = new CustomRelationshipTypeService(db);
     customTypes.create(userId, {
-      value: 'coach',
       label: 'Coach',
-      inverse_value: 'player',
+      inverse_value: 'Player',
     });
 
     expect(getInverseTypeForUser(db, userId, 'coach')).toBe('player');

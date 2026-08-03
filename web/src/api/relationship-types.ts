@@ -12,16 +12,15 @@ export function listCustomRelationshipTypes(): Promise<ApiResult<CustomRelations
 }
 
 export function createCustomRelationshipType(body: {
-  value: string;
-  label?: string;
-  inverse_value: string;
+  label: string;
+  inverse_value?: string;
 }): Promise<ApiResult<CustomRelationshipType>> {
   return apiPost<CustomRelationshipType>('/relationship-types/custom', body);
 }
 
 export function updateCustomRelationshipType(
   id: string,
-  body: { value?: string; label?: string | null; inverse_value?: string },
+  body: { label?: string; inverse_value?: string },
 ): Promise<ApiResult<CustomRelationshipType>> {
   return apiPatch<CustomRelationshipType>(`/relationship-types/custom/${encodeURIComponent(id)}`, body);
 }

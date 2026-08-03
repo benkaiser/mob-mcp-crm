@@ -94,13 +94,16 @@ function labelForValue(value: string): string {
   return value.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-export function normalizeRelationshipTypeValue(value: string): string {
+export function slugify(value: string): string {
   return value
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .replace(/_+/g, '_');
+    .replace(/^_+|_+$/g, '');
+}
+
+export function normalizeRelationshipTypeValue(value: string): string {
+  return slugify(value);
 }
 
 export interface RelationshipTypeOption {
@@ -151,14 +154,12 @@ export interface UpdateRelationshipInput {
 }
 
 export interface CreateCustomRelationshipTypeInput {
-  value: string;
-  label?: string;
-  inverse_value: string;
+  label: string;
+  inverse_value?: string;
 }
 
 export interface UpdateCustomRelationshipTypeInput {
-  value?: string;
-  label?: string | null;
+  label?: string;
   inverse_value?: string;
 }
 
@@ -240,13 +241,11 @@ export class CustomRelationshipTypeService {
   }
 
   create(userId: string, input: CreateCustomRelationshipTypeInput): CustomRelationshipType {
-    const value = normalizeRelationshipTypeValue(input.value);
-    const inverseValue = normalizeRelationshipTypeValue(input.inverse_value);
-    const label = input.label?.trim() || null;
-
-    if (!value) throw new Error('value is required');
-    if (!inverseValue) throw new Error('inverse_value is required');
-    if (INVERSE_MAP[value]) throw new Error(`"${value}" is a built-in relationship type`);
+    const label = input.label.trim();
+    const value = slugify(label);
+    this.validateDerivedValue(value);
+    const inverseValue = this.resolveInverseValue(input.inverse_value, value);
+    if (INVERSE_MAP[value]) throw new Error(`"${label}" is a built-in relationship type`);
 
     const id = generateId();
     try {
@@ -255,8 +254,8 @@ export class CustomRelationshipTypeService {
         VALUES (?, ?, ?, ?, ?)
       `).run(id, userId, value, label, inverseValue);
     } catch (err: any) {
-      if (err.message?.includes('UNIQUE constraint failed')) {
-        throw new Error(`Custom relationship type "${value}" already exists`);
+      if (this.isUniqueConstraintError(err)) {
+        throw new Error('A relationship type with a similar name already exists');
       }
       throw err;
     }
@@ -273,45 +272,49 @@ export class CustomRelationshipTypeService {
     const existing = this.get(userId, id);
     if (!existing) return null;
 
-    const fields: string[] = [];
-    const values: unknown[] = [];
-
-    if (input.value !== undefined) {
-      const value = normalizeRelationshipTypeValue(input.value);
-      if (!value) throw new Error('value is required');
-      if (INVERSE_MAP[value]) throw new Error(`"${value}" is a built-in relationship type`);
-      fields.push('value = ?');
-      values.push(value);
-    }
+    const label = input.label !== undefined ? input.label.trim() : existing.label ?? labelForValue(existing.value);
+    const value = input.label !== undefined ? slugify(label) : existing.value;
     if (input.label !== undefined) {
-      fields.push('label = ?');
-      values.push(input.label?.trim() || null);
-    }
-    if (input.inverse_value !== undefined) {
-      const inverseValue = normalizeRelationshipTypeValue(input.inverse_value);
-      if (!inverseValue) throw new Error('inverse_value is required');
-      fields.push('inverse_value = ?');
-      values.push(inverseValue);
+      this.validateDerivedValue(value);
+      if (INVERSE_MAP[value]) throw new Error(`"${label}" is a built-in relationship type`);
     }
 
-    if (fields.length === 0) return existing;
-    fields.push("updated_at = datetime('now')");
-    values.push(id, userId);
+    const inverseValue = input.inverse_value !== undefined || input.label !== undefined
+      ? this.resolveInverseValue(input.inverse_value, value)
+      : existing.inverse_value;
+
+    if (input.label === undefined && input.inverse_value === undefined) return existing;
 
     try {
       this.db.prepare(`
         UPDATE custom_relationship_types
-        SET ${fields.join(', ')}
+        SET value = ?, label = ?, inverse_value = ?, updated_at = datetime('now')
         WHERE id = ? AND user_id = ?
-      `).run(...values);
+      `).run(value, label, inverseValue, id, userId);
     } catch (err: any) {
-      if (err.message?.includes('UNIQUE constraint failed')) {
-        throw new Error('Custom relationship type already exists');
+      if (this.isUniqueConstraintError(err)) {
+        throw new Error('A relationship type with a similar name already exists');
       }
       throw err;
     }
 
     return this.get(userId, id);
+  }
+
+
+  private validateDerivedValue(value: string): void {
+    if (!value) throw new Error('Label must include at least one letter or number');
+  }
+
+  private resolveInverseValue(inverse: string | undefined, defaultValue: string): string {
+    const inverseValue = inverse?.trim() ? slugify(inverse) : defaultValue;
+    if (!inverseValue) throw new Error('Inverse value must include at least one letter or number');
+    return inverseValue;
+  }
+
+  private isUniqueConstraintError(err: unknown): boolean {
+    const sqliteError = err as { code?: string; message?: string };
+    return sqliteError.code === 'SQLITE_CONSTRAINT_UNIQUE' || sqliteError.message?.includes('UNIQUE constraint failed') === true;
   }
 
   get(userId: string, id: string): CustomRelationshipType | null {

@@ -8,16 +8,14 @@ import {
 import { asyncHandler, sendData, ApiError, parseBody, getUserId } from './helpers.js';
 
 const createSchema = z.object({
-  value: z.string().min(1, 'value is required'),
-  label: z.string().optional(),
-  inverse_value: z.string().min(1, 'inverse_value is required'),
-}).strict();
+  label: z.string().trim().min(1, 'label is required'),
+  inverse_value: z.string().optional(),
+});
 
 const updateSchema = z.object({
-  value: z.string().min(1).optional(),
-  label: z.string().nullable().optional(),
-  inverse_value: z.string().min(1).optional(),
-}).strict();
+  label: z.string().trim().min(1, 'label is required').optional(),
+  inverse_value: z.string().optional(),
+});
 
 export function createRelationshipTypesRouter(db: Database.Database, forgetful: boolean): Router {
   const router = Router();

@@ -98,7 +98,7 @@ describe('relationship type web-api', () => {
 
     const created = await inject(app, 'POST', '/web/api/relationship-types/custom', {
       headers: { Cookie: `mob_session=session; mob_csrf=${token}`, 'X-CSRF-Token': token },
-      body: { value: 'Board Mentor', label: 'Board mentor', inverse_value: 'Board Mentee' },
+      body: { value: 'ignored_by_server', label: 'Board mentor', inverse_value: 'Board Mentee' },
     });
     expect(created.status).toBe(201);
     const createdType = JSON.parse(created.body).data;
@@ -127,7 +127,7 @@ describe('relationship type web-api', () => {
       body: { label: 'Advisory mentor' },
     });
     expect(updated.status).toBe(200);
-    expect(JSON.parse(updated.body).data.label).toBe('Advisory mentor');
+    expect(JSON.parse(updated.body).data).toEqual(expect.objectContaining({ label: 'Advisory mentor', value: 'advisory_mentor', inverse_value: 'advisory_mentor' }));
 
     const deleted = await inject(app, 'DELETE', `/web/api/relationship-types/custom/${createdType.id}`, {
       headers: { Cookie: `mob_session=session; mob_csrf=${token}`, 'X-CSRF-Token': token },
@@ -151,15 +151,43 @@ describe('relationship type web-api', () => {
 
     await inject(app, 'POST', '/web/api/relationship-types/custom', {
       headers,
-      body: { value: 'coach', inverse_value: 'player' },
+      body: { label: 'Coach', inverse_value: 'Player' },
     });
     const duplicate = await inject(app, 'POST', '/web/api/relationship-types/custom', {
       headers,
-      body: { value: 'Coach', inverse_value: 'player' },
+      body: { label: 'coach!!!', inverse_value: 'Player' },
     });
 
     expect(duplicate.status).toBe(400);
-    expect(JSON.parse(duplicate.body).error.code).toBe('invalid_relationship_type');
+    const error = JSON.parse(duplicate.body).error;
+    expect(error.code).toBe('invalid_relationship_type');
+    expect(error.message).toContain('similar name');
+  });
+
+  it('defaults blank inverse values and rejects invalid labels', async () => {
+    db = createTestDatabase();
+    const userId = createTestUser(db);
+    const app = appFor(db, userId);
+    const token = await csrf(app);
+    const headers = { Cookie: `mob_session=session; mob_csrf=${token}`, 'X-CSRF-Token': token };
+
+    const created = await inject(app, 'POST', '/web/api/relationship-types/custom', {
+      headers,
+      body: { label: 'Accountability Buddy', inverse_value: '   ' },
+    });
+    expect(created.status).toBe(201);
+    expect(JSON.parse(created.body).data).toEqual(expect.objectContaining({
+      value: 'accountability_buddy',
+      label: 'Accountability Buddy',
+      inverse_value: 'accountability_buddy',
+    }));
+
+    const invalid = await inject(app, 'POST', '/web/api/relationship-types/custom', {
+      headers,
+      body: { label: '!!!' },
+    });
+    expect(invalid.status).toBe(400);
+    expect(JSON.parse(invalid.body).error.code).toBe('invalid_relationship_type');
   });
 
   it('returns canonical types but blocks custom management in forgetful mode', async () => {
@@ -178,7 +206,7 @@ describe('relationship type web-api', () => {
 
     const custom = await inject(app, 'POST', '/web/api/relationship-types/custom', {
       headers: { Cookie: `mob_session=session; mob_csrf=${token}`, 'X-CSRF-Token': token },
-      body: { value: 'coach', inverse_value: 'player' },
+      body: { label: 'Coach', inverse_value: 'Player' },
     });
     expect(custom.status).toBe(400);
     expect(JSON.parse(custom.body).error.code).toBe('unavailable');

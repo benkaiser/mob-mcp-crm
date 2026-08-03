@@ -74,7 +74,6 @@ function RelationshipTypesSection() {
   const [types, setTypes] = useState<CustomRelationshipType[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [value, setValue] = useState('');
   const [label, setLabel] = useState('');
   const [inverse, setInverse] = useState('');
   const [busy, setBusy] = useState(false);
@@ -97,11 +96,9 @@ function RelationshipTypesSection() {
     setError(null);
     try {
       await createCustomRelationshipType({
-        value,
-        label: label.trim() || undefined,
-        inverse_value: inverse,
+        label: label.trim(),
+        inverse_value: inverse.trim() || undefined,
       });
-      setValue('');
       setLabel('');
       setInverse('');
       showToast('Relationship type added', 'success');
@@ -143,7 +140,7 @@ function RelationshipTypesSection() {
             <div key={t.id} class="sub-row" data-testid="relationship-type-row">
               <div class="sub-row__meta">
                 <span><strong>{t.label || t.value}</strong> <span class="mono muted">{t.value}</span></span>
-                <span class="muted">inverse: <span class="mono">{t.inverse_value}</span></span>
+                <span class="muted">Inverse: {t.inverse_value.replace(/_/g, ' ')}</span>
               </div>
               <Button variant="danger" size="sm" data-testid="relationship-type-delete" onClick={() => setDeleting(t)}>Delete</Button>
             </div>
@@ -153,18 +150,15 @@ function RelationshipTypesSection() {
 
       <form class="stack" onSubmit={submit} style="margin-top:1rem;">
         <div class="form-grid">
-          <Field label="Value" hint="Stored as snake_case">
-            <Input data-testid="relationship-type-value" value={value} placeholder="mentor_external" onInput={(e) => setValue((e.target as HTMLInputElement).value)} required />
+          <Field label="Label" hint="Used to create the stored relationship type automatically.">
+            <Input data-testid="relationship-type-label" value={label} placeholder="External mentor" onInput={(e) => setLabel((e.target as HTMLInputElement).value)} required />
           </Field>
-          <Field label="Label (optional)">
-            <Input data-testid="relationship-type-label" value={label} placeholder="External mentor" onInput={(e) => setLabel((e.target as HTMLInputElement).value)} />
-          </Field>
-          <Field label="Inverse value" hint="May be the same for symmetric types">
-            <Input data-testid="relationship-type-inverse" value={inverse} placeholder="mentee_external" onInput={(e) => setInverse((e.target as HTMLInputElement).value)} required />
+          <Field label="Inverse value" hint="Defaults to the label if left blank">
+            <Input data-testid="relationship-type-inverse" value={inverse} placeholder="External mentee" onInput={(e) => setInverse((e.target as HTMLInputElement).value)} />
           </Field>
         </div>
         <div>
-          <Button type="submit" disabled={busy || !value.trim() || !inverse.trim()} data-testid="relationship-type-add">
+          <Button type="submit" disabled={busy || !label.trim()} data-testid="relationship-type-add">
             {busy ? 'Adding…' : 'Add relationship type'}
           </Button>
         </div>
