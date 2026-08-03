@@ -61,7 +61,7 @@ export function Settings() {
             {showUsage && <span class="muted"> (free plan cap)</span>}
             {!showUsage && me.hosted && me.plan === 'free' && <span class="muted"> (beta: uncapped)</span>}
           </dd>
-          <dt>Public API</dt><dd>{ent.public_api ? <Badge tone="success">enabled</Badge> : <Badge>unavailable</Badge>}</dd>
+          <dt><a href="/docs/api" target="_blank" rel="noopener noreferrer">Public API</a></dt><dd>{ent.public_api ? <Badge tone="success">enabled</Badge> : <Badge>unavailable</Badge>}</dd>
           <dt>Webhooks</dt><dd>{ent.webhooks ? <Badge tone="success">enabled</Badge> : <Badge>unavailable</Badge>}</dd>
           <dt>Advanced import</dt><dd>{ent.advanced_import ? <Badge tone="success">enabled</Badge> : <Badge>unavailable</Badge>}</dd>
         </dl>

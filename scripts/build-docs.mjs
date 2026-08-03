@@ -15,6 +15,7 @@ const pages = [
   { file: 'usage.md', slug: 'usage', href: '/docs/usage', label: 'Usage' },
   { file: 'api.md', slug: 'api', href: '/docs/api', label: 'API' },
   { file: 'mcp.md', slug: 'mcp', href: '/docs/mcp', label: 'MCP' },
+  { file: 'self-hosting.md', slug: 'self-hosting', href: '/docs/self-hosting', label: 'Self-hosting' },
 ];
 
 marked.setOptions({ gfm: true, breaks: false });
@@ -59,7 +60,8 @@ function layout({ title, body, slug }) {
       </nav>
       <div class="sidebar-footer">
         <a href="/">Home</a>
-        <a href="/app/">Open app</a>
+        <a class="header-button header-button--secondary" href="/app/">Sign in</a>
+        <a class="header-button header-button--primary" href="/auth/register?from=web">Sign up</a>
         <a href="/api/v1/docs">REST reference</a>
       </div>
     </aside>
@@ -143,6 +145,21 @@ a:hover { text-decoration: underline; }
   background: linear-gradient(135deg, var(--primary), var(--primary-2));
 }
 .sidebar-footer { margin-top: auto; display: grid; gap: .25rem; font-size: .9rem; }
+.sidebar-footer .header-button {
+  text-align: center;
+  border: 1px solid var(--line);
+  color: var(--ink);
+}
+.sidebar-footer .header-button:hover { text-decoration: none; }
+.sidebar-footer .header-button--secondary {
+  background: var(--surface-2);
+}
+.sidebar-footer .header-button--primary {
+  color: #fff;
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--primary), var(--primary-2));
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--primary) 24%, transparent);
+}
 .docs-content {
   width: min(100%, 1060px);
   padding: 3rem clamp(1.25rem, 5vw, 4rem) 5rem;
@@ -204,7 +221,7 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 2rem 0; }
   .docs-shell { grid-template-columns: 1fr; }
   .docs-sidebar { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
   .docs-sidebar nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .sidebar-footer { grid-template-columns: repeat(3, max-content); margin-top: 0; }
+  .sidebar-footer { grid-template-columns: repeat(4, max-content); margin-top: 0; align-items: center; }
 }
 `;
 
