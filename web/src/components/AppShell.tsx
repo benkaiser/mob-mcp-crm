@@ -459,6 +459,7 @@ export function AppShell({ children }: { children: ComponentChildren }) {
             )}
             <InstallPrompt />
             <div class="sidebar__user-actions">
+              <a href="/docs" data-testid="docs-link">Docs</a>
               {/* Server-rendered logout route — full navigation, not SPA. */}
               <a href="/web/logout" data-testid="logout-link">Log out</a>
               <ThemeToggle />

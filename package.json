@@ -7,8 +7,9 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "dev:all": "concurrently -n server,web -c blue,green \"npm:dev\" \"npm:web:dev\"",
-    "build": "npm run build:server && npm run build:web",
+    "build": "npm run build:server && npm run build:web && npm run build:docs",
     "build:server": "tsup",
+    "build:docs": "node scripts/build-docs.mjs",
     "build:web": "vite build --config web/vite.config.ts",
     "start": "node dist/index.js",
     "test": "vitest run",
@@ -59,6 +60,7 @@
     "better-sqlite3": "^12.6.2",
     "ejs": "^5.0.1",
     "express": "^5.2.1",
+    "marked": "^18.0.7",
     "multer": "^2.0.2",
     "nodemailer": "^9.0.3",
     "preact": "^10.27.2",
