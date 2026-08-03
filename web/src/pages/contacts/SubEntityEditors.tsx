@@ -386,6 +386,11 @@ export function ActivityEditor({ contactId, existing, onClose, onSaved }: Editor
   const [description, setDescription] = useState(existing?.description ?? '');
   const [duration, setDuration] = useState(existing?.duration_minutes != null ? String(existing.duration_minutes) : '');
   const [location, setLocation] = useState(existing?.location ?? '');
+  const [others, setOthers] = useState<string[]>(
+    Array.isArray(existing?.participants)
+      ? (existing!.participants as string[]).filter((p) => p !== contactId)
+      : [],
+  );
   const { saving, error, errs, run } = useSave();
 
   function submit(e: Event) {
@@ -393,7 +398,7 @@ export function ActivityEditor({ contactId, existing, onClose, onSaved }: Editor
     const payload: Record<string, unknown> = {
       type,
       occurred_at: occurredAt,
-      participant_contact_ids: [contactId],
+      participant_contact_ids: Array.from(new Set([contactId, ...others])),
     };
     if (title.trim()) payload.title = title.trim();
     if (description.trim()) payload.description = description.trim();
@@ -441,6 +446,18 @@ export function ActivityEditor({ contactId, existing, onClose, onSaved }: Editor
         <Field label="Description">
           <Textarea data-testid="activity-description" value={description} onInput={(e) => setDescription((e.target as HTMLTextAreaElement).value)} />
         </Field>
+        <details class="accordion" data-testid="activity-add-people">
+          <summary>Add other people to this activity?</summary>
+          <div class="accordion__body">
+            <ContactPicker
+              mode="multi"
+              label="Other people involved"
+              value={others}
+              onChange={setOthers}
+              excludeIds={[contactId]}
+            />
+          </div>
+        </details>
       </form>
     </Modal>
   );

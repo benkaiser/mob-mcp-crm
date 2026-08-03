@@ -13,7 +13,8 @@ const ts = () => Date.now().toString(36);
 
 test.describe('timeline entities', () => {
   test('activity: create, view, edit, delete', async ({ page, seeder }) => {
-    const contact = await seeder.createContact({ first_name: `Act${ts()}` });
+    const firstName = `Act${ts()}`;
+    const contact = await seeder.createContact({ first_name: firstName });
     const activity = await seeder.post<{ id: string }>('/activities', {
       type: 'phone_call',
       title: `Call ${ts()}`,
@@ -24,6 +25,8 @@ test.describe('timeline entities', () => {
     await page.goto(`/app/activities/${activity.id}`);
     await expect(page.getByTestId('entity-detail')).toHaveAttribute('data-resource', 'activities');
     await expect(page.getByTestId('entity-field-type')).toContainText('Phone call');
+    // The related participant contact is shown on the detail page.
+    await expect(page.getByTestId('activity-participants')).toContainText(firstName);
 
     // Edit the title.
     const newTitle = `Edited call ${ts()}`;

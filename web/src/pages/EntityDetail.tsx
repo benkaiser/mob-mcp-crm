@@ -190,6 +190,8 @@ export function EntityDetail({
 
   // Linked contact (resolved name for the contact_id field, if present).
   const [contactName, setContactName] = useState<string | null>(null);
+  // Resolved participant contacts (activities relate to contacts many-to-many).
+  const [participants, setParticipants] = useState<{ id: string; name: string }[]>([]);
 
   // Edit state.
   const [editing, setEditing] = useState(false);
@@ -211,6 +213,7 @@ export function EntityDetail({
     setError(null);
     setEditing(false);
     setContactName(null);
+    setParticipants([]);
     apiGet<Record_>(`/${resource}/${id}`)
       .then((res) => {
         if (cancelled) return;
@@ -227,6 +230,26 @@ export function EntityDetail({
               setContactName(name || null);
             })
             .catch(() => { /* fall back to the id if the contact can't be loaded */ });
+        }
+        // Resolve participant contacts (activities) into names for display.
+        const participantIds = res.data?.participants;
+        if (Array.isArray(participantIds) && participantIds.length > 0) {
+          const ids = participantIds.filter((p): p is string => typeof p === 'string' && !!p);
+          Promise.all(
+            ids.map((pid) =>
+              apiGet<Record_>(`/contacts/${pid}`)
+                .then((c) => ({
+                  id: pid,
+                  name:
+                    [c.data?.first_name, c.data?.last_name]
+                      .filter((v) => typeof v === 'string' && v)
+                      .join(' ') || pid,
+                }))
+                .catch(() => ({ id: pid, name: pid })),
+            ),
+          ).then((resolved) => {
+            if (!cancelled) setParticipants(resolved);
+          });
         }
       })
       .catch((err) => {
@@ -334,7 +357,7 @@ export function EntityDetail({
               </div>
             </div>
           ) : RICH_RESOURCES.has(resource) ? (
-            <RichEntityBody resource={resource} data={data} contactName={contactName} />
+            <RichEntityBody resource={resource} data={data} contactName={contactName} participants={participants} />
           ) : (
             <dl class="entity-fields">
               {typeof data.contact_id === 'string' && data.contact_id && (
@@ -440,10 +463,12 @@ function RichEntityBody({
   resource,
   data,
   contactName,
+  participants = [],
 }: {
   resource: string;
   data: Record_;
   contactName: string | null;
+  participants?: { id: string; name: string }[];
 }) {
   const builder = RICH_BUILDERS[resource];
   const view = builder ? builder(data) : null;
@@ -516,6 +541,27 @@ function RichEntityBody({
           ),
         )}
       </div>
+
+      {participants.length > 0 && (
+        <div class="detail__section" data-testid="activity-participants">
+          <span class="detail__stat-label">{participants.length === 1 ? 'Person' : 'People'}</span>
+          <div class="detail__people">
+            {participants.map((p) => (
+              <Link
+                key={p.id}
+                href={`/contacts/${p.id}`}
+                class="detail__stat detail__stat--contact"
+                data-testid="entity-field-participant-link"
+              >
+                <span class="detail__contact">
+                  <Avatar name={p.name} size="sm" />
+                  <span class="detail__stat-value">{p.name}</span>
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {view.sections.map((sec, i) => (
         <div key={i} class="detail__section">

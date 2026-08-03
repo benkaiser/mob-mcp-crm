@@ -144,6 +144,22 @@ test('relationships: link then unlink another contact', async ({ page, seeder })
   await expect(sec.getByText(relatedName)).toHaveCount(0);
 });
 
+test('activity: link another person via the accordion + contact picker', async ({ page, seeder }) => {
+  const stamp = Date.now();
+  const other = `ActOther-${stamp}`;
+  await seeder.createContact({ first_name: other });
+  await openContact(page, seeder, `ActPrimary-${stamp}`);
+  const sec = section(page, 'Recent activities');
+
+  await sec.getByRole('button', { name: '+ Add' }).click();
+  // Expand the optional "Add other people to this activity?" accordion.
+  await page.getByTestId('activity-add-people').locator('summary').click();
+  await page.getByTestId('contact-picker-search').fill(other);
+  await page.getByTestId('contact-picker-row').filter({ hasText: other }).click();
+  await page.getByTestId('editor-save').click();
+  await expect(page.getByTestId('toast')).toBeVisible();
+});
+
 test('tags: autocomplete existing, create new by name, then remove', async ({ page, seeder }) => {
   const stamp = Date.now();
   const existingTag = `existing-${stamp}`;
