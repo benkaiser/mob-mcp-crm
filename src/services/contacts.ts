@@ -91,6 +91,18 @@ export interface PaginatedResult<T> {
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'];
+const MAX_PLAUSIBLE_AGE = 150;
+
+function isApproximateAgeValue(value: number): boolean {
+  return Number.isInteger(value) && value >= 0 && value <= MAX_PLAUSIBLE_AGE;
+}
+
+function normalizeApproximateBirthYear(value: number): number {
+  if (isApproximateAgeValue(value)) {
+    return new Date().getFullYear() - value;
+  }
+  return value;
+}
 
 /**
  * Generate a human-readable birthday description that clarifies the precision.
@@ -141,8 +153,8 @@ export function calculateAge(contact: {
     birthYear = parseInt(parts[0], 10);
     birthMonth = parseInt(parts[1], 10) - 1;
     birthDay = parseInt(parts[2], 10);
-  } else if (contact.birthday_mode === 'approximate_age' && contact.birthday_year_approximate) {
-    birthYear = contact.birthday_year_approximate;
+  } else if (contact.birthday_mode === 'approximate_age' && contact.birthday_year_approximate != null) {
+    birthYear = normalizeApproximateBirthYear(contact.birthday_year_approximate);
     approximate = true;
   } else {
     return null;
@@ -171,14 +183,17 @@ function normalizeBirthdayFields<T extends {
   birthday_date?: string | null;
   birthday_month?: number | null;
   birthday_day?: number | null;
+  birthday_year_approximate?: number | null;
 }>(input: T): T {
+  let normalized = input;
+
   if (input.birthday_mode === 'full_date' && input.birthday_date) {
     const parts = input.birthday_date.split('-');
     if (parts.length >= 3) {
       const month = parseInt(parts[1], 10);
       const day = parseInt(parts[2], 10);
       if (!isNaN(month) && !isNaN(day)) {
-        return {
+        normalized = {
           ...input,
           birthday_month: input.birthday_month ?? month,
           birthday_day: input.birthday_day ?? day,
@@ -186,7 +201,15 @@ function normalizeBirthdayFields<T extends {
       }
     }
   }
-  return input;
+
+  if (normalized.birthday_mode === 'approximate_age' && normalized.birthday_year_approximate != null) {
+    return {
+      ...normalized,
+      birthday_year_approximate: normalizeApproximateBirthYear(normalized.birthday_year_approximate),
+    };
+  }
+
+  return normalized;
 }
 
 // ─── Service ────────────────────────────────────────────────────
@@ -256,6 +279,7 @@ export class ContactService {
       birthday_date: effectiveDate ?? null,
       birthday_month: input.birthday_month ?? null,
       birthday_day: input.birthday_day ?? null,
+      birthday_year_approximate: input.birthday_year_approximate ?? null,
     });
     const normalizedInput: UpdateContactInput = { ...input };
     if (!('birthday_month' in input) && normalized.birthday_month != null) {
@@ -263,6 +287,9 @@ export class ContactService {
     }
     if (!('birthday_day' in input) && normalized.birthday_day != null) {
       normalizedInput.birthday_day = normalized.birthday_day;
+    }
+    if ('birthday_year_approximate' in input && normalized.birthday_year_approximate != null) {
+      normalizedInput.birthday_year_approximate = normalized.birthday_year_approximate;
     }
 
     const fields: string[] = [];

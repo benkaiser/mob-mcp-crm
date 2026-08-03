@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Database from 'better-sqlite3';
 import { ContactService, calculateAge } from '../../src/services/contacts.js';
 import { ContactMethodService } from '../../src/services/contact-methods.js';
@@ -19,25 +19,50 @@ import { closeDatabase } from '../../src/db/connection.js';
 
 describe('calculateAge', () => {
   it('should calculate age from full date', () => {
-    const result = calculateAge({
-      birthday_mode: 'full_date',
-      birthday_date: '1990-01-15',
-      birthday_year_approximate: null,
-    });
-    expect(result).not.toBeNull();
-    expect(result!.approximate).toBe(false);
-    expect(result!.age).toBeGreaterThanOrEqual(35);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-03T00:00:00Z'));
+    try {
+      const result = calculateAge({
+        birthday_mode: 'full_date',
+        birthday_date: '2016-01-15',
+        birthday_year_approximate: null,
+      });
+      expect(result).toEqual({ age: 10, approximate: false });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('should calculate approximate age from birth year', () => {
-    const result = calculateAge({
-      birthday_mode: 'approximate_age',
-      birthday_date: null,
-      birthday_year_approximate: 1990,
-    });
-    expect(result).not.toBeNull();
-    expect(result!.approximate).toBe(true);
-    expect(result!.age).toBeGreaterThanOrEqual(35);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-03T00:00:00Z'));
+    try {
+      const result = calculateAge({
+        birthday_mode: 'approximate_age',
+        birthday_date: null,
+        birthday_year_approximate: 2016,
+      });
+      expect(result).toEqual({ age: 10, approximate: true });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('treats a clearly age-like approximate value as an age instead of a birth year', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-03T00:00:00Z'));
+    try {
+      const result = calculateAge({
+        birthday_mode: 'approximate_age',
+        birthday_date: null,
+        birthday_year_approximate: 10,
+      });
+      expect(result).not.toBeNull();
+      expect(result!.approximate).toBe(true);
+      expect(result!.age).toBe(10);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('should return null for month_day mode (no year)', () => {
@@ -146,6 +171,30 @@ describe('ContactService', () => {
       expect(contact.birthday_year_approximate).toBe(1985);
       expect(contact.age).toBeGreaterThanOrEqual(40);
       expect(contact.age_approximate).toBe(true);
+    });
+
+    it('should normalize an approximate age captured in the birth year field', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-08-03T00:00:00Z'));
+      try {
+        const contact = service.create(userId, {
+          first_name: 'Daisy',
+          birthday_mode: 'approximate_age',
+          birthday_year_approximate: 10,
+        });
+
+        expect(contact.birthday_year_approximate).toBe(2016);
+        expect(contact.age).toBe(10);
+        expect(contact.age_approximate).toBe(true);
+
+        vi.setSystemTime(new Date('2027-08-03T00:00:00Z'));
+        const nextYear = service.get(userId, contact.id)!;
+        expect(nextYear.birthday_year_approximate).toBe(2016);
+        expect(nextYear.age).toBe(11);
+        expect(nextYear.age_approximate).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 

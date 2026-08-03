@@ -157,7 +157,7 @@ export function ContactProfileView({ id }: { id: string }) {
             {p.pronouns && <Badge>{p.pronouns}</Badge>}
             {p.gender && <Badge>{p.gender}</Badge>}
             {p.birthday_display && <Badge>🎂 {p.birthday_display}</Badge>}
-            {typeof p.age === 'number' && <Badge>{p.age}{p.age_approximate ? '~' : ''} yrs</Badge>}
+            {typeof p.age === 'number' && <Badge>{p.age_approximate ? '~' : ''}{p.age} years</Badge>}
           </div>
         </div>
       </Card>

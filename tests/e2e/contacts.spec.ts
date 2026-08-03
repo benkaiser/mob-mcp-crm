@@ -147,6 +147,20 @@ test('toggle favourite directly from the contact profile header', async ({ page,
   await expect(page.getByTestId('favorite-toggle')).toHaveText('☆');
 });
 
+test('profile renders approximate age as a derived years badge', async ({ page, seeder }) => {
+  const tag = unique();
+  const { id } = await seeder.createContact({
+    first_name: `Age-${tag}`,
+    birthday_mode: 'approximate_age',
+    birthday_year_approximate: 10,
+  });
+
+  await page.goto(`/app/contacts/${id}`);
+
+  await expect(page.getByTestId('badge').filter({ hasText: '~10 years' })).toBeVisible();
+  await expect(page.getByTestId('badge').filter({ hasText: '~2016 yrs' })).toHaveCount(0);
+});
+
 test('delete a contact via the confirm dialog removes it from the list', async ({ page, seeder }) => {
   const tag = unique();
   const { id } = await seeder.createContact({ first_name: `Doomed-${tag}`, last_name: 'Soon' });
