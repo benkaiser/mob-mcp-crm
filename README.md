@@ -7,6 +7,10 @@
   <a href="https://mobcrm.au/auth/register?from=web"><strong>Sign up free while in beta</strong></a>
 </p>
 
+<p align="center">
+  <img src="docs/assets/dashboard.png" alt="Mob dashboard" width="900">
+</p>
+
 ## Why Mob
 
 Relationships are full of details: birthdays, family ties, dietary needs, last conversations, gift ideas, follow-ups, and the context that helps you show up well. Mob keeps those details organized without making you maintain another spreadsheet or click through a dashboard.
@@ -19,6 +23,10 @@ Log coffee with Mike yesterday; he is training for a marathon.
 Remind me to message Priya before her trip next Friday.
 Who have I not caught up with lately?
 ```
+
+<p align="center">
+  <img src="docs/assets/mcp-card.png" alt="Connect your AI assistant to Mob over MCP" width="760">
+</p>
 
 ## What Mob helps with
 
