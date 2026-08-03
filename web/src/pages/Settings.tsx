@@ -275,7 +275,7 @@ function ProfileSection() {
         <div>
           <dl class="kv" style="margin-bottom:0.75rem;">
             <dt>Plan</dt>
-            <dd data-testid="settings-profile-plan"><Badge tone="primary">{me.plan}</Badge>{me.hosted ? ' · hosted' : ' · self-hosted'}</dd>
+            <dd data-testid="settings-profile-plan"><Badge tone="primary">{me.plan}</Badge>{me.beta ? ' · free in beta' : me.hosted ? ' · hosted' : ' · self-hosted'}</dd>
           </dl>
           <Button type="submit" disabled={!dirty || busy} data-testid="settings-profile-save">
             {busy ? 'Saving…' : 'Save changes'}

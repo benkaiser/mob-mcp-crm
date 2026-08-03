@@ -52,6 +52,8 @@ export interface Me {
   timezone: string;
   plan: string;
   hosted: boolean;
+  /** True on the hosted beta deployment (server ENV=production). */
+  beta?: boolean;
   usage: MeUsage;
   entitlements: MeEntitlements;
 }

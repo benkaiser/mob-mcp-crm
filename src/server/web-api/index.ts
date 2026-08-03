@@ -115,6 +115,7 @@ export function createWebApiRouter(deps: WebApiDeps): Router {
       timezone,
       plan: usage.plan,
       hosted: planService.isHosted(),
+      beta: process.env.ENV === 'production',
       usage: { contacts: usage.contacts, contact_cap: usage.contactCap },
       entitlements: {
         contact_cap: entitlements.contactCap,

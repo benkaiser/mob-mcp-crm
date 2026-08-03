@@ -84,8 +84,26 @@ describe('Internal Web API (/web/api)', () => {
     // Self-hosted/forgetful → unlimited, no cap
     expect(body.data.plan).toBe('unlimited');
     expect(body.data.hosted).toBe(false);
+    expect(body.data.beta).toBe(false);
     expect(body.data.usage.contact_cap).toBeNull();
     expect(body.data.entitlements.public_api).toBe(true);
+  });
+
+  it('GET /web/api/me reports beta=true when ENV=production', async () => {
+    server = createServer(forgetfulConfig);
+    const session = await loginForgetful(server.app);
+    const prev = process.env.ENV;
+    process.env.ENV = 'production';
+    try {
+      const res = await inject(server.app, 'GET', '/web/api/me', {
+        headers: { Cookie: `mob_session=${session}` },
+      });
+      expect(res.status).toBe(200);
+      expect(JSON.parse(res.body).data.beta).toBe(true);
+    } finally {
+      if (prev === undefined) delete process.env.ENV;
+      else process.env.ENV = prev;
+    }
   });
 
   it('issues a CSRF cookie on safe requests', async () => {
