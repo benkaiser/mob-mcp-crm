@@ -3,6 +3,7 @@ import { Link } from 'wouter-preact';
 import { apiGet } from '../api/client';
 import type { DashboardData } from '../api/types';
 import { Card, Spinner, ErrorBanner, Badge, EmptyState } from '../ui';
+import { Icon, type IconName } from '../ui/Icon';
 import { user } from '../store/session';
 import { errorMessage, formatDate } from '../lib/format';
 
@@ -57,14 +58,14 @@ export function Dashboard() {
       ) : (
         <>
           <div class="counts-row">
-            <CountTile label="Contacts" num={data.counts.contacts} href="/contacts" />
-            <CountTile label="Favorites" num={data.counts.favorite_contacts} href="/contacts?is_favorite=true" />
-            <CountTile label="Activities" num={data.counts.total_activities} href="/activities" />
-            <CountTile label="Notes" num={data.counts.total_notes} href="/notes" />
-            <CountTile label="Reminders" num={data.counts.pending_reminders} href="/reminders" />
-            <CountTile label="Tasks" num={data.counts.pending_tasks} href="/tasks" />
-            <CountTile label="Debts" num={data.counts.active_debts} href="/debts" />
-            <CountTile label="Gift ideas" num={data.counts.gift_ideas} href="/gifts" />
+            <CountTile label="Contacts" icon="users" num={data.counts.contacts} href="/contacts" />
+            <CountTile label="Favorites" icon="star" num={data.counts.favorite_contacts} href="/contacts?is_favorite=true" />
+            <CountTile label="Activities" icon="activity" num={data.counts.total_activities} href="/activities" />
+            <CountTile label="Notes" icon="file-text" num={data.counts.total_notes} href="/notes" />
+            <CountTile label="Reminders" icon="bell" num={data.counts.pending_reminders} href="/reminders" />
+            <CountTile label="Tasks" icon="list-checks" num={data.counts.pending_tasks} href="/tasks" />
+            <CountTile label="Debts" icon="wallet" num={data.counts.active_debts} href="/debts" />
+            <CountTile label="Gift ideas" icon="gift" num={data.counts.gift_ideas} href="/gifts" />
           </div>
 
           <div class="grid-cards">
@@ -170,10 +171,11 @@ export function Dashboard() {
   );
 }
 
-function CountTile({ label, num, href }: { label: string; num: number; href?: string }) {
+function CountTile({ label, num, href, icon }: { label: string; num: number; href?: string; icon?: IconName }) {
   const slug = label.toLowerCase().replace(/\s+/g, '-');
   const inner = (
     <>
+      {icon && <span class="count-tile__icon" aria-hidden="true"><Icon name={icon} size={20} /></span>}
       <div class="count-tile__num" data-testid={`dashboard-count-${slug}-num`}>{num}</div>
       <div class="count-tile__label">{label}</div>
     </>

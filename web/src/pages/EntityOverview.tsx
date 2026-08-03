@@ -127,7 +127,7 @@ export function EntityOverview({ resource }: { resource: OverviewResource }) {
   return (
     <div class="stack" data-testid={`overview-${resource}`}>
       <div class="page-header">
-        <h1><span class="page-header__icon" aria-hidden="true"><Icon name={config.icon} size={24} /></span> {config.pluralLabel}</h1>
+        <h1 style="display:inline-flex;align-items:center;gap:0.5rem;"><span class="page-header__icon" aria-hidden="true"><Icon name={config.icon} size={24} /></span> {config.pluralLabel}</h1>
         <Link href={`/${resource}/new`} class="btn" data-testid={`overview-new-${resource}`}>{config.newLabel}</Link>
       </div>
 
