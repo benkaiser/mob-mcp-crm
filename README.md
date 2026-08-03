@@ -41,4 +41,4 @@ Mob is open source and can be self-hosted with Node.js and SQLite. See the **[se
 
 ## Open source, license, and support
 
-Mob is licensed under the MIT License. For hosted beta support, account help, or feedback, email [mobsupport@benkaiser.dev](mailto:mobsupport@benkaiser.dev).
+Mob is available under the [Functional Source License 1.1 (MIT Future License)](LICENSE) — free to use, modify, and self-host for any non-competing purpose, and it converts to the MIT License two years after each release. For hosted beta support, account help, or feedback, email [mobsupport@benkaiser.dev](mailto:mobsupport@benkaiser.dev).
