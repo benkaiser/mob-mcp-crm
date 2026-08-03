@@ -26,7 +26,6 @@ Who have I not caught up with lately?
 - Remember relationships, notes, preferences, birthdays, reminders, gifts, debts, tasks, and shared history.
 - See timelines and search across everything you know about your contacts.
 - Connect AI assistants over MCP, use the web app when you want to browse, and automate through the public API.
-- Choose persistent accounts or forgetful demo sessions where data disappears automatically.
 
 ## Get started
 
