@@ -4,6 +4,7 @@ import { apiGet } from '../api/client';
 import type { Activity, Debt, Gift, Note, Reminder, Task, PageMeta } from '../api/types';
 import { Badge, Card, EmptyState, ErrorBanner, Spinner } from '../ui';
 import { errorMessage, formatDate } from '../lib/format';
+import { humanize } from '../lib/humanize';
 
 type OverviewResource = 'activities' | 'notes' | 'reminders' | 'tasks' | 'debts' | 'gifts';
 type Row = Activity | Reminder | Task | Debt | Gift | (Note & { contact_name?: string; body_truncated?: boolean });
@@ -38,7 +39,7 @@ const configs: Record<OverviewResource, OverviewConfig> = {
     render: (item) => {
       const n = item as Note & { contact_name?: string; body_truncated?: boolean };
       return {
-        title: n.title || n.body.slice(0, 80) || 'Untitled note',
+        title: n.title || (n.body ?? '').slice(0, 80) || 'Untitled note',
         meta: [n.contact_name ? `About ${n.contact_name}` : '', formatDate(n.updated_at), n.body_truncated ? 'truncated preview' : ''].filter(Boolean),
         badges: n.is_pinned ? [{ label: 'Pinned', tone: 'warning' }] : [],
       };
@@ -164,15 +165,13 @@ export function EntityOverview({ resource }: { resource: OverviewResource }) {
   );
 }
 
-function humanize(value: string): string {
-  const spaced = value.replace(/_/g, ' ').trim();
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
-}
-
-function formatMoney(amount: number, currency: string): string {
+function formatMoney(amount: number | null | undefined, currency: string | null | undefined): string {
+  const num = typeof amount === 'number' ? amount : Number(amount);
+  if (!Number.isFinite(num)) return '';
+  const code = currency || 'USD';
   try {
-    return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(amount);
+    return new Intl.NumberFormat(undefined, { style: 'currency', currency: code }).format(num);
   } catch {
-    return `${amount.toFixed(2)} ${currency}`;
+    return `${num.toFixed(2)} ${code}`;
   }
 }

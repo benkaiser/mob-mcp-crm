@@ -16,6 +16,7 @@ import {
   Badge,
   Avatar,
 } from '../ui';
+import { humanize } from '../lib/humanize';
 
 /**
  * Detail page for a single timeline entity (activity, note, life event,
@@ -59,12 +60,6 @@ type Record_ = Record<string, unknown>;
 
 /** Internal/redundant fields that add noise to the detail view. */
 const HIDDEN_FIELDS = new Set(['id', 'user_id', 'contact_id', 'deleted_at']);
-
-/** Turn a snake_case field key into a human-readable label. */
-function humanize(key: string): string {
-  const spaced = key.replace(/_/g, ' ').trim();
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
-}
 
 /** Render a scalar value as a string for display. */
 function display(value: unknown): string {

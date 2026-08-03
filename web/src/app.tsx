@@ -1,9 +1,10 @@
 import { useEffect } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
-import { Router, Route, Switch } from 'wouter-preact';
+import { Router, Route, Switch, useLocation } from 'wouter-preact';
 import { authFailed, redirectToLogin } from './api/client';
 import { loadSession, sessionLoading, sessionLoaded, sessionError, isAuthenticated } from './store/session';
 import { AppShell } from './components/AppShell';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { KeyboardShortcuts } from './components/KeyboardShortcuts';
 import { Spinner, ErrorBanner, ToastHost } from './ui';
 import { Dashboard } from './pages/Dashboard';
@@ -55,7 +56,26 @@ export function App() {
     <Router base="/app">
       <AuthGuard>
         <AppShell>
-          <Switch>
+          <RoutedContent />
+        </AppShell>
+        <ToastHost />
+        <KeyboardShortcuts />
+      </AuthGuard>
+    </Router>
+  );
+}
+
+/**
+ * The routed page content, wrapped in an ErrorBoundary keyed to the current
+ * location so a render error on one route shows a recoverable message and
+ * resets on navigation — instead of throwing mid-reconciliation and leaving
+ * the previous route's DOM stacked underneath.
+ */
+function RoutedContent() {
+  const [location] = useLocation();
+  return (
+    <ErrorBoundary resetKey={location}>
+      <Switch>
             <Route path="/" component={Dashboard} />
             <Route path="/contacts" component={ContactsList} />
             <Route path="/contacts/new">{() => <ContactForm />}</Route>
@@ -92,10 +112,6 @@ export function App() {
             <Route path="/notes/:id">{(p) => <EntityDetail resource="notes" label="Note" id={p.id} />}</Route>
             <Route component={NotFound} />
           </Switch>
-        </AppShell>
-        <ToastHost />
-        <KeyboardShortcuts />
-      </AuthGuard>
-    </Router>
-  );
+        </ErrorBoundary>
+      );
 }
