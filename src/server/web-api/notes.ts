@@ -34,7 +34,7 @@ export function createNotesRouter(db: Database.Database): Router {
 
   const param = (v: unknown): string => (Array.isArray(v) ? v[0] : String(v ?? ''));
 
-  // GET / — list notes. With ?contact_id=... preserves pinned-first per-contact
+  // GET / - list notes. With ?contact_id=... preserves pinned-first per-contact
   // ordering; without contact_id returns a cross-contact overview list.
   router.get('/', asyncHandler((req, res) => {
     const userId = getUserId(req);
@@ -94,7 +94,7 @@ export function createNotesRouter(db: Database.Database): Router {
     sendData(res, updated);
   }));
 
-  // DELETE /:id — soft delete.
+  // DELETE /:id - soft delete.
   router.delete('/:id', asyncHandler((req, res) => {
     const userId = getUserId(req);
     const ok = notes.softDelete(userId, param(req.params.id));

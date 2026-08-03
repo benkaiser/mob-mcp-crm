@@ -62,7 +62,7 @@ export function createContactsRouter(db: Database.Database, planService: PlanSer
   /** Read a single route param as a string. */
   const param = (v: unknown): string => (Array.isArray(v) ? v[0] : String(v ?? ''));
 
-  // GET / — list with filters, sort, pagination.
+  // GET / - list with filters, sort, pagination.
   router.get('/', asyncHandler((req, res) => {
     const userId = getUserId(req);
     const p = pageParams(req);
@@ -84,14 +84,14 @@ export function createContactsRouter(db: Database.Database, planService: PlanSer
     sendData(res, result.data, pageMeta(result.total, p));
   }));
 
-  // GET /duplicates — potential duplicate pairs (registered before /:id).
+  // GET /duplicates - potential duplicate pairs (registered before /:id).
   router.get('/duplicates', asyncHandler((req, res) => {
     const userId = getUserId(req);
     const result = contacts.findDuplicates(userId);
     sendData(res, result.data, { total: result.total });
   }));
 
-  // GET /:id — enriched profile payload.
+  // GET /:id - enriched profile payload.
   router.get('/:id', asyncHandler((req, res) => {
     const userId = getUserId(req);
     const profile = getContactProfile(db, userId, param(req.params.id));
@@ -99,7 +99,7 @@ export function createContactsRouter(db: Database.Database, planService: PlanSer
     sendData(res, profile);
   }));
 
-  // POST / — create (quota-enforced).
+  // POST / - create (quota-enforced).
   router.post('/', asyncHandler((req, res) => {
     const userId = getUserId(req);
     const input = parseBody(createContactSchema, req);
@@ -108,7 +108,7 @@ export function createContactsRouter(db: Database.Database, planService: PlanSer
     sendData(res, contact, undefined, 201);
   }));
 
-  // PATCH /:id — partial update.
+  // PATCH /:id - partial update.
   router.patch('/:id', asyncHandler((req, res) => {
     const userId = getUserId(req);
     const input = parseBody(updateContactSchema, req);
@@ -117,7 +117,7 @@ export function createContactsRouter(db: Database.Database, planService: PlanSer
     sendData(res, updated);
   }));
 
-  // DELETE /:id — soft delete.
+  // DELETE /:id - soft delete.
   router.delete('/:id', asyncHandler((req, res) => {
     const userId = getUserId(req);
     const existing = contacts.get(userId, param(req.params.id));
@@ -127,7 +127,7 @@ export function createContactsRouter(db: Database.Database, planService: PlanSer
     sendData(res, { id: param(req.params.id), deleted: true });
   }));
 
-  // POST /:id/restore — restore a soft-deleted contact.
+  // POST /:id/restore - restore a soft-deleted contact.
   router.post('/:id/restore', asyncHandler((req, res) => {
     const userId = getUserId(req);
     try {
@@ -138,7 +138,7 @@ export function createContactsRouter(db: Database.Database, planService: PlanSer
     }
   }));
 
-  // POST /:id/merge — merge :secondaryId into :id (primary). Body { secondary_id }.
+  // POST /:id/merge - merge :secondaryId into :id (primary). Body { secondary_id }.
   router.post('/:id/merge', asyncHandler((req, res) => {
     const userId = getUserId(req);
     const { secondary_id } = parseBody(mergeContactSchema, req);

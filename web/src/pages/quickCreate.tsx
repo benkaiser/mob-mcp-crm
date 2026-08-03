@@ -15,7 +15,7 @@ import { errorMessage, fieldErrors } from '../lib/format';
  * - Activities: 1+ participants (multi-select; server stores via
  *   `participant_contact_ids`).
  * - Reminders: 1 contact.
- * - Tasks: 0 or 1 contact (optional — task can stand alone).
+ * - Tasks: 0 or 1 contact (optional - task can stand alone).
  * - Gifts / Debts: 1 contact.
  */
 
@@ -301,7 +301,7 @@ type TaskPriority = typeof TASK_PRIORITIES[number];
 export function NewTaskPage() {
   const [, navigate] = useLocation();
   const initial = useQueryParam('contact_id');
-  // Tasks can stand alone — contact selection is optional.
+  // Tasks can stand alone - contact selection is optional.
   const [contactId, setContactId] = useState<string | null>(initial ?? null);
   const [title, setTitle] = useState('');
   const [dueDate, setDueDate] = useState('');

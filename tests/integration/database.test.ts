@@ -81,7 +81,7 @@ describe('Migrations', () => {
   it('should not re-run already applied migrations', () => {
     db = createTestDatabase();
 
-    // Run migrations again — should be idempotent
+    // Run migrations again - should be idempotent
     runMigrations(db);
 
     const migrations = db.prepare('SELECT name FROM migrations').all() as any[];

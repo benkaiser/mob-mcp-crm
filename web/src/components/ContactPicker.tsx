@@ -7,8 +7,8 @@ import { contactName } from '../lib/format';
 /**
  * Focused contact-selection control for the dedicated /new pages.
  *
- * - `mode: 'single'`: radio-style — picking a contact replaces the selection.
- * - `mode: 'multi'`:  checkbox-style — accumulates selections, with chips for
+ * - `mode: 'single'`: radio-style - picking a contact replaces the selection.
+ * - `mode: 'multi'`:  checkbox-style - accumulates selections, with chips for
  *   easy removal.
  *
  * Search filters the in-memory list (we fetch up to 200 contacts sorted by
@@ -96,7 +96,7 @@ export function ContactPicker(props: PickerProps) {
     <div class="contact-picker stack">
       {props.label && <div class="field__label">{props.label}</div>}
 
-      {/* Selected chips — always visible so users can see what they've picked. */}
+      {/* Selected chips - always visible so users can see what they've picked. */}
       {selectedIds.length > 0 && (
         <div class="tag-chips" data-testid="contact-picker-chips">
           {selectedIds.map((id) => {
@@ -149,7 +149,7 @@ export function ContactPicker(props: PickerProps) {
             );
           })}
           {filtered.length > 100 && (
-            <p class="muted contact-picker__hint">Showing first 100 of {filtered.length} matches — refine your search.</p>
+            <p class="muted contact-picker__hint">Showing first 100 of {filtered.length} matches - refine your search.</p>
           )}
         </div>
       )}

@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures';
 
 /**
- * Contacts CRUD E2E — exercises the real UI for the create/edit/delete/favourite
+ * Contacts CRUD E2E - exercises the real UI for the create/edit/delete/favourite
  * flows, and uses the ApiSeeder for bulk setup (pagination). Each test gets a
  * fresh, authenticated account via the `account` fixture, so tests are isolated.
  *

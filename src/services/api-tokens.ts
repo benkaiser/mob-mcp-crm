@@ -16,7 +16,7 @@ export interface ApiTokenSummary {
 }
 
 /** The full result of creating a token. The `token` plaintext is only ever
- *  returned here — it cannot be recovered later. */
+ *  returned here - it cannot be recovered later. */
 export interface CreatedApiToken {
   id: string;
   name: string;
@@ -65,7 +65,7 @@ export class ApiTokenService {
     return { id, name, prefix, scopes, token };
   }
 
-  /** List a user's tokens (masked — no hash or plaintext). */
+  /** List a user's tokens (masked - no hash or plaintext). */
   list(userId: string): ApiTokenSummary[] {
     return this.db.prepare(`
       SELECT id, name, prefix, scopes, created_at, last_used_at, revoked_at

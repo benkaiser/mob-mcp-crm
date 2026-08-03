@@ -100,7 +100,7 @@ describe('Forgetful Mode', () => {
     const port = address.port;
 
     try {
-      // Connect to /mcp directly — no OAuth needed
+      // Connect to /mcp directly - no OAuth needed
       const initResponse = await fetch(`http://localhost:${port}/mcp`, {
         method: 'POST',
         headers: {

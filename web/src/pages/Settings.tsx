@@ -892,7 +892,7 @@ function DangerZoneSection() {
     setBusy(true);
     try {
       await deleteAccount({ password, confirm_email: confirmEmail });
-      // Account and session are gone — send the user to the login page.
+      // Account and session are gone - send the user to the login page.
       window.location.href = '/web/login';
     } catch (err) {
       setError(errorMessage(err, 'Failed to delete account'));
@@ -904,7 +904,7 @@ function DangerZoneSection() {
     <Card class="section" data-testid="settings-danger">
       <div class="section__head"><h2>Danger zone</h2></div>
       <p class="muted">
-        Permanently delete your account and all associated data — contacts, notes, activities,
+        Permanently delete your account and all associated data - contacts, notes, activities,
         reminders and everything else. This <strong>cannot be undone</strong>.
       </p>
       <Button variant="danger" data-testid="account-delete-open" onClick={() => { setOpen(true); setError(null); setPassword(''); setConfirmEmail(''); }}>
@@ -960,7 +960,7 @@ function ExportSection() {
     <Card class="section" data-testid="settings-export">
       <div class="section__head"><h2>Export your data</h2></div>
       <p class="muted">
-        Download a full JSON snapshot of all your CRM data — contacts, activities, notes,
+        Download a full JSON snapshot of all your CRM data - contacts, activities, notes,
         reminders and everything else. This is your complete data, yours to keep.
       </p>
       <Button onClick={onDownload} disabled={downloading} data-testid="settings-export-download">
@@ -1051,7 +1051,7 @@ function TokensSection({ enabled }: { enabled: boolean }) {
             <div class="callout callout--success" data-testid="token-created">
               <p class="callout__title">Copy your new token now</p>
               <p style="margin:0 0 var(--space-2);">
-                This is the only time the plaintext token will be shown — you won't see it again.
+                This is the only time the plaintext token will be shown - you won't see it again.
               </p>
               <CopyField value={created.token} />
             </div>
@@ -1236,7 +1236,7 @@ function WebhooksSection({ enabled }: { enabled: boolean }) {
             <div class="callout callout--success" data-testid="webhook-created">
               <p class="callout__title">Webhook signing secret</p>
               <p style="margin:0 0 var(--space-2);">
-                Save this secret for <span class="mono">{createdSecret.url}</span> — use it to verify incoming payloads.
+                Save this secret for <span class="mono">{createdSecret.url}</span> - use it to verify incoming payloads.
               </p>
               <CopyField value={createdSecret.secret} label="Secret" />
             </div>
@@ -1373,7 +1373,7 @@ function DeliveriesView({ webhookId }: { webhookId: string }) {
         <div key={d.id} class="delivery-row">
           <span class="mono">{d.event}</span>
           <Badge tone={deliveryTone(d.status)}>{d.status}</Badge>
-          <span class="muted">{d.response_status ?? '—'} · {d.attempts} attempt{d.attempts === 1 ? '' : 's'}</span>
+          <span class="muted">{d.response_status ?? '-'} · {d.attempts} attempt{d.attempts === 1 ? '' : 's'}</span>
           <span class="muted">{formatDate(d.last_attempt_at ?? d.created_at)}</span>
         </div>
       ))}
@@ -1568,7 +1568,7 @@ function PushSection() {
           <dt>Permission</dt>
           <dd>{permissionBadge(permission.value)}</dd>
           <dt>Active subscriptions</dt>
-          <dd>{count === null ? '—' : count}</dd>
+          <dd>{count === null ? '-' : count}</dd>
         </dl>
       )}
     </Card>

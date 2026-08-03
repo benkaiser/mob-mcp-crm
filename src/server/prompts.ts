@@ -5,8 +5,8 @@ import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 /**
  * Register all MCP prompt definitions on the given server.
  *
- * @param server  – the McpServer instance to register prompts on
- * @param getUserId – helper that extracts the authenticated userId from the
+ * @param server  - the McpServer instance to register prompts on
+ * @param getUserId - helper that extracts the authenticated userId from the
  *                    callback's `extra` parameter (throws if not authenticated)
  */
 export function registerPrompts(
@@ -55,7 +55,7 @@ Present everything in a clean, organized summary. Highlight anything urgent (ove
           text: `I'm preparing to meet with **${args.contact_name}**. Please compile a comprehensive dossier:
 
 1. **Find the contact** (use contact_list with search for "${args.contact_name}")
-2. **Full profile** (use contact_get with their ID — includes contact methods, addresses, food preferences, custom fields, tags)
+2. **Full profile** (use contact_get with their ID - includes contact methods, addresses, food preferences, custom fields, tags)
 3. **Recent timeline** (use contact_timeline to see recent activities, notes, life events)
 4. **Relationships** (use relationship_list to see who they're connected to)
 5. **Pinned/recent notes** (use note_list to see important notes)
@@ -107,7 +107,7 @@ If any contact names don't match existing contacts, ask me if I want to create n
 
   server.registerPrompt('add-new-contact', {
     title: 'Add New Contact',
-    description: 'Intelligently onboard a new contact from freeform text — parses name, phone, email, social, birthday, work info, tags, relationships, and more.',
+    description: 'Intelligently onboard a new contact from freeform text - parses name, phone, email, social, birthday, work info, tags, relationships, and more.',
     argsSchema: {
       info: z.string().describe('Everything you know about the person (e.g. "Met Sarah Chen at the React conference, she\'s a senior engineer at Google, email sarah@example.com, birthday March 15, she\'s friends with Mike")'),
     },
@@ -162,11 +162,11 @@ Present a summary of everything you created and ask if anything needs correction
           text: `Help me brainstorm gift ideas for **${args.contact_name}**. Please:
 
 1. **Find the contact** (use contact_list with search for "${args.contact_name}")
-2. **Get their full profile** (use contact_get — includes food preferences, custom fields)
+2. **Get their full profile** (use contact_get - includes food preferences, custom fields)
 3. **Check past gifts** (use gift_list filtered by their contact ID to see what I've already given/received)
 4. **Review their notes** (use note_list for any personal details, interests, wishlists)
-5. **Check recent life events** (use life_event_manage with action "list" — new job, moved, etc. might inspire ideas)
-6. **Check their relationships** (use relationship_list — could inform group gift ideas)
+5. **Check recent life events** (use life_event_manage with action "list" - new job, moved, etc. might inspire ideas)
+6. **Check their relationships** (use relationship_list - could inform group gift ideas)
 
 Based on all this context, suggest **5-10 personalized gift ideas** organized by:
 - **Budget tiers** (under $25, $25-50, $50-100, $100+)
@@ -209,7 +209,7 @@ Analyze and present:
 - **Relationship strength**: Your assessment based on frequency, recency, and depth of interactions
 - **Key milestones**: Important life events and shared experiences
 - **Pending items**: Any open reminders, tasks, or unsettled debts
-- **Suggestions**: Specific, actionable ways to strengthen this relationship (e.g., "It's been 3 months since you last met in person — consider scheduling a coffee")`,
+- **Suggestions**: Specific, actionable ways to strengthen this relationship (e.g., "It's been 3 months since you last met in person - consider scheduling a coffee")`,
         },
       }],
     };
@@ -234,7 +234,7 @@ Analyze and present:
 2. **Recent activities** (use activity_list with a large per_page and review which occurred this week)
 3. **Completed tasks** (use task_manage with action "list" and status "completed" and check which were completed this week)
 4. **New contacts** (use contact_list sorted by created_at desc and check which were added this week)
-5. **Still pending tasks** (use task_manage with action "list" and status "pending" — especially overdue ones)
+5. **Still pending tasks** (use task_manage with action "list" and status "pending" - especially overdue ones)
 6. **Upcoming reminders** (use reminder_manage with action "list" and status "active" for next week)
 
 Summarize:
@@ -269,7 +269,7 @@ Please search broadly:
 3. **Search by tags** (use contact_list with tag_name filter for relevant tags)
 4. **Search by company** (use contact_list with company filter)
 5. For promising matches, **get full details** (use contact_get to check custom fields, notes, and work info)
-6. For top matches, **check notes** (use note_list — notes might mention relevant skills, interests, or expertise)
+6. For top matches, **check notes** (use note_list - notes might mention relevant skills, interests, or expertise)
 
 Present results as:
 - **Strong matches**: People who clearly fit the criteria, with why they match

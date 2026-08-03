@@ -5,7 +5,7 @@ import { join } from 'node:path';
 /**
  * Visual screenshot harness (bean mob-crm-rih5).
  *
- * Not an assertion spec — its job is to walk every meaningful screen and dump a
+ * Not an assertion spec - its job is to walk every meaningful screen and dump a
  * full-page PNG in BOTH light and dark mode into `.design-preview/shots/`. The
  * captures feed the per-screen visual-refinement pass (bean ed4k): they make
  * theme regressions (e.g. a form input that ignored --color-input-bg in dark

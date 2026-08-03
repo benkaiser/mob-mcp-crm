@@ -27,14 +27,14 @@ export function createApiTokensRouter(db: Database.Database, planService: PlanSe
 
   const param = (v: unknown): string => (Array.isArray(v) ? v[0] : String(v ?? ''));
 
-  // List tokens (masked — never returns the plaintext or hash).
+  // List tokens (masked - never returns the plaintext or hash).
   router.get('/', asyncHandler((req, res) => {
     const userId = getUserId(req);
     planService.requireFeature(userId, 'public_api');
     sendData(res, tokens.list(userId));
   }));
 
-  // Create a token — plaintext returned ONCE in this response.
+  // Create a token - plaintext returned ONCE in this response.
   router.post('/', asyncHandler((req, res) => {
     const userId = getUserId(req);
     planService.requireFeature(userId, 'public_api');

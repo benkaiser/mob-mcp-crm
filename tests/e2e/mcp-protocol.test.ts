@@ -5,7 +5,7 @@ import http from 'node:http';
 /**
  * E2E MCP Protocol Tests
  * Tests the full MCP protocol flow via HTTP requests.
- * In forgetful mode, no OAuth is needed — connect to /mcp directly.
+ * In forgetful mode, no OAuth is needed - connect to /mcp directly.
  */
 describe('E2E MCP Protocol', () => {
   let serverInstance: ReturnType<typeof createServer>;
@@ -96,7 +96,7 @@ describe('E2E MCP Protocol', () => {
   it('should establish a session in forgetful mode without OAuth', async () => {
     await startServer(true);
 
-    // No token needed — connect directly
+    // No token needed - connect directly
     const response = await mcpRequest({
       jsonrpc: '2.0',
       id: 1,
@@ -135,7 +135,7 @@ describe('E2E MCP Protocol', () => {
     await startServer(true);
     const sessionId = await initSession();
 
-    // List tools — no token needed
+    // List tools - no token needed
     const toolsResponse = await mcpRequest({
       jsonrpc: '2.0',
       id: 2,
@@ -162,7 +162,7 @@ describe('E2E MCP Protocol', () => {
     await startServer(true);
     const sessionId = await initSession();
 
-    // Create a contact — no token needed
+    // Create a contact - no token needed
     const createResponse = await mcpRequest({
       jsonrpc: '2.0',
       id: 2,
@@ -235,7 +235,7 @@ describe('E2E MCP Protocol', () => {
     await startServer(true);
     const sessionId = await initSession();
 
-    // Call prime — should return Bluey data with 'me' field
+    // Call prime - should return Bluey data with 'me' field
     const primeResponse = await mcpRequest({
       jsonrpc: '2.0',
       id: 2,
@@ -290,7 +290,7 @@ describe('E2E MCP Protocol', () => {
       },
     }, sessionA);
 
-    // Session B: init and list contacts — should not see Alice
+    // Session B: init and list contacts - should not see Alice
     const sessionB = await initSession();
     const listResponse = await mcpRequest({
       jsonrpc: '2.0',

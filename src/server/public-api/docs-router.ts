@@ -4,7 +4,7 @@ import { buildOpenApiSpec } from './openapi.js';
 /**
  * Public documentation router for the REST API.
  *
- * Serves two endpoints — neither requires authentication, since documentation
+ * Serves two endpoints - neither requires authentication, since documentation
  * should be world-readable:
  *   - `GET /openapi.json` → the OpenAPI 3.0 spec as JSON.
  *   - `GET /docs`         → a self-contained HTML page rendering the spec with

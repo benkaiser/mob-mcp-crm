@@ -189,7 +189,7 @@ describe('MCP Auth Enforcement', () => {
     await startServer(true);
     const sessionId = await initForgetfulSession();
 
-    // Use a tool — no bearer token needed
+    // Use a tool - no bearer token needed
     const response = await mcpRequest({
       jsonrpc: '2.0',
       id: 2,
@@ -225,7 +225,7 @@ describe('MCP Auth Enforcement', () => {
       },
     }, sessionA);
 
-    // Session B: list contacts — should not see Alice
+    // Session B: list contacts - should not see Alice
     const sessionB = await initForgetfulSession();
 
     const listResponse = await mcpRequest({

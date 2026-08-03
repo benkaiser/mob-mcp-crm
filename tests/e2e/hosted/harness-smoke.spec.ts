@@ -1,7 +1,7 @@
 import { test, expect } from '../fixtures';
 
 /**
- * Hosted-mode harness smoke — proves the hosted webServer (MOB_HOSTED=true,
+ * Hosted-mode harness smoke - proves the hosted webServer (MOB_HOSTED=true,
  * port 3101) boots and that a fresh hosted account is on the free plan.
  *
  * Full plan-gating coverage (contact cap, token/webhook 403s) lives in the

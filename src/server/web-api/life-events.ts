@@ -35,7 +35,7 @@ export function createLifeEventsRouter(db: Database.Database): Router {
 
   const param = (v: unknown): string => (Array.isArray(v) ? v[0] : String(v ?? ''));
 
-  // GET /?contact_id=... — list a contact's life events.
+  // GET /?contact_id=... - list a contact's life events.
   router.get('/', asyncHandler((req, res) => {
     const userId = getUserId(req);
     const q = req.query;
@@ -84,7 +84,7 @@ export function createLifeEventsRouter(db: Database.Database): Router {
     sendData(res, updated);
   }));
 
-  // DELETE /:id — soft delete.
+  // DELETE /:id - soft delete.
   router.delete('/:id', asyncHandler((req, res) => {
     const userId = getUserId(req);
     const ok = lifeEvents.softDelete(userId, param(req.params.id));

@@ -5,7 +5,7 @@ import nodemailer, { type Transporter } from 'nodemailer';
 export interface EmailMessage {
   to: string;
   subject: string;
-  /** Plain-text body (required — always provide a text fallback). */
+  /** Plain-text body (required - always provide a text fallback). */
   text: string;
   /** Optional HTML body. When omitted, a simple HTML wrapper around `text` is used. */
   html?: string;
@@ -55,7 +55,7 @@ export class EmailService {
   async sendMail(msg: EmailMessage): Promise<SendResult> {
     if (!this.transport) {
       console.warn(
-        `[email] SMTP not configured — skipping email to ${msg.to} ("${msg.subject}"). ` +
+        `[email] SMTP not configured - skipping email to ${msg.to} ("${msg.subject}"). ` +
         `Set SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASS/MAIL_FROM to enable delivery.`,
       );
       return { sent: false };
@@ -124,7 +124,7 @@ export function renderEmailHtml(title: string, text: string): string {
       <h1 style="font-size:20px;margin:0 0 24px;color:#1a1a2e;">${escapeHtml(title)}</h1>
       ${paragraphs}
       <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;">
-      <p style="font-size:12px;color:#6b7280;margin:0;">Mob — your AI-first personal CRM 🦘</p>
+      <p style="font-size:12px;color:#6b7280;margin:0;">Mob - your AI-first personal CRM 🦘</p>
     </div>
   </body>
 </html>`;
@@ -161,7 +161,7 @@ export function renderActionEmail(opts: {
       <p style="font-size:13px;color:#2563eb;word-break:break-all;margin:0 0 24px;">${escapeHtml(opts.url)}</p>
       ${opts.outro ? `<p style="font-size:13px;color:#6b7280;margin:0 0 24px;">${escapeHtml(opts.outro)}</p>` : ''}
       <hr style="border:none;border-top:1px solid #e5e7eb;margin:0 0 24px;">
-      <p style="font-size:12px;color:#6b7280;margin:0;">Mob — your AI-first personal CRM 🦘</p>
+      <p style="font-size:12px;color:#6b7280;margin:0;">Mob - your AI-first personal CRM 🦘</p>
     </div>
   </body>
 </html>`;

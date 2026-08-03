@@ -92,7 +92,7 @@ test('Monica: cancelling the confirm dialog aborts the import', async ({ page })
   await page.getByTestId('tab-monica').click();
   await page.getByTestId('import-textarea').fill(monicaSqlSample(first, last));
 
-  // Open the destructive confirm dialog, then cancel — no request should fire.
+  // Open the destructive confirm dialog, then cancel - no request should fire.
   let importFired = false;
   await page.route('**/web/api/import/monica', (route) => { importFired = true; route.abort(); });
 

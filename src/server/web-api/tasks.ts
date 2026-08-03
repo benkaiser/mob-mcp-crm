@@ -44,7 +44,7 @@ export function createTasksRouter(db: Database.Database): Router {
 
   const param = (v: unknown): string => (Array.isArray(v) ? v[0] : String(v ?? ''));
 
-  // GET / — list with filters + pagination.
+  // GET / - list with filters + pagination.
   router.get('/', asyncHandler((req, res) => {
     const userId = getUserId(req);
     const p = pageParams(req);
@@ -83,7 +83,7 @@ export function createTasksRouter(db: Database.Database): Router {
     sendData(res, updated);
   }));
 
-  // DELETE /:id — soft delete.
+  // DELETE /:id - soft delete.
   router.delete('/:id', asyncHandler((req, res) => {
     const userId = getUserId(req);
     const ok = tasks.softDelete(userId, param(req.params.id));

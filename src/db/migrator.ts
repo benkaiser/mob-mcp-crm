@@ -34,7 +34,7 @@ export function runMigrations(db: Database.Database): void {
       .filter((f) => f.endsWith('.sql'))
       .sort();
   } catch {
-    // No migrations directory yet — this is fine during early development
+    // No migrations directory yet - this is fine during early development
     migrationFiles = [];
   }
 

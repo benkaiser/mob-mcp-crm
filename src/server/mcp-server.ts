@@ -30,7 +30,7 @@ import { registerPrompts } from './prompts.js';
 /**
  * Detect forgetful mode the same way `src/index.ts` does. In forgetful mode
  * users live in ephemeral per-session DB clones with no persistent account,
- * so auto-login tokens can't round-trip — deep-links are omitted.
+ * so auto-login tokens can't round-trip - deep-links are omitted.
  */
 const FORGETFUL = process.argv.includes('--forgetful') || process.env.MOB_FORGETFUL === 'true';
 
@@ -324,7 +324,7 @@ export function createMcpServer(db: Database.Database): McpServer {
       id: z.string().optional().describe('The contact method ID (required for "update" and "remove")'),
       type: z.string().trim().min(1)
         .optional().describe('Type of contact method (required for "add"). Built-ins: email, phone, whatsapp, telegram, signal, twitter, instagram, facebook, linkedin, website, other. Custom values defined in Settings are also accepted.'),
-      value: z.string().optional().describe('The value — email, phone number, handle (required for "add")'),
+      value: z.string().optional().describe('The value - email, phone number, handle (required for "add")'),
       label: z.string().optional().describe('Label (e.g. "Personal", "Work")'),
       is_primary: z.boolean().optional().describe('Set as primary for this type'),
     },
@@ -418,7 +418,7 @@ export function createMcpServer(db: Database.Database): McpServer {
   });
 
   server.registerTool('food_preferences_upsert', {
-    description: 'Set or update food preferences for a contact. Replaces all fields — pass all known preferences, not just changes.',
+    description: 'Set or update food preferences for a contact. Replaces all fields - pass all known preferences, not just changes.',
     inputSchema: {
       contact_id: z.string().describe('The contact ID'),
       dietary_restrictions: z.array(z.string()).optional().describe('Dietary restrictions (e.g. ["vegetarian", "gluten-free"])'),
@@ -585,7 +585,7 @@ export function createMcpServer(db: Database.Database): McpServer {
     description: 'List and search notes. When contact_id is provided alone, lists that contact\'s notes (pinned first). ' +
       'Add query, tag_name, is_pinned, or omit contact_id to search across all contacts.',
     inputSchema: {
-      contact_id: z.string().optional().describe('Filter by contact ID (optional — omit to search across all contacts)'),
+      contact_id: z.string().optional().describe('Filter by contact ID (optional - omit to search across all contacts)'),
       query: z.string().optional().describe('Search term matched against note title and body'),
       tag_name: z.string().optional().describe('Filter to notes belonging to contacts with this tag'),
       is_pinned: z.boolean().optional().describe('Filter by pinned status'),
@@ -816,8 +816,8 @@ export function createMcpServer(db: Database.Database): McpServer {
       action: z.enum(['create', 'list', 'update', 'delete', 'restore']).describe('Action to perform'),
       contact_id: z.string().optional().describe('The contact ID (required for "create" and "list")'),
       id: z.string().optional().describe('The life event ID (required for "update", "delete", "restore")'),
-      event_type: z.string().optional().describe('Event type (e.g. "new_job", "got_married", "moved") — required for "create", optional for "update"'),
-      title: z.string().optional().describe('Title (e.g. "Started at Google", "Moved to Berlin") — required for "create", optional for "update"'),
+      event_type: z.string().optional().describe('Event type (e.g. "new_job", "got_married", "moved") - required for "create", optional for "update"'),
+      title: z.string().optional().describe('Title (e.g. "Started at Google", "Moved to Berlin") - required for "create", optional for "update"'),
       description: z.string().optional().describe('Description (optional for "create" and "update")'),
       occurred_at: z.string().optional().describe('When it happened (ISO date, optional for "create" and "update")'),
       related_contact_ids: z.array(z.string()).optional().describe('IDs of other contacts involved (optional for "create" and "update")'),
@@ -1462,7 +1462,7 @@ export function createMcpServer(db: Database.Database): McpServer {
   });
 
   server.registerTool('contacts_needing_attention', {
-    description: 'Find contacts you haven\'t interacted with recently — the "who am I neglecting?" query. ' +
+    description: 'Find contacts you haven\'t interacted with recently - the "who am I neglecting?" query. ' +
       'Returns contacts sorted by staleness (longest since last interaction first). ' +
       'Contacts with zero interactions are included and sorted first.',
     inputSchema: {
@@ -1515,7 +1515,7 @@ export function createMcpServer(db: Database.Database): McpServer {
   // ─── Batch Operations ────────────────────────────────────────
 
   server.registerTool('batch_create_contacts', {
-    description: 'Create multiple contacts in one call. Max 50 items per batch. Runs atomically — if any item fails, the entire batch is rolled back.',
+    description: 'Create multiple contacts in one call. Max 50 items per batch. Runs atomically - if any item fails, the entire batch is rolled back.',
     inputSchema: {
       contacts: z.array(z.object({
         first_name: z.string().describe('First name (required)'),
@@ -1555,7 +1555,7 @@ export function createMcpServer(db: Database.Database): McpServer {
   });
 
   server.registerTool('batch_tag_contacts', {
-    description: 'Apply a tag to multiple contacts in one call. Max 50 contacts per batch. Creates the tag if it doesn\'t exist. Runs atomically — if any item fails, the entire batch is rolled back.',
+    description: 'Apply a tag to multiple contacts in one call. Max 50 contacts per batch. Creates the tag if it doesn\'t exist. Runs atomically - if any item fails, the entire batch is rolled back.',
     inputSchema: {
       tag_name: z.string().describe('Tag name to apply'),
       contact_ids: z.array(z.string()).describe('Array of contact IDs to tag (max 50)'),
@@ -1571,7 +1571,7 @@ export function createMcpServer(db: Database.Database): McpServer {
   });
 
   server.registerTool('batch_create_activities', {
-    description: 'Create multiple activities/interactions in one call. Max 50 items per batch. Runs atomically — if any item fails, the entire batch is rolled back.',
+    description: 'Create multiple activities/interactions in one call. Max 50 items per batch. Runs atomically - if any item fails, the entire batch is rolled back.',
     inputSchema: {
       activities: z.array(z.object({
         type: z.enum(['phone_call', 'video_call', 'text_message', 'in_person', 'email', 'activity', 'other'])
@@ -1657,7 +1657,7 @@ export function createMcpServer(db: Database.Database): McpServer {
       }
       return textResult('Push notification management was declined.');
     } catch (err: any) {
-      // Client doesn't support URL elicitation or handler not registered — return the URL as text
+      // Client doesn't support URL elicitation or handler not registered - return the URL as text
       console.warn('URL elicitation unavailable, falling back to text:', err?.message || err);
       return textResult({
         message: 'Open the following URL in your browser to manage push notification subscriptions:',

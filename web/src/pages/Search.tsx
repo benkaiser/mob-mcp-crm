@@ -97,7 +97,7 @@ export function SearchPage() {
                         data-testid="search-result-row" data-entity-type={type}>
                         <span>
                           <strong>{r.title}</strong>
-                          {r.snippet && <span class="muted"> — {r.snippet}</span>}
+                          {r.snippet && <span class="muted"> - {r.snippet}</span>}
                           {r.contact_name && <span class="muted"> · {r.contact_name}</span>}
                         </span>
                       </Link>

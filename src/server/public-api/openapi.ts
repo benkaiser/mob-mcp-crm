@@ -3,7 +3,7 @@
  *
  * The spec describes every endpoint mounted by `createPublicApiRouter` under
  * `/api/v1` (see ./index.ts). Request/response bodies use intentionally loose
- * schemas — path/operation coverage matters more than exhaustive field typing.
+ * schemas - path/operation coverage matters more than exhaustive field typing.
  *
  * Exposed via the docs router (./docs-router.ts) at `/api/v1/openapi.json`.
  */
@@ -40,8 +40,8 @@ returns \`429 rate_limited\` with a \`Retry-After\` header (seconds until reset)
 
 ## Webhooks
 Subscribers receive signed \`POST\` deliveries. Each request includes an
-\`X-Mob-Signature: sha256=<hmac>\` header — an HMAC-SHA256 of the raw JSON body keyed
-by the webhook secret — and an \`X-Mob-Event\` header. Verify the signature with a
+\`X-Mob-Signature: sha256=<hmac>\` header - an HMAC-SHA256 of the raw JSON body keyed
+by the webhook secret - and an \`X-Mob-Event\` header. Verify the signature with a
 constant-time comparison. Supported event names:
 \`contact.created\`, \`contact.updated\`, \`contact.deleted\`, \`activity.created\`,
 \`reminder.due\`, \`task.created\`, \`task.completed\`. Subscribers may use \`*\` to

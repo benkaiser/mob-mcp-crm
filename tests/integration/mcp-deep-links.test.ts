@@ -88,7 +88,7 @@ describe('MCP deep-link wiring', () => {
     expect(linkBlock!.text).toContain('View on web:');
     const url = linkBlock!.text.replace('View on web: ', '');
     // base_url may be empty in a cloned forgetful template DB, so the link can
-    // be relative — parse against a dummy base to inspect path/query.
+    // be relative - parse against a dummy base to inspect path/query.
     const parsed = new URL(url, 'http://base.invalid');
     expect(parsed.pathname).toBe('/web/auto-login');
     expect(parsed.searchParams.get('token')).toBeTruthy();

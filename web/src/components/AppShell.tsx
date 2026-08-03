@@ -20,7 +20,7 @@ interface NavItem {
   label: string;
   /** Match pattern for active-state highlighting. */
   match: string;
-  /** Exact match only — no descendant prefix highlighting. */
+  /** Exact match only - no descendant prefix highlighting. */
   exact?: boolean;
   /** Sub-items revealed when the parent section is active. */
   children?: NavChild[];
@@ -460,7 +460,7 @@ export function AppShell({ children }: { children: ComponentChildren }) {
             <InstallPrompt />
             <div class="sidebar__user-actions">
               <a href="/docs" data-testid="docs-link">Docs</a>
-              {/* Server-rendered logout route — full navigation, not SPA. */}
+              {/* Server-rendered logout route - full navigation, not SPA. */}
               <a href="/web/logout" data-testid="logout-link">Log out</a>
               <ThemeToggle />
             </div>

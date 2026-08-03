@@ -251,7 +251,7 @@ export function ContactForm({ id }: { id?: string }) {
                   <Field label="Month" error={errs.birthday_month}>
                     <Select value={form.birthday_month}
                       onChange={(e) => set('birthday_month', (e.target as HTMLSelectElement).value)}>
-                      <option value="">—</option>
+                      <option value="">-</option>
                       {MONTHS.map((m, i) => <option key={m} value={String(i + 1)}>{m}</option>)}
                     </Select>
                   </Field>

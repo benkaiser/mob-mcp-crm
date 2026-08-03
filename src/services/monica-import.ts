@@ -282,9 +282,9 @@ function importParsedData(db: Database.Database, userId: string, data: MonicaPar
       if (mc.is_dead) status = 'deceased';
       else if (!mc.is_active) status = 'archived';
 
-      // "How we met" — combine first_met_where and first_met_additional_info
+      // "How we met" - combine first_met_where and first_met_additional_info
       const metParts = [mc.first_met_where, mc.first_met_additional_info].filter(Boolean);
-      const metDescription = metParts.length > 0 ? metParts.join(' — ') : null;
+      const metDescription = metParts.length > 0 ? metParts.join(' - ') : null;
 
       try {
         insertContact.run(
@@ -359,7 +359,7 @@ function importParsedData(db: Database.Database, userId: string, data: MonicaPar
       }
 
       if (!mobType) {
-        // Unknown type — store as "other" with a label
+        // Unknown type - store as "other" with a label
         mobType = 'other';
       }
 
@@ -401,7 +401,7 @@ function importParsedData(db: Database.Database, userId: string, data: MonicaPar
       if (!contactMobId) continue;
 
       const direction = call.contact_called ? 'Called them' : 'They called';
-      const body = `[Phone Call — ${call.called_at?.split(' ')[0] ?? 'unknown date'}] ${direction}\n\n${call.content ?? ''}`.trim();
+      const body = `[Phone Call - ${call.called_at?.split(' ')[0] ?? 'unknown date'}] ${direction}\n\n${call.content ?? ''}`.trim();
 
       try {
         insertNote.run(generateId(), contactMobId, body, 0);

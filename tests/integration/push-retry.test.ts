@@ -32,7 +32,7 @@ describe('Push notification retry tracking', () => {
   }
 
   describe('recordPushResult', () => {
-    it('marks success — sets push_sent = 1 and push_attempts = 1', () => {
+    it('marks success - sets push_sent = 1 and push_attempts = 1', () => {
       const id = createNotification();
 
       service.recordPushResult(id, true);
@@ -42,7 +42,7 @@ describe('Push notification retry tracking', () => {
       expect(row.push_attempts).toBe(1);
     });
 
-    it('tracks failure — sets push_sent = 0 and push_attempts = 1', () => {
+    it('tracks failure - sets push_sent = 0 and push_attempts = 1', () => {
       const id = createNotification();
 
       service.recordPushResult(id, false);
@@ -129,7 +129,7 @@ describe('Push notification retry tracking', () => {
     });
 
     it('excludes notifications with 0 attempts (never attempted)', () => {
-      // Create a fresh notification — push_attempts defaults to 0
+      // Create a fresh notification - push_attempts defaults to 0
       createNotification();
 
       const retries = service.getPendingPushRetries(userId);

@@ -52,7 +52,7 @@ describe('ContactService.getUpcomingBirthdays', () => {
       birthdayDay: futureDate.getDate(),
     });
 
-    // Birthday 100 days ahead — should NOT appear
+    // Birthday 100 days ahead - should NOT appear
     const farDate = new Date(now);
     farDate.setDate(farDate.getDate() + 100);
     createContactWithBirthday({

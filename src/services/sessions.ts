@@ -135,7 +135,7 @@ export class SessionService {
     }));
   }
 
-  /** Public (hashed) id for a raw session token — matches `listForUser` ids. */
+  /** Public (hashed) id for a raw session token - matches `listForUser` ids. */
   publicId(token: string): string {
     return publicSessionId(token);
   }

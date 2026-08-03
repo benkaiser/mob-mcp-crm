@@ -254,7 +254,7 @@ function tokenizeRow(row: string): string[] {
     }
 
     if (row[i] === "'") {
-      // Quoted string — find matching end quote
+      // Quoted string - find matching end quote
       let val = "'";
       i++;
       while (i < end) {

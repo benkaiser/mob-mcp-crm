@@ -3,7 +3,7 @@ import { createTestDatabase, createTestUser } from '../fixtures/test-helpers.js'
 import { importMonicaExport } from '../../src/services/monica-import.js';
 import { ReminderService } from '../../src/services/reminders.js';
 
-describe('importMonicaExport — birthday reminder skipping', () => {
+describe('importMonicaExport - birthday reminder skipping', () => {
   let db: ReturnType<typeof createTestDatabase>;
 
   afterEach(() => db?.close());

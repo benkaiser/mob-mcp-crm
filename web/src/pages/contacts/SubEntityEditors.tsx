@@ -333,7 +333,7 @@ function EditorFooter({ saving, onClose, form }: { saving: boolean; onClose: () 
 
 // ─── Note editor ────────────────────────────────────────────────
 // Wraps POST /web/api/notes (create) and PATCH /notes/:id (edit). Notes are
-// 1-contact per record — `contact_id` is taken from the profile we're viewing.
+// 1-contact per record - `contact_id` is taken from the profile we're viewing.
 
 export function NoteEditor({ contactId, existing, onClose, onSaved }: EditorProps<Note>) {
   const [title, setTitle] = useState(existing?.title ?? '');

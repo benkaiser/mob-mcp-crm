@@ -353,7 +353,7 @@ export class SearchService {
       return {
         id: row.id,
         entity_type: 'relationships' as SearchEntityType,
-        title: `${contactName} — ${row.relationship_type} — ${relatedName}`,
+        title: `${contactName} - ${row.relationship_type} - ${relatedName}`,
         snippet: `${contactName} is ${row.relationship_type} of ${relatedName}`,
         contact_id: row.contact_id,
         contact_name: contactName,
@@ -380,7 +380,7 @@ export class SearchService {
         id: row.contact_id,
         entity_type: 'contact_methods' as SearchEntityType,
         title: `${row.type}: ${row.value}`,
-        snippet: row.label ? `${row.label} — ${row.value}` : row.value,
+        snippet: row.label ? `${row.label} - ${row.value}` : row.value,
         contact_id: row.contact_id,
         contact_name: contactName,
         match_field: 'value',
@@ -436,7 +436,7 @@ export class SearchService {
         id: row.id,
         entity_type: 'custom_fields' as SearchEntityType,
         title: `${row.field_name}: ${row.field_value}`,
-        snippet: row.field_group ? `${row.field_group} — ${row.field_name}: ${row.field_value}` : `${row.field_name}: ${row.field_value}`,
+        snippet: row.field_group ? `${row.field_group} - ${row.field_name}: ${row.field_value}` : `${row.field_name}: ${row.field_value}`,
         contact_id: row.contact_id,
         contact_name: contactName,
       };

@@ -366,13 +366,13 @@ export class RelationshipService {
     // Check if the invalid ID is actually the user's own ID (common mistake)
     const isUserIdCheck = (id: string) => {
       const user = this.db.prepare('SELECT id, name FROM users WHERE id = ?').get(id) as { id: string; name: string } | undefined;
-      return user ? ` This looks like your own user ID (${user.name}) — you cannot use your user ID as a contact_id. Use your self-contact ID instead (available from the \`me\` or \`prime\` tool).` : '';
+      return user ? ` This looks like your own user ID (${user.name}) - you cannot use your user ID as a contact_id. Use your self-contact ID instead (available from the \`me\` or \`prime\` tool).` : '';
     };
 
     if (!contact && !related) {
       const hint1 = isUserIdCheck(input.contact_id);
       const hint2 = input.contact_id !== input.related_contact_id ? isUserIdCheck(input.related_contact_id) : '';
-      throw new Error(`Neither contact exists — contact_id "${input.contact_id}" and related_contact_id "${input.related_contact_id}" were not found.${hint1}${hint2} Use contact_list or contact_search to find valid contact IDs.`);
+      throw new Error(`Neither contact exists - contact_id "${input.contact_id}" and related_contact_id "${input.related_contact_id}" were not found.${hint1}${hint2} Use contact_list or contact_search to find valid contact IDs.`);
     }
     if (!contact) {
       const relatedName = [related!.first_name, related!.last_name].filter(Boolean).join(' ');
@@ -386,7 +386,7 @@ export class RelationshipService {
     }
 
     if (input.contact_id === input.related_contact_id) {
-      throw new Error('contact_id and related_contact_id cannot be the same — a contact cannot have a relationship with itself.');
+      throw new Error('contact_id and related_contact_id cannot be the same - a contact cannot have a relationship with itself.');
     }
 
     const forwardId = generateId();

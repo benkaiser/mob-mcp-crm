@@ -2,11 +2,11 @@
 /*
  * App-shell service worker for the Mob CRM Preact SPA.
  *
- * Scope: /app/ — this coexists with the EXISTING root-scoped push service
+ * Scope: /app/ - this coexists with the EXISTING root-scoped push service
  * worker served by the server at /service-worker.js (which owns `push` +
  * `notificationclick` delivery). This SW deliberately does NOT register any
  * push/notification handlers, so it can never swallow push events or
- * notification clicks — those stay with the root SW.
+ * notification clicks - those stay with the root SW.
  *
  * Responsibilities:
  *  - Precache the app shell (navigation fallback = index.html).
@@ -14,7 +14,7 @@
  *    so they're immutable and safe to cache forever).
  *  - Serve /app/ navigations with a network-first strategy, falling back to the
  *    cached app shell when offline.
- *  - NEVER touch /web/api or /api requests (auth/mutations/push endpoints) —
+ *  - NEVER touch /web/api or /api requests (auth/mutations/push endpoints) -
  *    they are passed straight through to the network, never cached.
  */
 
@@ -94,7 +94,7 @@ sw.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== sw.location.origin) return;
 
-  // Pass API/auth/push requests straight through — never cache, never break.
+  // Pass API/auth/push requests straight through - never cache, never break.
   if (isApiRequest(url)) return;
 
   // Navigations (page loads within /app) → network-first, offline fallback.

@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto';
  * Tests that the server properly handles user creation and contact operations
  * through the MCP flow.
  *
- * In forgetful mode, no OAuth is needed — connect to /mcp directly.
+ * In forgetful mode, no OAuth is needed - connect to /mcp directly.
  * In persistent mode, OAuth is required.
  */
 describe('Authenticated User Contact Creation', () => {
@@ -93,7 +93,7 @@ describe('Authenticated User Contact Creation', () => {
     await startServer(true);
     const sessionId = await initForgetfulSession();
 
-    // Call contact_create — no token needed in forgetful mode
+    // Call contact_create - no token needed in forgetful mode
     const createResponse = await mcpRequest({
       jsonrpc: '2.0',
       id: 2,

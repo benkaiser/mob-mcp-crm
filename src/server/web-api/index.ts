@@ -64,7 +64,7 @@ export interface WebApiDeps {
  * Build the internal JSON API router mounted at `/web/api`.
  *
  * Auth: session cookie (NOT bearer tokens). Returns 401 JSON (never redirects)
- * so the SPA can handle auth failures. Ungated for the free tier — this surface
+ * so the SPA can handle auth failures. Ungated for the free tier - this surface
  * powers the web UI, which all plans get in full.
  */
 export function createWebApiRouter(deps: WebApiDeps): Router {
@@ -75,7 +75,7 @@ export function createWebApiRouter(deps: WebApiDeps): Router {
   const router = Router();
 
   // JSON body parsing scoped to the API. The Monica import route parses its own
-  // (much larger) body, so skip it here — otherwise the 100kb default would 413
+  // (much larger) body, so skip it here - otherwise the 100kb default would 413
   // a multi-MB SQL export before that route's parser runs.
   const globalJson = json();
   router.use((req, res, next) => {
@@ -105,7 +105,7 @@ export function createWebApiRouter(deps: WebApiDeps): Router {
     const usage = planService.getUsage(userId);
     const entitlements = planService.getEntitlements(userId);
     // Forgetful-mode users live in an ephemeral cloned DB, not the main users
-    // table, so account/settings lookups don't apply — use sensible defaults.
+    // table, so account/settings lookups don't apply - use sensible defaults.
     const verification = forgetful ? { email_verified: true, pending_email: null } : accountService.getVerification(userId);
     const timezone = forgetful ? 'UTC' : settingsService.get(userId).timezone;
     sendData(res, {

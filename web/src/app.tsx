@@ -69,7 +69,7 @@ export function App() {
 /**
  * The routed page content, wrapped in an ErrorBoundary keyed to the current
  * location so a render error on one route shows a recoverable message and
- * resets on navigation — instead of throwing mid-reconciliation and leaving
+ * resets on navigation - instead of throwing mid-reconciliation and leaving
  * the previous route's DOM stacked underneath.
  */
 function RoutedContent() {
@@ -89,7 +89,7 @@ function RoutedContent() {
             <Route path="/data" component={DataExport} />
             <Route path="/settings" component={Settings} />
             <Route path="/activity-log" component={AuditLogPage} />
-            {/* "+ New" pages — registered BEFORE the /:id routes so /notes/new
+            {/* "+ New" pages - registered BEFORE the /:id routes so /notes/new
                 etc. match the focused-creation page, not the detail view. */}
             <Route path="/notes/new" component={NewNotePage} />
             <Route path="/activities/new" component={NewActivityPage} />
@@ -97,7 +97,7 @@ function RoutedContent() {
             <Route path="/tasks/new" component={NewTaskPage} />
             <Route path="/gifts/new" component={NewGiftPage} />
             <Route path="/debts/new" component={NewDebtPage} />
-            {/* Overview pages — registered BEFORE /:id detail routes so base
+            {/* Overview pages - registered BEFORE /:id detail routes so base
                 resource paths render lists while /:id still renders details. */}
             <Route path="/activities">{() => <EntityOverview resource="activities" />}</Route>
             <Route path="/notes">{() => <EntityOverview resource="notes" />}</Route>

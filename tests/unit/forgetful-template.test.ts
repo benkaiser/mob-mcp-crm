@@ -61,7 +61,7 @@ describe('ForgetfulTemplate', () => {
     expect(count1).toBe(21);
     expect(count2).toBe(21);
 
-    // Delete a contact from db1 — should not affect db2
+    // Delete a contact from db1 - should not affect db2
     const contact1 = db1.prepare("SELECT id FROM contacts WHERE user_id = 'user-a' LIMIT 1").get() as any;
     db1.prepare('DELETE FROM contacts WHERE id = ?').run(contact1.id);
 

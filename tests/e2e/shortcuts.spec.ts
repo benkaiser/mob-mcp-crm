@@ -13,7 +13,7 @@ import { test, expect } from './fixtures';
  * The global keydown listener is attached by a Preact effect after the shell
  * mounts, so the very first keypress can race that subscription. Each test
  * anchors focus on the body and wraps the trigger in `toPass()` so the key is
- * re-sent until the listener is live — deterministic without arbitrary waits.
+ * re-sent until the listener is live - deterministic without arbitrary waits.
  */
 
 test('? opens the shortcuts overlay and Escape closes it', async ({ page }) => {

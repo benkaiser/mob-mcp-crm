@@ -15,7 +15,7 @@ if (root) {
 
 // Register the app-shell service worker (scope /app/) for offline support.
 // This is separate from the root-scoped push SW at /service-worker.js, which
-// the push store registers when the user enables notifications — different
+// the push store registers when the user enables notifications - different
 // URLs and scopes mean the two registrations never conflict.
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {

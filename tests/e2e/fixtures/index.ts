@@ -144,11 +144,11 @@ export class ApiSeeder {
 /**
  * Extended `test` with auto-registered, authenticated fixtures.
  *
- *   - `account`  — a freshly registered account. This is an AUTO fixture: every
+ *   - `account`  - a freshly registered account. This is an AUTO fixture: every
  *     test that imports this `test` starts already logged in (session + csrf
  *     cookies set, SPA renders the authenticated shell). Request it by name to
  *     read the account's name/email/password.
- *   - `seeder`   — an ApiSeeder bound to the authenticated context for fast setup
+ *   - `seeder`   - an ApiSeeder bound to the authenticated context for fast setup
  *
  * Specs that need a clean UNAUTHENTICATED page (register/login/logout flows)
  * must import the base test from '@playwright/test' instead, so they don't pick

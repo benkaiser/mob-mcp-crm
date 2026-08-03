@@ -4,7 +4,7 @@ import { AccountService, AccountError } from '../../src/auth/accounts.js';
 import { createTestDatabase } from '../fixtures/test-helpers.js';
 import { closeDatabase } from '../../src/db/connection.js';
 
-describe('AccountService — self-service', () => {
+describe('AccountService - self-service', () => {
   let db: Database.Database;
   let service: AccountService;
   let userId: string;

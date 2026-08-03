@@ -147,7 +147,7 @@ describe('NotificationService', () => {
   describe('generateBirthdayNotifications', () => {
     it('should generate a notification for a birthday that is today (0 days)', () => {
       // Service computes "today" in UTC by default, so derive month/day in UTC
-      // too — otherwise this is flaky near midnight in non-UTC timezones.
+      // too - otherwise this is flaky near midnight in non-UTC timezones.
       const [, month, day] = new Intl.DateTimeFormat('en-CA', {
         timeZone: 'UTC', year: 'numeric', month: '2-digit', day: '2-digit',
       }).format(new Date()).split('-').map(Number);

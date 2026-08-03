@@ -1,12 +1,12 @@
 import { signal } from '@preact/signals';
 
 /**
- * Theme store — light / dark / system.
+ * Theme store - light / dark / system.
  *
  * The actual <html data-theme> attribute is first set by an inline boot script
  * in index.html (before paint, to avoid a flash). This store keeps the user's
- * preference in sync, persists it to localStorage under 'mob-theme', and—when
- * the preference is 'system'—follows OS changes live via matchMedia.
+ * preference in sync, persists it to localStorage under 'mob-theme', and-when
+ * the preference is 'system'-follows OS changes live via matchMedia.
  *
  *   - 'light' | 'dark' : explicit override, persisted.
  *   - 'system'         : no stored key; resolve from prefers-color-scheme.

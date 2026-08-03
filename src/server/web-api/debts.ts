@@ -37,7 +37,7 @@ export function createDebtsRouter(db: Database.Database): Router {
 
   const param = (v: unknown): string => (Array.isArray(v) ? v[0] : String(v ?? ''));
 
-  // GET / — list with filters + pagination.
+  // GET / - list with filters + pagination.
   router.get('/', asyncHandler((req, res) => {
     const userId = getUserId(req);
     const p = pageParams(req);
@@ -50,7 +50,7 @@ export function createDebtsRouter(db: Database.Database): Router {
     sendData(res, result.data, pageMeta(result.total, p));
   }));
 
-  // GET /summary?contact_id=... — net balance per currency (BEFORE /:id).
+  // GET /summary?contact_id=... - net balance per currency (BEFORE /:id).
   router.get('/summary', asyncHandler((req, res) => {
     const userId = getUserId(req);
     const q = req.query;
@@ -93,7 +93,7 @@ export function createDebtsRouter(db: Database.Database): Router {
     sendData(res, updated);
   }));
 
-  // DELETE /:id — soft delete.
+  // DELETE /:id - soft delete.
   router.delete('/:id', asyncHandler((req, res) => {
     const userId = getUserId(req);
     const ok = debts.softDelete(userId, param(req.params.id));

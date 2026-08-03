@@ -353,7 +353,7 @@ export class ContactService {
   }
 
   softDelete(userId: string, contactId: string): boolean {
-    // Check if this is a self-contact (is_me = 1) — cannot be deleted
+    // Check if this is a self-contact (is_me = 1) - cannot be deleted
     const contact = this.get(userId, contactId);
 
     if (contact && contact.is_me) {

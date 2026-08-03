@@ -27,7 +27,7 @@ export function createNotesRouter(db: Database.Database): Router {
   const router = Router();
   const notes = new NoteService(db);
 
-  // GET /search?query=... — full-text search across the user's notes (BEFORE /:id).
+  // GET /search?query=... - full-text search across the user's notes (BEFORE /:id).
   router.get('/search', asyncHandler((req, res) => {
     const userId = getApiUserId(req);
     const p = pageParams(req);
@@ -43,7 +43,7 @@ export function createNotesRouter(db: Database.Database): Router {
     sendData(res, result.data, pageMeta(result.total, p));
   }));
 
-  // GET /?contact_id=... — list a contact's notes (pinned first).
+  // GET /?contact_id=... - list a contact's notes (pinned first).
   router.get('/', asyncHandler((req, res) => {
     const userId = getApiUserId(req);
     const q = req.query;

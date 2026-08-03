@@ -4,10 +4,10 @@ import { test, expect } from './fixtures';
  * Settings page E2E (self-hosted mode, port 3100, unlimited plan).
  *
  * Covers the four sections of /app/settings:
- *   1. Profile/plan — shows name, email, plan.
- *   2. API tokens — create → plaintext shown once (copy-field) → masked in list → revoke.
- *   3. Webhooks — create (url + event) → list → toggle active → send test → delete.
- *   4. Push notifications — renders gracefully without VAPID (no real subscription).
+ *   1. Profile/plan - shows name, email, plan.
+ *   2. API tokens - create → plaintext shown once (copy-field) → masked in list → revoke.
+ *   3. Webhooks - create (url + event) → list → toggle active → send test → delete.
+ *   4. Push notifications - renders gracefully without VAPID (no real subscription).
  *
  * In self-hosted mode the public-API and webhooks entitlements are enabled, so
  * the management UI (not the UpgradeNotice) is shown.
@@ -267,7 +267,7 @@ test('push notifications section renders gracefully without VAPID', async ({ pag
 
   // Wait for the async init to settle (spinner clears). The section then shows
   // one of: not supported, not configured (no VAPID), or the subscription kv.
-  // We do NOT require a real subscription — just assert a stable end state.
+  // We do NOT require a real subscription - just assert a stable end state.
   await expect(section.getByTestId('spinner-center')).toHaveCount(0);
 
   const empty = section.getByTestId('empty-state');

@@ -18,7 +18,7 @@ describe('getContactProfile contact-method links', () => {
     const methods = new ContactMethodService(db);
     methods.add({ contact_id: contactId, type: 'phone', value: '0400 123 456' });
     methods.add({ contact_id: contactId, type: 'facebook', value: 'zoe.example' });
-    // A fully custom type — no link until the user defines a template.
+    // A fully custom type - no link until the user defines a template.
     methods.add({ contact_id: contactId, type: 'discord' as never, value: 'zoe#1234' });
 
     let profile = getContactProfile(db, userId, contactId)!;

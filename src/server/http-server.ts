@@ -71,7 +71,7 @@ export function createServer(config: ServerConfig): {
   function forgetfulMcpAuth(req: express.Request, res: express.Response, next: express.NextFunction): void {
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
-    // Existing session — inject auth from stored session
+    // Existing session - inject auth from stored session
     if (sessionId && forgetfulSessions.has(sessionId)) {
       const session = forgetfulSessions.get(sessionId)!;
       (req as any).auth = {
@@ -82,7 +82,7 @@ export function createServer(config: ServerConfig): {
       return;
     }
 
-    // New session (no session ID yet) — create user + clone DB
+    // New session (no session ID yet) - create user + clone DB
     if (!sessionId && isInitializeRequest(req.body)) {
       const userId = generateId();
       const clonedDb = forgetfulTemplate!.clone(userId);
@@ -111,7 +111,7 @@ export function createServer(config: ServerConfig): {
   app.set('views', path.join(__dirname, 'views'));
 
   // App-level body parsing. The Monica import route handles its own (much
-  // larger) JSON body downstream, so skip it here — otherwise express.json()'s
+  // larger) JSON body downstream, so skip it here - otherwise express.json()'s
   // 100kb default would reject a multi-MB SQL export with PayloadTooLargeError
   // before it ever reaches that route's own parser.
   const appJson = express.json();
@@ -219,7 +219,7 @@ export function createServer(config: ServerConfig): {
     }
     const session = getWebSession(sessionToken);
     if (!session) {
-      // Expired/invalid session — clear cookie and redirect
+      // Expired/invalid session - clear cookie and redirect
       res.setHeader('Set-Cookie', clearSessionCookie());
       res.redirect(`/web/login?redirect=${encodeURIComponent(req.originalUrl)}`);
       return;
@@ -330,7 +330,7 @@ export function createServer(config: ServerConfig): {
             state,
           });
         } else {
-          // Not in OAuth flow — auto-login and redirect to the SPA
+          // Not in OAuth flow - auto-login and redirect to the SPA
           const token = setWebSession({ userId: user.id, userName: user.name, email: user.email }, req);
           res.setHeader('Set-Cookie', sessionCookie(token));
           res.redirect('/app/');
@@ -403,7 +403,7 @@ export function createServer(config: ServerConfig): {
           intro: `Hi ${result.user.name}, we received a request to reset your Mob password. This link expires in 1 hour.`,
           buttonLabel: 'Reset password',
           url,
-          outro: "If you didn't request this, you can safely ignore this email — your password won't change.",
+          outro: "If you didn't request this, you can safely ignore this email - your password won't change.",
         });
         await emailService.sendMail({ to: result.user.email, subject: 'Reset your Mob password', text, html });
       }
@@ -413,7 +413,7 @@ export function createServer(config: ServerConfig): {
     res.render('forgot', { error: undefined, success: generic });
   });
 
-  // Reset form (GET) — token carried in the query string.
+  // Reset form (GET) - token carried in the query string.
   app.get('/auth/reset', (req, res) => {
     if (config.forgetful) { res.redirect('/'); return; }
     const token = typeof req.query.token === 'string' ? req.query.token : '';
@@ -470,7 +470,7 @@ export function createServer(config: ServerConfig): {
 
   // ─── OAuth 2.0 PKCE Endpoints ─────────────────────────────
 
-  // Authorization endpoint — GET: browser-based OAuth flow
+  // Authorization endpoint - GET: browser-based OAuth flow
   app.get('/auth/authorize', async (req, res) => {
     const {
       client_id,
@@ -512,7 +512,7 @@ export function createServer(config: ServerConfig): {
       return;
     }
 
-    // Persistent mode — show login form
+    // Persistent mode - show login form
     res.render('login', {
       authorizeUrl: req.originalUrl,
       registerUrl: req.originalUrl.replace('/auth/authorize', '/auth/register'),
@@ -522,7 +522,7 @@ export function createServer(config: ServerConfig): {
     });
   });
 
-  // Authorization endpoint — POST: accepts login credentials + PKCE params
+  // Authorization endpoint - POST: accepts login credentials + PKCE params
   app.post('/auth/authorize', async (req, res) => {
     // Support both JSON body (API clients) and form-encoded (login form)
     const isFormPost = req.headers['content-type']?.includes('application/x-www-form-urlencoded');
@@ -535,7 +535,7 @@ export function createServer(config: ServerConfig): {
     const state = req.body.state || req.query.state as string;
     const confirmed = req.body.confirm_authorize === '1';
 
-    // In forgetful mode, no OAuth is needed for MCP — reject API auth requests
+    // In forgetful mode, no OAuth is needed for MCP - reject API auth requests
     if (config.forgetful) {
       res.status(404).json({ error: 'OAuth is disabled in forgetful mode. Connect to /mcp directly.' });
       return;
@@ -600,7 +600,7 @@ export function createServer(config: ServerConfig): {
       return;
     }
 
-    // No web session — require credentials.
+    // No web session - require credentials.
     if (!email || !password) {
       res.status(400).json({ error: 'email and password are required' });
       return;
@@ -655,7 +655,7 @@ export function createServer(config: ServerConfig): {
     res.render('oauth-consent', params);
   }
 
-  // Token endpoint — exchange auth code for access token
+  // Token endpoint - exchange auth code for access token
   app.post('/auth/token', (req, res) => {
     const { grant_type, code, code_verifier, client_id, redirect_uri } = req.body;
 
@@ -758,7 +758,7 @@ export function createServer(config: ServerConfig): {
     res.redirect(301, '/app/');
   });
 
-  // ─── Internal JSON API (/web/api) — consumed by the Preact SPA ──
+  // ─── Internal JSON API (/web/api) - consumed by the Preact SPA ──
   // In forgetful mode, resolve the caller's cloned (seeded) database from their
   // web session and run the request within that db context, so the web API
   // sees the same demo data as MCP sessions instead of the empty main db.
@@ -789,12 +789,12 @@ export function createServer(config: ServerConfig): {
     forgetful: config.forgetful,
   }));
 
-  // ─── Public REST API (/api/v1) — API-token auth, plan-gated ─────
+  // ─── Public REST API (/api/v1) - API-token auth, plan-gated ─────
   // Docs router first so /api/v1/docs + /api/v1/openapi.json bypass bearer auth.
   app.use('/api/v1', createDocsRouter());
   app.use('/api/v1', createPublicApiRouter({ db, planService, tokenService }));
 
-  // ─── Preact SPA (/app) — built by `npm run build:web` into dist-web ──
+  // ─── Preact SPA (/app) - built by `npm run build:web` into dist-web ──
   // Static assets first (Vite base '/app/' → absolute /app/assets/... URLs),
   // then a history-fallback that serves index.html for any non-asset /app route.
   // __dirname differs between dev (src/server) and the bundle (dist), so probe
@@ -1035,13 +1035,13 @@ export function createServer(config: ServerConfig): {
   app.post('/mcp', mcpAuth, async (req, res) => {
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
-    // Existing session — reuse its transport
+    // Existing session - reuse its transport
     if (sessionId && transports[sessionId]) {
       await transports[sessionId].handleRequest(req, res, req.body);
       return;
     }
 
-    // New session — only allowed for initialization requests
+    // New session - only allowed for initialization requests
     if (isInitializeRequest(req.body)) {
       // If client sent an old session ID (e.g. after server restart), ignore it
       // and create a fresh session.
@@ -1079,7 +1079,7 @@ export function createServer(config: ServerConfig): {
       return;
     }
 
-    // Invalid request — non-init request without valid session
+    // Invalid request - non-init request without valid session
     // Return 404 for stale session IDs so clients know to re-initialize
     const status = sessionId ? 404 : 400;
     res.status(status).json({
@@ -1275,7 +1275,7 @@ export function createServer(config: ServerConfig): {
               } else {
                 title = `Upcoming in ${daysUntil} day${daysUntil > 1 ? 's' : ''}: ${reminder.title}`;
               }
-              const body = contactName + (reminder.description ? ` — ${reminder.description}` : '');
+              const body = contactName + (reminder.description ? ` - ${reminder.description}` : '');
 
               try {
                 await pushService.sendPushNotification(

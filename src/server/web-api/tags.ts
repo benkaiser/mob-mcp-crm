@@ -30,13 +30,13 @@ export function createTagsRouter(db: Database.Database): Router {
 
   const param = (v: unknown): string => (Array.isArray(v) ? v[0] : String(v ?? ''));
 
-  // GET / — list all tags for the user.
+  // GET / - list all tags for the user.
   router.get('/', asyncHandler((req, res) => {
     const userId = getUserId(req);
     sendData(res, tags.list(userId));
   }));
 
-  // POST / — create (or return existing by name).
+  // POST / - create (or return existing by name).
   router.post('/', asyncHandler((req, res) => {
     const userId = getUserId(req);
     const input = parseBody(createTagSchema, req);

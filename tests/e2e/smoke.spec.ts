@@ -3,7 +3,7 @@ import { test as base } from '@playwright/test';
 import { registerAccount, loginAs, freshAccount } from './fixtures';
 
 /**
- * Smoke test — proves the harness works end to end:
+ * Smoke test - proves the harness works end to end:
  *   1. A fresh account can be registered through the real server flow.
  *   2. Registration auto-logs-in and lands on the SPA dashboard.
  *   3. The shell nav + sidebar user render.

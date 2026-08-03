@@ -18,7 +18,7 @@ test('skip-to-content link is the first tab stop and focuses main', async ({ pag
   await expect(page.getByTestId('skip-link')).toBeAttached();
   await expect(page.getByTestId('shell-search-input')).toBeVisible();
 
-  // Anchor focus at the top of the document, then Tab — the skip link is the
+  // Anchor focus at the top of the document, then Tab - the skip link is the
   // first focusable element so it receives focus.
   await page.evaluate(() => document.body.focus());
   await page.keyboard.press('Tab');

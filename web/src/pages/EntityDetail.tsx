@@ -65,7 +65,7 @@ const HIDDEN_FIELDS = new Set(['id', 'user_id', 'contact_id', 'deleted_at']);
 
 /** Render a scalar value as a string for display. */
 function display(value: unknown): string {
-  if (value == null) return '—';
+  if (value == null) return '-';
   if (typeof value === 'boolean') return value ? 'Yes' : 'No';
   if (typeof value === 'object') return JSON.stringify(value);
   return String(value);
@@ -75,7 +75,7 @@ type Tone = 'default' | 'primary' | 'success' | 'warning' | 'danger';
 
 /** Format a YYYY-MM-DD (or ISO) string as a friendly date with weekday. */
 function formatNiceDate(value: unknown): string {
-  if (typeof value !== 'string' || !value) return '—';
+  if (typeof value !== 'string' || !value) return '-';
   const d = new Date(value.length <= 10 ? value + 'T00:00:00' : value);
   if (Number.isNaN(d.getTime())) return value;
   return d.toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
@@ -83,7 +83,7 @@ function formatNiceDate(value: unknown): string {
 
 /** Format an ISO timestamp as a short local date + time. */
 function formatTimestamp(value: unknown): string {
-  if (typeof value !== 'string' || !value) return '—';
+  if (typeof value !== 'string' || !value) return '-';
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
   return d.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -142,7 +142,7 @@ function relativeTime(value: unknown): string | null {
 /** Format a currency amount (falls back to a plain number when currency is odd). */
 function formatMoney(amount: unknown, currency: unknown): string {
   const num = typeof amount === 'number' ? amount : Number(amount);
-  if (!Number.isFinite(num)) return '—';
+  if (!Number.isFinite(num)) return '-';
   const code = typeof currency === 'string' && currency ? currency : 'USD';
   try {
     return new Intl.NumberFormat(undefined, { style: 'currency', currency: code }).format(num);
@@ -154,7 +154,7 @@ function formatMoney(amount: unknown, currency: unknown): string {
 /** Format a duration in minutes as a friendly string ("1h 30m"). */
 function formatDuration(minutes: unknown): string {
   const num = typeof minutes === 'number' ? minutes : Number(minutes);
-  if (!Number.isFinite(num) || num <= 0) return '—';
+  if (!Number.isFinite(num) || num <= 0) return '-';
   const h = Math.floor(num / 60);
   const m = Math.round(num % 60);
   if (h && m) return `${h}h ${m}m`;
@@ -760,7 +760,7 @@ const RICH_BUILDERS: Record<string, (data: Record_) => RichView> = {
       highlight: dueDate && !done
         ? (() => { const c = dateCountdown(dueDate); return { label: c.label, sub: `${c.sub} · ${formatNiceDate(dueDate)}`, tone: c.tone }; })()
         : done
-          ? { label: 'Completed', sub: 'Nice work — this task is done', tone: 'success' }
+          ? { label: 'Completed', sub: 'Nice work - this task is done', tone: 'success' }
           : undefined,
       stats,
       sections: [

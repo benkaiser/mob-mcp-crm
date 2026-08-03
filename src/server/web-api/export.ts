@@ -15,13 +15,13 @@ export function createExportRouter(db: Database.Database): Router {
   const router = Router();
   const exporter = new DataExportService(db);
 
-  // GET /statistics — aggregate counts.
+  // GET /statistics - aggregate counts.
   router.get('/statistics', asyncHandler((req, res) => {
     const userId = getUserId(req);
     sendData(res, exporter.getStatistics(userId));
   }));
 
-  // GET / — full export dump.
+  // GET / - full export dump.
   router.get('/', asyncHandler((req, res) => {
     const userId = getUserId(req);
     sendData(res, exporter.exportAll(userId));

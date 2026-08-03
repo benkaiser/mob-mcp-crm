@@ -50,48 +50,48 @@ export function seedForgetfulData(db: Database.Database, userId: string): void {
   const lucky = generateId();
   const jack = generateId();
 
-  // 1. Bandit Heeler — Dad, archaeologist at UQ, birthday Nov 19, favorite
+  // 1. Bandit Heeler - Dad, archaeologist at UQ, birthday Nov 19, favorite
   insertContact.run(bandit, userId, 'Bandit', 'Heeler', null, 'month_day', null, 11, 19, 1, 'Archaeologist', 'University of Queensland', null, null, 0);
-  // 2. Chilli Heeler — Mum, airport security part-time, birthday Sep 6, favorite
+  // 2. Chilli Heeler - Mum, airport security part-time, birthday Sep 6, favorite
   insertContact.run(chilli, userId, 'Chilli', 'Heeler', null, 'month_day', null, 9, 6, 1, 'Airport Security Officer', 'Brisbane Airport', 'Part-time', null, 0);
-  // 3. Bingo Heeler — Little sister, birthday Jul 24, favorite
+  // 3. Bingo Heeler - Little sister, birthday Jul 24, favorite
   insertContact.run(bingo, userId, 'Bingo', 'Heeler', null, 'month_day', null, 7, 24, 1, null, null, null, null, 0);
-  // 4. Stripe Heeler — Uncle (Bandit's brother)
+  // 4. Stripe Heeler - Uncle (Bandit's brother)
   insertContact.run(stripe, userId, 'Stripe', 'Heeler', null, null, null, null, null, 0, null, null, null, null, 0);
-  // 5. Trixie Heeler — Aunt (Stripe's wife)
+  // 5. Trixie Heeler - Aunt (Stripe's wife)
   insertContact.run(trixie, userId, 'Trixie', 'Heeler', null, null, null, null, null, 0, null, null, null, null, 0);
-  // 6. Muffin Heeler — Cousin, toddler
+  // 6. Muffin Heeler - Cousin, toddler
   insertContact.run(muffin, userId, 'Muffin', 'Heeler', null, null, null, null, null, 0, null, null, null, null, 0);
-  // 7. Socks Heeler — Cousin, acts like a puppy
+  // 7. Socks Heeler - Cousin, acts like a puppy
   insertContact.run(socks, userId, 'Socks', 'Heeler', null, null, null, null, null, 0, null, null, null, null, 0);
-  // 8. Rad Heeler — Uncle, extreme sports, lives overseas
+  // 8. Rad Heeler - Uncle, extreme sports, lives overseas
   insertContact.run(rad, userId, 'Rad', 'Heeler', null, null, null, null, null, 0, null, null, 'Extreme sports enthusiast, lives overseas', null, 0);
-  // 9. Chris Heeler — Grandmother, nickname "Nana"
+  // 9. Chris Heeler - Grandmother, nickname "Nana"
   insertContact.run(chris, userId, 'Chris', 'Heeler', 'Nana', null, null, null, null, 0, null, null, null, null, 0);
-  // 10. Bob Heeler — Grandfather
+  // 10. Bob Heeler - Grandfather
   insertContact.run(bob, userId, 'Bob', 'Heeler', null, null, null, null, null, 0, null, null, null, null, 0);
-  // 11. Frisky — Aunt (Chilli's sister), engaged to Rad, nickname "Aunt Frisky"
+  // 11. Frisky - Aunt (Chilli's sister), engaged to Rad, nickname "Aunt Frisky"
   insertContact.run(frisky, userId, 'Frisky', null, 'Aunt Frisky', null, null, null, null, 0, null, null, null, null, 0);
-  // 12. Mackenzie — School friend, from New Zealand
+  // 12. Mackenzie - School friend, from New Zealand
   insertContact.run(mackenzie, userId, 'Mackenzie', null, null, null, null, null, null, 0, null, null, null, 'School friend from New Zealand', 0);
-  // 13. Rusty — School friend, lives on a farm
+  // 13. Rusty - School friend, lives on a farm
   insertContact.run(rusty, userId, 'Rusty', null, null, null, null, null, null, 0, null, null, null, 'School friend who lives on a farm', 0);
-  // 14. Judo — Neighbour & friend, competitive
+  // 14. Judo - Neighbour & friend, competitive
   insertContact.run(judo, userId, 'Judo', null, null, null, null, null, null, 0, null, null, null, 'Neighbour, quite competitive', 0);
-  // 15. Chloe — School friend, dalmatian, gentle
+  // 15. Chloe - School friend, dalmatian, gentle
   insertContact.run(chloe, userId, 'Chloe', null, null, null, null, null, null, 0, null, null, null, 'School friend, very gentle', 0);
-  // 16. Honey — School friend, shy
+  // 16. Honey - School friend, shy
   insertContact.run(honey, userId, 'Honey', null, null, null, null, null, null, 0, null, null, null, 'School friend, quite shy', 0);
-  // 17. Snickers — School friend
+  // 17. Snickers - School friend
   insertContact.run(snickers, userId, 'Snickers', null, null, null, null, null, null, 0, null, null, null, 'School friend', 0);
-  // 18. Calypso — Teacher at Glebe Hill School
+  // 18. Calypso - Teacher at Glebe Hill School
   insertContact.run(calypso, userId, 'Calypso', null, null, null, null, null, null, 0, 'Teacher', 'Glebe Hill School', null, null, 0);
-  // 19. Lucky — Next-door neighbour, labrador
+  // 19. Lucky - Next-door neighbour, labrador
   insertContact.run(lucky, userId, 'Lucky', null, null, null, null, null, null, 0, null, null, null, 'Next-door neighbour', 0);
-  // 20. Jack — School friend, had to move away
+  // 20. Jack - School friend, had to move away
   insertContact.run(jack, userId, 'Jack', null, null, null, null, null, null, 0, null, null, null, 'School friend who had to move away', 0);
 
-  // 21. Bluey Heeler — Self-contact (the user themselves)
+  // 21. Bluey Heeler - Self-contact (the user themselves)
   const bluey = generateId();
   insertContact.run(bluey, userId, 'Bluey', 'Heeler', null, null, null, null, null, 0, null, null, null, null, 1);
 
@@ -238,26 +238,26 @@ export function seedForgetfulData(db: Database.Database, userId: string): void {
   const DAY_MS = 86400000;
   const now = Date.now();
 
-  // 1. "Played Keepy Uppy" — 3 days ago, Bandit + Chilli + Bingo
+  // 1. "Played Keepy Uppy" - 3 days ago, Bandit + Chilli + Bingo
   const act1 = generateId();
   insertActivity.run(act1, userId, 'in_person', 'Played Keepy Uppy', new Date(now - 3 * DAY_MS).toISOString(), 'Home');
   insertParticipant.run(act1, bandit);
   insertParticipant.run(act1, chilli);
   insertParticipant.run(act1, bingo);
 
-  // 2. "Trip to the Creek" — 7 days ago, Bingo + Mackenzie + Rusty
+  // 2. "Trip to the Creek" - 7 days ago, Bingo + Mackenzie + Rusty
   const act2 = generateId();
   insertActivity.run(act2, userId, 'in_person', 'Trip to the Creek', new Date(now - 7 * DAY_MS).toISOString(), 'The Creek');
   insertParticipant.run(act2, bingo);
   insertParticipant.run(act2, mackenzie);
   insertParticipant.run(act2, rusty);
 
-  // 3. "Farmers Market with Dad" — 14 days ago, Bandit
+  // 3. "Farmers Market with Dad" - 14 days ago, Bandit
   const act3 = generateId();
   insertActivity.run(act3, userId, 'in_person', 'Farmers Market with Dad', new Date(now - 14 * DAY_MS).toISOString(), 'Brisbane Farmers Market');
   insertParticipant.run(act3, bandit);
 
-  // 4. "Sleepover at Muffin's" — 21 days ago, Bingo + Muffin + Socks + Stripe + Trixie
+  // 4. "Sleepover at Muffin's" - 21 days ago, Bingo + Muffin + Socks + Stripe + Trixie
   const act4 = generateId();
   insertActivity.run(act4, userId, 'in_person', "Sleepover at Muffin's", new Date(now - 21 * DAY_MS).toISOString(), "Stripe's house");
   insertParticipant.run(act4, bingo);
@@ -293,7 +293,7 @@ export function seedForgetfulData(db: Database.Database, userId: string): void {
   insertReminder.run(generateId(), chilli, "Chilli's birthday", `${thisYear}-09-06`, 'yearly', 1);
   insertReminder.run(generateId(), bingo, "Bingo's birthday", `${thisYear}-07-24`, 'yearly', 1);
 
-  // Custom reminder: Mackenzie playdate — 1 week from now
+  // Custom reminder: Mackenzie playdate - 1 week from now
   const oneWeekFromNow = new Date(now + 7 * DAY_MS).toISOString().slice(0, 10);
   insertReminder.run(generateId(), mackenzie, 'Plan next playdate', oneWeekFromNow, 'one_time', 0);
 

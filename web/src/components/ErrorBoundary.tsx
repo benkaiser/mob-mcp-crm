@@ -12,7 +12,7 @@ interface State {
 
 /**
  * Catches render errors in the routed content so a single failing page shows a
- * recoverable message instead of throwing mid-reconciliation — which would
+ * recoverable message instead of throwing mid-reconciliation - which would
  * otherwise leave the previous route's DOM mounted and stack pages on top of
  * each other. Resets automatically when `resetKey` (the location) changes.
  */

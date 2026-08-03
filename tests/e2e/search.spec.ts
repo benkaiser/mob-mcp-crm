@@ -49,7 +49,7 @@ test('search returns grouped matches across entity types', async ({ page, seeder
   // Results load (debounced); wait for the rows.
   await expect(page.getByTestId('search-result-row').first()).toBeVisible();
 
-  // Grouped by entity type — contacts, notes and activities groups all present.
+  // Grouped by entity type - contacts, notes and activities groups all present.
   await expect(page.locator('[data-testid="search-result-group"][data-entity-type="contacts"]')).toBeVisible();
   await expect(page.locator('[data-testid="search-result-group"][data-entity-type="notes"]')).toBeVisible();
   await expect(page.locator('[data-testid="search-result-group"][data-entity-type="activities"]')).toBeVisible();

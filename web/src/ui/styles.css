@@ -11,7 +11,7 @@
   --color-primary-soft: #dbeafe;      /* tinted fills: badges, avatars, active sub-nav */
   --color-primary-ring: rgba(37, 99, 235, 0.18);
   --color-primary-shadow: rgba(37, 99, 235, 0.28);
-  --color-accent: #06b6d4;            /* cyan — gradient end, highlights */
+  --color-accent: #06b6d4;            /* cyan - gradient end, highlights */
   --brand-gradient: linear-gradient(135deg, #2563eb, #06b6d4);
 
   --color-bg: #f5f9ff;                /* app canvas */
@@ -111,7 +111,7 @@
 
 /* Tint native form controls (checkboxes, radios, date pickers, range,
    progress) with the brand colour so they don't render as default-grey
-   chrome against the themed surfaces — most visible in dark mode. */
+   chrome against the themed surfaces - most visible in dark mode. */
 input, textarea, select, button { accent-color: var(--color-primary); }
 
 html, body {
@@ -231,7 +231,7 @@ h1, h2, h3 { margin: 0 0 var(--space-3); line-height: 1.25; }
 .sidebar__link--active { background: var(--color-primary); color: var(--color-on-primary); }
 .sidebar__link--active:hover { background: var(--color-primary-hover); }
 
-/* Sub-items revealed under the active section — progressive detail. */
+/* Sub-items revealed under the active section - progressive detail. */
 .sidebar__sublist {
   display: flex;
   flex-direction: column;
@@ -680,7 +680,7 @@ input[type="file"]::file-selector-button:hover { background: var(--color-hover);
 .profile-hero__facts { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
 .profile-hero__facts .badge { background: rgba(255, 255, 255, 0.2); color: #fff; border-color: transparent; }
 
-/* Two-column layout — collapses to one column on narrow screens. */
+/* Two-column layout - collapses to one column on narrow screens. */
 .profile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); align-items: start; }
 .profile-col { min-width: 0; }
 @media (max-width: 860px) { .profile-grid { grid-template-columns: 1fr; } }

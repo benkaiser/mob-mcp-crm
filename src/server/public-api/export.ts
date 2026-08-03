@@ -9,8 +9,8 @@ import { getApiUserId } from './middleware.js';
 
 /**
  * Public REST API router for full data export (mounted at /api/v1/export).
- * GET /        — full JSON export of the user's CRM data.
- * GET /stats   — aggregate statistics.
+ * GET /        - full JSON export of the user's CRM data.
+ * GET /stats   - aggregate statistics.
  */
 export function createExportRouter(db: Database.Database): Router {
   const router = Router();

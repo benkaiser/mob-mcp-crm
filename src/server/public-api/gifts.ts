@@ -36,7 +36,7 @@ export function createGiftsRouter(db: Database.Database): Router {
   const router = Router();
   const gifts = new GiftService(db);
 
-  // GET /stats — cross-contact tracker with summary aggregation (BEFORE /:id).
+  // GET /stats - cross-contact tracker with summary aggregation (BEFORE /:id).
   router.get('/stats', asyncHandler((req, res) => {
     const userId = getApiUserId(req);
     const p = pageParams(req);

@@ -13,7 +13,7 @@ import { asyncHandler, sendData, getUserId } from './helpers.js';
  * Internal API router for the SPA dashboard, mounted at /web/api/dashboard.
  *
  * GET / composes a single payload from existing services so the SPA can render
- * the dashboard in one round-trip. No new service methods are introduced — every
+ * the dashboard in one round-trip. No new service methods are introduced - every
  * field is derived from existing list/summary calls.
  */
 export function createDashboardRouter(db: Database.Database): Router {
@@ -26,7 +26,7 @@ export function createDashboardRouter(db: Database.Database): Router {
   const exporter = new DataExportService(db);
   const audit = new AuditService(db);
 
-  // GET / — composed dashboard payload.
+  // GET / - composed dashboard payload.
   router.get('/', asyncHandler((req, res) => {
     const userId = getUserId(req);
 

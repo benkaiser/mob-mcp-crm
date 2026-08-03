@@ -1,5 +1,5 @@
 // Hand-mirrored types for the Mob internal JSON API (/web/api/*).
-// NOTE: there is no shared module across the build boundary — these mirror
+// NOTE: there is no shared module across the build boundary - these mirror
 // server shapes (src/server/web-api/*, src/services/contacts.ts) by hand.
 
 // ─── Response envelopes ─────────────────────────────────────────

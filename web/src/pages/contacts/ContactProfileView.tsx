@@ -129,7 +129,7 @@ export function ContactProfileView({ id }: { id: string }) {
 
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
 
-      {/* Header — gradient banner with identity + at-a-glance facts. */}
+      {/* Header - gradient banner with identity + at-a-glance facts. */}
       <Card class="profile-hero">
         <Avatar name={name} url={p.avatar_url} size="lg" />
         <div class="profile-hero__body">
@@ -213,7 +213,7 @@ export function ContactProfileView({ id }: { id: string }) {
             ))}
           </Section>
 
-          {/* Tags — each tag links to its tag page (all contacts with that tag). */}
+          {/* Tags - each tag links to its tag page (all contacts with that tag). */}
           <Section title="Tags">
             <div class="stack">
               {p.tags.length === 0 ? <Empty /> : (
@@ -274,7 +274,7 @@ export function ContactProfileView({ id }: { id: string }) {
               <div key={r.id} class="sub-row">
                 <span>
                   <Link href={`/contacts/${r.related_contact_id}`}>{r.related_contact_name ?? 'Contact'}</Link>
-                  <span class="muted"> — {r.relationship_type}</span>
+                  <span class="muted"> - {r.relationship_type}</span>
                   {r.notes && <span class="muted"> · {r.notes}</span>}
                 </span>
                 <RowActions

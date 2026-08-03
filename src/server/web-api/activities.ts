@@ -88,7 +88,7 @@ export function createActivitiesRouter(db: Database.Database): Router {
 
   // ─── Activities ──────────────────────────────────────────────
 
-  // GET / — list with filters + pagination.
+  // GET / - list with filters + pagination.
   router.get('/', asyncHandler((req, res) => {
     const userId = getUserId(req);
     const p = pageParams(req);
@@ -126,7 +126,7 @@ export function createActivitiesRouter(db: Database.Database): Router {
     sendData(res, updated);
   }));
 
-  // DELETE /:id — soft delete.
+  // DELETE /:id - soft delete.
   router.delete('/:id', asyncHandler((req, res) => {
     const userId = getUserId(req);
     const ok = activities.softDelete(userId, param(req.params.id));
