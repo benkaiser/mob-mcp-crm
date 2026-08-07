@@ -292,6 +292,17 @@ export function createServer(config: ServerConfig): {
     const isFormPost = req.headers['content-type']?.includes('application/x-www-form-urlencoded');
     if (isFormPost) {
       const { name, email, password, timezone } = req.body;
+
+      // Bare-minimum bot protection (honeypots):
+      // 1. `hp_js` must equal the token that page JS sets (bots that don't run JS fail).
+      // 2. `website` is a decoy field hidden from humans; it must stay empty.
+      const hpJs = typeof req.body.hp_js === 'string' ? req.body.hp_js.trim() : '';
+      const decoy = typeof req.body.website === 'string' ? req.body.website.trim() : '';
+      if (hpJs !== 'mob-human' || decoy !== '') {
+        res.status(400).render('register', { registerUrl: req.originalUrl, loginUrl: getLoginUrlFromRegister(req.originalUrl), error: 'Something went wrong. Please try again.' });
+        return;
+      }
+
       const client_id = req.query.client_id as string;
       const code_challenge = req.query.code_challenge as string;
       const code_challenge_method = req.query.code_challenge_method as string;

@@ -10,11 +10,19 @@ const content = `
     <label for="password">Password</label>
     <input type="password" id="password" name="password" required minlength="6">
     <input type="hidden" id="timezone" name="timezone" value="">
+    <!-- Bot honeypot: JS sets this to the expected token; bots that don't run JS leave it empty. -->
+    <input type="hidden" id="hp_js" name="hp_js" value="">
+    <!-- Bot honeypot: decoy field hidden from humans; real users leave it empty, bots tend to fill it. -->
+    <div class="hp-field" aria-hidden="true">
+      <label for="hp_website">Website</label>
+      <input type="text" id="hp_website" name="website" tabindex="-1" autocomplete="off">
+    </div>
     <button type="submit" style="width:100%;">Create Account</button>
   </form>
   <p class="alt-link">Already have an account? <a href="${loginUrl}">Sign in</a></p>
   <p class="alt-link" style="font-size:0.9rem;">Need help? Email <a href="mailto:mobsupport@benkaiser.dev">mobsupport@benkaiser.dev</a>.</p>
+  <style>.hp-field{position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden;}</style>
 `;
-const scripts = '<script>try { document.getElementById("timezone").value = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch(e) {}</script>';
+const scripts = '<script>try { document.getElementById("timezone").value = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch(e) {} try { document.getElementById("hp_js").value = "mob-human"; } catch(e) {}</script>';
 %>
 <%- include('_auth-layout', { title: 'Create Account - Mob CRM', subtitle: 'Create your account', content, scripts }) %>

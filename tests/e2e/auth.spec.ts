@@ -121,3 +121,45 @@ base('legacy /web/dashboard and /web/import 301-redirect into the SPA', async ({
   expect(importPath.status()).toBe(301);
   expect(importPath.headers()['location']).toBe('/app/import');
 });
+
+// 7. Bot honeypots: raw form POSTs (no page JS) are rejected unless the JS
+//    token is present and the decoy field is empty. The real browser flow
+//    (tested in #1) populates the token via JS, so genuine signups still work.
+base('register honeypot rejects a bot that omits the JS token', async ({ request }) => {
+  const account = freshAccount('bot-nojs');
+  const res = await request.post('/auth/register?from=web', {
+    form: { name: account.name, email: account.email, password: account.password, timezone: 'UTC' },
+    maxRedirects: 0,
+  });
+  // Missing hp_js token → rejected, no redirect into the SPA.
+  expect(res.status()).toBe(400);
+  expect(res.headers()['location']).toBeUndefined();
+});
+
+base('register honeypot rejects a bot that fills the decoy field', async ({ request }) => {
+  const account = freshAccount('bot-decoy');
+  const res = await request.post('/auth/register?from=web', {
+    form: {
+      name: account.name,
+      email: account.email,
+      password: account.password,
+      timezone: 'UTC',
+      hp_js: 'mob-human',
+      website: 'https://spam.example',
+    },
+    maxRedirects: 0,
+  });
+  expect(res.status()).toBe(400);
+  expect(res.headers()['location']).toBeUndefined();
+});
+
+base('register honeypot allows a submission with the JS token and empty decoy', async ({ request }) => {
+  const account = freshAccount('honeypot-ok');
+  const res = await request.post('/auth/register?from=web', {
+    form: { name: account.name, email: account.email, password: account.password, timezone: 'UTC', hp_js: 'mob-human', website: '' },
+    maxRedirects: 0,
+  });
+  // Valid signup → auto-login redirect into the SPA (not a 400).
+  expect(res.status()).toBe(302);
+  expect(res.headers()['location']).toBe('/app/');
+});
