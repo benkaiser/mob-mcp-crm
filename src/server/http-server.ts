@@ -13,7 +13,8 @@ import { createMcpServer } from './mcp-server.js';
 import { createDatabase } from '../db/connection.js';
 import { runMigrations } from '../db/migrator.js';
 import { AccountService } from '../auth/accounts.js';
-import { OAuthService } from '../auth/oauth.js';
+import { OAuthService, ClientRegistrationError } from '../auth/oauth.js';
+import type { ClientRegistrationRequest } from '../auth/oauth.js';
 import { McpTokenVerifier } from '../auth/mcp-token-verifier.js';
 import { generateId, formatContactName } from '../utils.js';
 import { ReminderService } from '../services/reminders.js';
@@ -278,11 +279,49 @@ export function createServer(config: ServerConfig): {
       issuer: serverUrl,
       authorization_endpoint: `${serverUrl}/auth/authorize`,
       token_endpoint: `${serverUrl}/auth/token`,
+      registration_endpoint: `${serverUrl}/auth/register-client`,
       response_types_supported: ['code'],
+      grant_types_supported: ['authorization_code'],
       code_challenge_methods_supported: ['S256'],
+      token_endpoint_auth_methods_supported: ['none', 'client_secret_post', 'client_secret_basic'],
     },
     resourceServerUrl: new URL(`${serverUrl}/mcp`),
   }));
+
+  // ─── OAuth 2.0 Dynamic Client Registration (RFC 7591) ────
+  // MCP clients (Claude, Codex, ...) can't be pre-provisioned on a self-hosted
+  // server, so they register themselves here before starting the PKCE flow.
+  app.post('/auth/register-client', (req, res) => {
+    try {
+      const registration = oauthService.registerClient((req.body ?? {}) as ClientRegistrationRequest);
+      res.status(201).json(registration);
+    } catch (err) {
+      if (err instanceof ClientRegistrationError) {
+        res.status(400).json({ error: err.code, error_description: err.message });
+        return;
+      }
+      console.error('Client registration error:', err);
+      res.status(500).json({ error: 'server_error', error_description: 'Client registration failed' });
+    }
+  });
+
+  /**
+   * Validate the shared OAuth request params and, for dynamically registered
+   * clients, that the redirect_uri exactly matches one they registered.
+   */
+  function validateOAuthClientRequest(params: {
+    client_id?: string;
+    code_challenge?: string;
+    code_challenge_method?: string;
+    redirect_uri?: string;
+  }): string | null {
+    const error = validateOAuthRequest(params);
+    if (error) return error;
+    if (!oauthService.isRedirectUriAllowed(params.client_id!, params.redirect_uri!)) {
+      return 'redirect_uri is not registered for this client';
+    }
+    return null;
+  }
 
   // ─── Account Endpoints ────────────────────────────────────
 
@@ -311,7 +350,7 @@ export function createServer(config: ServerConfig): {
 
         const isOAuthRegistration = Boolean(client_id || redirect_uri || code_challenge || code_challenge_method);
         const oauthError = isOAuthRegistration
-          ? validateOAuthRequest({ client_id, code_challenge, code_challenge_method, redirect_uri })
+          ? validateOAuthClientRequest({ client_id, code_challenge, code_challenge_method, redirect_uri })
           : null;
         if (oauthError) {
           res.status(400).render('register', { registerUrl: req.originalUrl, loginUrl: getLoginUrlFromRegister(req.originalUrl), error: oauthError });
@@ -501,7 +540,7 @@ export function createServer(config: ServerConfig): {
       return;
     }
 
-    const oauthError = validateOAuthRequest({ client_id, code_challenge, code_challenge_method, redirect_uri });
+    const oauthError = validateOAuthClientRequest({ client_id, code_challenge, code_challenge_method, redirect_uri });
     if (oauthError) {
       res.status(400).render('login', {
         authorizeUrl: req.originalUrl,
@@ -556,7 +595,7 @@ export function createServer(config: ServerConfig): {
       return;
     }
 
-    const oauthError = validateOAuthRequest({ client_id, code_challenge, code_challenge_method, redirect_uri });
+    const oauthError = validateOAuthClientRequest({ client_id, code_challenge, code_challenge_method, redirect_uri });
     if (oauthError) {
       if (isFormPost) {
         res.status(400).render('login', {
@@ -667,12 +706,16 @@ export function createServer(config: ServerConfig): {
     redirectUri: string;
     state?: string;
   }): void {
-    res.render('oauth-consent', params);
+    const clientName = oauthService.getClient(params.clientId)?.clientName ?? null;
+    res.render('oauth-consent', { ...params, clientName });
   }
 
   // Token endpoint - exchange auth code for access token
   app.post('/auth/token', (req, res) => {
-    const { grant_type, code, code_verifier, client_id, redirect_uri } = req.body;
+    const { grant_type, code, code_verifier, redirect_uri } = req.body;
+    const basicAuth = parseBasicAuth(req.headers.authorization);
+    const client_id = req.body.client_id || basicAuth?.clientId;
+    const client_secret = req.body.client_secret || basicAuth?.clientSecret;
 
     if (grant_type !== 'authorization_code') {
       res.status(400).json({ error: 'unsupported_grant_type' });
@@ -682,6 +725,16 @@ export function createServer(config: ServerConfig): {
     if (!code || !client_id) {
       res.status(400).json({ error: 'code and client_id are required' });
       return;
+    }
+
+    // Confidential clients (those issued a secret at registration) must
+    // authenticate. Public clients rely on PKCE alone.
+    const registeredClient = oauthService.getClient(client_id);
+    if (registeredClient?.hasSecret) {
+      if (!client_secret || !oauthService.verifyClientSecret(client_id, client_secret)) {
+        res.status(401).json({ error: 'invalid_client', error_description: 'Client authentication failed' });
+        return;
+      }
     }
 
     const token = oauthService.exchangeCode({
@@ -1367,6 +1420,18 @@ function getLoginUrlFromRegister(registerUrl: string): string {
 function parseCookie(cookieHeader: string, name: string): string | null {
   const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`));
   return match ? decodeURIComponent(match[1]) : null;
+}
+
+/** Parse an HTTP Basic `Authorization` header into OAuth client credentials. */
+function parseBasicAuth(header: string | undefined): { clientId: string; clientSecret: string } | null {
+  if (!header?.toLowerCase().startsWith('basic ')) return null;
+  const decoded = Buffer.from(header.slice(6).trim(), 'base64').toString('utf-8');
+  const separator = decoded.indexOf(':');
+  if (separator < 0) return null;
+  return {
+    clientId: decodeURIComponent(decoded.slice(0, separator)),
+    clientSecret: decodeURIComponent(decoded.slice(separator + 1)),
+  };
 }
 
 function param(value: unknown): string {

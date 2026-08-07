@@ -553,11 +553,24 @@ Users must create an account before accessing the CRM:
 Authentication uses the **MCP OAuth specification** with the **PKCE (Proof Key for Code Exchange)** flow:
 
 1. MCP client initiates OAuth authorization request with PKCE `code_verifier` and `code_challenge`.
-2. Server accepts **any `client_id`** — there is no client registration. This makes it easy for any MCP client to connect.
+2. Server accepts **any `client_id`**, including ones it never issued, so simple clients can connect without registering.
 3. Server logs every authorization for audit purposes (see 15.3).
 4. On first connection, user is prompted to log in or create an account.
 5. Server issues access token tied to the user's account.
 6. All subsequent MCP tool calls are authenticated via the access token and scoped to that user's data.
+
+#### Dynamic Client Registration (RFC 7591)
+
+Clients that don't have a pre-agreed `client_id` (Claude, Codex, ...) can register themselves. The
+`registration_endpoint` is advertised at `/.well-known/oauth-authorization-server`:
+
+1. Client `POST`s its metadata (`redirect_uris`, optional `client_name`, `grant_types`,
+   `response_types`, `token_endpoint_auth_method`) to `/auth/register-client`.
+2. Server validates the metadata, stores the registration, and returns a generated `client_id`
+   (plus a `client_secret` when the client asked for `client_secret_post`/`client_secret_basic`).
+3. Redirect URIs must be absolute; plain `http` is only allowed for loopback addresses.
+4. Subsequent authorization requests from a registered `client_id` must use one of its registered
+   `redirect_uris`, and confidential clients must authenticate at the token endpoint.
 
 #### Authorization Log
 
