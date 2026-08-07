@@ -291,7 +291,27 @@ export function createServer(config: ServerConfig): {
   // ─── OAuth 2.0 Dynamic Client Registration (RFC 7591) ────
   // MCP clients (Claude, Codex, ...) can't be pre-provisioned on a self-hosted
   // server, so they register themselves here before starting the PKCE flow.
+  // The endpoint is unauthenticated by design, so it's rate limited per IP to
+  // stop anyone flooding the database with junk registrations.
+  const registrationAttempts = new Map<string, { count: number; resetAt: number }>();
+  const REGISTRATION_WINDOW_MS = 60 * 60 * 1000;
+  const REGISTRATION_MAX_PER_WINDOW = 20;
+
   app.post('/auth/register-client', (req, res) => {
+    const now = Date.now();
+    for (const [ip, bucket] of registrationAttempts) {
+      if (now >= bucket.resetAt) registrationAttempts.delete(ip);
+    }
+    const key = req.ip ?? 'unknown';
+    const bucket = registrationAttempts.get(key) ?? { count: 0, resetAt: now + REGISTRATION_WINDOW_MS };
+    bucket.count += 1;
+    registrationAttempts.set(key, bucket);
+    if (bucket.count > REGISTRATION_MAX_PER_WINDOW) {
+      res.setHeader('Retry-After', String(Math.max(1, Math.ceil((bucket.resetAt - now) / 1000))));
+      res.status(429).json({ error: 'too_many_requests', error_description: 'Too many client registrations. Try again later.' });
+      return;
+    }
+
     try {
       const registration = oauthService.registerClient((req.body ?? {}) as ClientRegistrationRequest);
       res.status(201).json(registration);

@@ -301,6 +301,16 @@ describe('OAuth dynamic client registration (RFC 7591)', () => {
     expect(JSON.parse(res.body).error).toBe('invalid_grant');
   });
 
+  it('rate limits repeated client registrations from the same IP', async () => {
+    server = createServer(persistentConfig);
+    const body = { redirect_uris: ['https://example.com/callback'] };
+    let lastStatus = 0;
+    for (let i = 0; i < 21; i++) {
+      lastStatus = (await inject(server.app, 'POST', '/auth/register-client', { body })).status;
+    }
+    expect(lastStatus).toBe(429);
+  });
+
   it('still allows unregistered client_ids (backwards compatibility)', async () => {    server = createServer(persistentConfig);
     await makeUser(server);
 
