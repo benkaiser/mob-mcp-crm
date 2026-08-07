@@ -88,8 +88,11 @@ function asOptionalString(value: unknown, field: string): string | null {
 
 /**
  * Redirect URIs must be absolute. Loopback HTTP and custom app schemes are
- * allowed (native MCP clients rely on both); other plain-HTTP hosts are not.
+ * allowed (native MCP clients rely on both); other plain-HTTP hosts and
+ * script-capable schemes are not.
  */
+const DISALLOWED_REDIRECT_SCHEMES = ['javascript:', 'data:', 'vbscript:', 'file:', 'blob:'];
+
 function isValidRedirectUri(value: string): boolean {
   let url: URL;
   try {
@@ -98,10 +101,12 @@ function isValidRedirectUri(value: string): boolean {
     return false;
   }
   if (url.hash) return false;
+  if (DISALLOWED_REDIRECT_SCHEMES.includes(url.protocol.toLowerCase())) return false;
   if (url.protocol === 'http:') {
     return url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]' || url.hostname === '::1';
   }
-  return Boolean(url.protocol && url.protocol !== ':');
+  // https: plus custom app schemes such as `myapp://callback`.
+  return /^[a-z][a-z0-9+.-]*:$/.test(url.protocol.toLowerCase());
 }
 
 // ─── PKCE Helpers ───────────────────────────────────────────────
@@ -169,6 +174,7 @@ export class OAuthService {
       throw new ClientRegistrationError('invalid_client_metadata', `Unsupported token_endpoint_auth_method: ${authMethod}`);
     }
 
+    const clientName = asOptionalString(metadata.client_name, 'client_name');
     const clientId = `mcp_${randomBytes(16).toString('hex')}`;
     const clientSecret = authMethod === 'none' ? null : randomBytes(32).toString('hex');
     const createdAt = Date.now();
@@ -182,7 +188,7 @@ export class OAuthService {
     `).run(
       clientId,
       clientSecret ? hashSecret(clientSecret) : null,
-      asOptionalString(metadata.client_name, 'client_name'),
+      clientName,
       JSON.stringify(redirectUris),
       JSON.stringify(grantTypes),
       JSON.stringify(responseTypes),
@@ -203,7 +209,6 @@ export class OAuthService {
       response_types: responseTypes,
       token_endpoint_auth_method: authMethod,
     };
-    const clientName = asOptionalString(metadata.client_name, 'client_name');
     if (clientName) response.client_name = clientName;
     if (clientSecret) {
       response.client_secret = clientSecret;

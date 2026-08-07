@@ -113,6 +113,25 @@ describe('OAuth dynamic client registration (RFC 7591)', () => {
     expect(JSON.parse(res.body).error).toBe('invalid_redirect_uri');
   });
 
+  it('rejects registration with a script-capable redirect_uri scheme', async () => {
+    server = createServer(persistentConfig);
+    for (const uri of ['javascript:alert(1)', 'data:text/html,<script>alert(1)</script>', 'file:///etc/passwd']) {
+      const res = await inject(server.app, 'POST', '/auth/register-client', {
+        body: { redirect_uris: [uri] },
+      });
+      expect(res.status, uri).toBe(400);
+      expect(JSON.parse(res.body).error).toBe('invalid_redirect_uri');
+    }
+  });
+
+  it('allows custom app scheme redirect URIs', async () => {
+    server = createServer(persistentConfig);
+    const res = await inject(server.app, 'POST', '/auth/register-client', {
+      body: { redirect_uris: ['mob-client://oauth/callback'] },
+    });
+    expect(res.status).toBe(201);
+  });
+
   it('rejects registration with an unsupported grant type', async () => {
     server = createServer(persistentConfig);
     const res = await inject(server.app, 'POST', '/auth/register-client', {
@@ -271,8 +290,18 @@ describe('OAuth dynamic client registration (RFC 7591)', () => {
     expect(JSON.parse(token.body).access_token).toBeDefined();
   });
 
-  it('still allows unregistered client_ids (backwards compatibility)', async () => {
+  it('does not crash on a malformed Basic auth header at the token endpoint', async () => {
     server = createServer(persistentConfig);
+    const malformed = Buffer.from('bad%client:secret%zz').toString('base64');
+    const res = await inject(server.app, 'POST', '/auth/token', {
+      headers: { Authorization: `Basic ${malformed}` },
+      body: { grant_type: 'authorization_code', code: 'nope', code_verifier: verifier },
+    });
+    expect(res.status).toBe(400);
+    expect(JSON.parse(res.body).error).toBe('invalid_grant');
+  });
+
+  it('still allows unregistered client_ids (backwards compatibility)', async () => {    server = createServer(persistentConfig);
     await makeUser(server);
 
     const authorize = await inject(server.app, 'POST', '/auth/authorize', {

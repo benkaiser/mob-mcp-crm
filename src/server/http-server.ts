@@ -1428,10 +1428,19 @@ function parseBasicAuth(header: string | undefined): { clientId: string; clientS
   const decoded = Buffer.from(header.slice(6).trim(), 'base64').toString('utf-8');
   const separator = decoded.indexOf(':');
   if (separator < 0) return null;
-  return {
-    clientId: decodeURIComponent(decoded.slice(0, separator)),
-    clientSecret: decodeURIComponent(decoded.slice(separator + 1)),
-  };
+  // RFC 6749 §2.3.1 requires the credentials to be form-urlencoded before
+  // base64 encoding, but tolerate clients that send them verbatim.
+  try {
+    return {
+      clientId: decodeURIComponent(decoded.slice(0, separator)),
+      clientSecret: decodeURIComponent(decoded.slice(separator + 1)),
+    };
+  } catch {
+    return {
+      clientId: decoded.slice(0, separator),
+      clientSecret: decoded.slice(separator + 1),
+    };
+  }
 }
 
 function param(value: unknown): string {
