@@ -441,8 +441,12 @@ export function createServer(config: ServerConfig): {
     }
     try {
       const userId = await accountService.resetPassword(token, password);
-      // Security: revoke all existing sessions after a password reset.
+      // Security: a password reset means "I may have been compromised" - boot
+      // every web session AND revoke every MCP/API credential (OAuth access
+      // tokens and long-lived API tokens), not just the web session cookie.
       sessionService.destroyAllForUser(userId);
+      oauthService.revokeAllForUser(userId);
+      tokenService.revokeAllForUser(userId);
       res.render('reset', { token: '', error: undefined, success: 'Your password has been reset. You can now sign in.' });
     } catch (err: any) {
       const message = err?.code === 'weak_password' || err?.code === 'invalid_token'
@@ -783,6 +787,7 @@ export function createServer(config: ServerConfig): {
     accountService,
     sessionService,
     oauthService,
+    apiTokenService: tokenService,
     settingsService,
     emailService,
     baseUrl: config.baseUrl,

@@ -15,6 +15,7 @@ export interface ProfileUpdate {
   name?: string;
   email?: string;
   timezone?: string;
+  current_password?: string;
 }
 
 export interface ProfileUpdateResult {

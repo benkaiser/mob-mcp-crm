@@ -4,7 +4,8 @@ import { AccountService, AccountError } from '../../auth/accounts.js';
 import { OAuthService } from '../../auth/oauth.js';
 import { SessionService } from '../../services/sessions.js';
 import { UserSettingsService } from '../../services/settings.js';
-import { EmailService, renderActionEmail } from '../../services/email.js';
+import { ApiTokenService } from '../../services/api-tokens.js';
+import { EmailService, renderActionEmail, renderNoticeEmail } from '../../services/email.js';
 import {
   asyncHandler,
   sendData,
@@ -17,6 +18,7 @@ export interface AccountRouterDeps {
   accountService: AccountService;
   sessionService: SessionService;
   oauthService: OAuthService;
+  apiTokenService: ApiTokenService;
   settingsService: UserSettingsService;
   emailService: EmailService;
   baseUrl: string;
@@ -33,8 +35,14 @@ const passwordSchema = z.object({
 const profileSchema = z.object({
   name: z.string().min(1).optional(),
   email: z.string().min(1).optional(),
+  // Required whenever `email` is present (re-auth for a security-sensitive
+  // change) - see the `.refine` below.
+  current_password: z.string().min(1).optional(),
   timezone: z.string().min(1).optional(),
-}).strict();
+}).strict().refine(
+  (input) => input.email === undefined || (input.current_password?.length ?? 0) > 0,
+  { message: 'current_password is required to change your email address', path: ['current_password'] },
+);
 
 const deleteSchema = z.object({
   password: z.string().min(1, 'password is required'),
@@ -53,7 +61,7 @@ function parseCookie(header: string, name: string): string | null {
  * assistants, active web sessions and hard account deletion.
  */
 export function createAccountRouter(deps: AccountRouterDeps): Router {
-  const { accountService, sessionService, oauthService, settingsService, emailService, baseUrl, cookieSecure, forgetful } = deps;
+  const { accountService, sessionService, oauthService, apiTokenService, settingsService, emailService, baseUrl, cookieSecure, forgetful } = deps;
   const router = Router();
 
   const currentToken = (req: import('express').Request): string =>
@@ -77,14 +85,31 @@ export function createAccountRouter(deps: AccountRouterDeps): Router {
     await emailService.sendMail({ to: user.email, subject: 'Verify your Mob email', text, html });
   }
 
+  // Heads-up sent to the OLD address whenever an email change is requested, so
+  // the real owner finds out even if an attacker (e.g. via a stolen session)
+  // is the one who initiated it.
+  async function sendEmailChangeNotice(user: { name: string; email: string }, newEmail: string): Promise<void> {
+    const { text, html } = renderNoticeEmail({
+      title: 'Your Mob email address is changing',
+      intro: `Hi ${user.name}, someone requested to change your Mob account email to ${newEmail}. This won't take effect until it's verified from the new address.`,
+      outro: "If this wasn't you, change your password immediately and contact support.",
+    });
+    await emailService.sendMail({ to: user.email, subject: 'Your Mob email address is changing', text, html });
+  }
+
   // ─── Change password ──────────────────────────────────────────
   router.post('/password', asyncHandler(async (req, res) => {
     requirePersistent();
     const userId = getUserId(req);
     const input = parseBody(passwordSchema, req);
     await accountService.changePassword(userId, input.current_password, input.new_password);
-    // Security: boot every other session, keep the current browser signed in.
+    // Security: a password change means the old password (and anything an
+    // attacker minted with it) can no longer be trusted. Boot every other web
+    // session, and revoke every MCP/API credential (OAuth access tokens and
+    // long-lived API tokens) so a compromised account is actually evicted.
     sessionService.destroyAllForUserExcept(userId, currentToken(req));
+    oauthService.revokeAllForUser(userId);
+    apiTokenService.revokeAllForUser(userId);
     sendData(res, { ok: true });
   }));
 
@@ -108,8 +133,19 @@ export function createAccountRouter(deps: AccountRouterDeps): Router {
 
     let emailChangePending = false;
     if (input.email !== undefined) {
+      // Re-auth: email is a security-sensitive credential (used for password
+      // resets and account recovery), so require the current password before
+      // repointing it - same bar as account deletion.
+      const currentUser = accountService.getPublicUser(userId);
+      if (!currentUser) throw new ApiError(404, 'not_found', 'Account not found');
+      const valid = await accountService.verifyPassword(userId, input.current_password ?? '');
+      if (!valid) throw new ApiError(400, 'invalid_password', 'Current password is incorrect');
+
       const { token, user } = accountService.requestEmailChange(userId, input.email);
       await sendVerificationEmail(user, token);
+      // Notify the OLD address too, so the real owner is never left in the
+      // dark about a change they may not have made.
+      await sendEmailChangeNotice(currentUser, user.email);
       emailChangePending = true;
     }
 

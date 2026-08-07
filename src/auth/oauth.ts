@@ -238,6 +238,16 @@ export class OAuthService {
   }
 
   /**
+   * Revoke every access token for a user, across all connected clients.
+   * Used after a security-sensitive event (password change/reset) so that
+   * an attacker who compromised the account can't keep MCP access via a
+   * still-valid OAuth token. Returns the count removed.
+   */
+  revokeAllForUser(userId: string): number {
+    return this.db.prepare('DELETE FROM oauth_tokens WHERE user_id = ?').run(userId).changes;
+  }
+
+  /**
    * Log an OAuth authorization event.
    */
   private logAuthorization(userId: string, clientId: string, ipAddress?: string, userAgent?: string): void {

@@ -542,6 +542,7 @@ function ProfileSection() {
   const [name, setName] = useState(me?.name ?? '');
   const [email, setEmail] = useState(me?.email ?? '');
   const [timezone, setTimezone] = useState(me?.timezone ?? 'UTC');
+  const [currentPassword, setCurrentPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [resending, setResending] = useState(false);
 
@@ -550,19 +551,30 @@ function ProfileSection() {
   // Include the current timezone in the options even if it isn't in our curated list.
   const tzOptions = TIMEZONES.includes(timezone) ? TIMEZONES : [timezone, ...TIMEZONES];
 
-  const dirty = name.trim() !== me.name || email.trim() !== me.email || timezone !== me.timezone;
+  const emailChanged = email.trim() !== me.email;
+  const dirty = name.trim() !== me.name || emailChanged || timezone !== me.timezone;
 
   async function save(e: Event) {
     e.preventDefault();
     if (!me || !dirty || busy) return;
+    // Changing the account's email is security-sensitive (it's used for
+    // password resets), so the server requires re-authentication.
+    if (emailChanged && !currentPassword) {
+      showToast('Enter your current password to change your email', 'error');
+      return;
+    }
     setBusy(true);
     try {
-      const body: { name?: string; email?: string; timezone?: string } = {};
+      const body: { name?: string; email?: string; timezone?: string; current_password?: string } = {};
       if (name.trim() !== me.name) body.name = name.trim();
       if (timezone !== me.timezone) body.timezone = timezone;
-      if (email.trim() !== me.email) body.email = email.trim();
+      if (emailChanged) {
+        body.email = email.trim();
+        body.current_password = currentPassword;
+      }
       const { data } = await updateProfile(body);
       await loadSession();
+      setCurrentPassword('');
       if (data?.email_change_pending) {
         showToast(`Confirmation sent to ${data.pending_email}. Your email changes once you confirm it.`, 'success');
       } else {
@@ -614,6 +626,16 @@ function ProfileSection() {
         <Field label="Email" hint={me.email_verified ? undefined : 'Unverified'}>
           <Input type="email" value={email} onInput={(e) => setEmail((e.target as HTMLInputElement).value)} data-testid="settings-profile-email-input" />
         </Field>
+        {emailChanged && (
+          <Field label="Current password" hint="Required to change your email">
+            <Input
+              type="password"
+              value={currentPassword}
+              onInput={(e) => setCurrentPassword((e.target as HTMLInputElement).value)}
+              data-testid="settings-profile-email-password-input"
+            />
+          </Field>
+        )}
         <Field label="Timezone">
           <Select value={timezone} onChange={(e) => setTimezone((e.target as HTMLSelectElement).value)} data-testid="settings-profile-timezone-input">
             {tzOptions.map((tz) => <option key={tz} value={tz}>{tz}</option>)}

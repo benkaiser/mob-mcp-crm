@@ -86,6 +86,20 @@ export class ApiTokenService {
   }
 
   /**
+   * Revoke every active API token for a user (they never expire on their own).
+   * Used after a security-sensitive event (password change/reset) so a stolen
+   * long-lived API token can't keep working. Returns the count revoked.
+   */
+  revokeAllForUser(userId: string): number {
+    const result = this.db.prepare(`
+      UPDATE api_tokens
+      SET revoked_at = datetime('now')
+      WHERE user_id = ? AND revoked_at IS NULL
+    `).run(userId);
+    return result.changes;
+  }
+
+  /**
    * Verify a plaintext token. On success, bumps last_used_at and returns the
    * owning userId + parsed scopes. Returns null for unknown/revoked tokens.
    */
