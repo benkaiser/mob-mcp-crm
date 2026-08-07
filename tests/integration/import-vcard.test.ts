@@ -74,4 +74,19 @@ describe('parseVCard', () => {
   it('tolerates empty input', () => {
     expect(parseVCard('')).toEqual([]);
   });
+
+  it('folds N additional (middle) name into first_name (no separate middle_name field)', () => {
+    const vcard = [
+      'BEGIN:VCARD',
+      'VERSION:3.0',
+      'N:Doe;John;Jeffery;;',
+      'FN:John Jeffery Doe',
+      'END:VCARD',
+      '',
+    ].join('\n');
+
+    const [contact] = parseVCard(vcard);
+    expect(contact.first_name).toBe('John Jeffery');
+    expect(contact.last_name).toBe('Doe');
+  });
 });

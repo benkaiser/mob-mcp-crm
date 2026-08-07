@@ -240,6 +240,10 @@ function importParsedData(db: Database.Database, userId: string, data: MonicaPar
       const mobId = generateId();
       contactIdMap.set(mc.id, mobId);
 
+      // There is no separate middle_name field in Mob, so fold Monica's
+      // middle_name into first_name (e.g. "John" + "Jeffery" -> "John Jeffery").
+      const firstName = mc.middle_name ? `${mc.first_name} ${mc.middle_name}` : mc.first_name;
+
       // Resolve gender
       let gender: string | null = null;
       if (mc.gender_id) {
@@ -288,7 +292,7 @@ function importParsedData(db: Database.Database, userId: string, data: MonicaPar
 
       try {
         insertContact.run(
-          mobId, userId, mc.first_name, mc.last_name, mc.nickname, gender,
+          mobId, userId, firstName, mc.last_name, mc.nickname, gender,
           birthdayMode, birthdayDate, birthdayMonth, birthdayDay, birthdayYearApproximate,
           status, mc.is_starred ? 1 : 0,
           null, metDescription,

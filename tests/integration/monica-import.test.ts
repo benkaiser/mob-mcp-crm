@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { createTestDatabase, createTestUser } from '../fixtures/test-helpers.js';
 import { importMonicaExport } from '../../src/services/monica-import.js';
 import { ReminderService } from '../../src/services/reminders.js';
+import { ContactService } from '../../src/services/contacts.js';
 
 describe('importMonicaExport - birthday reminder skipping', () => {
   let db: ReturnType<typeof createTestDatabase>;
@@ -51,5 +52,31 @@ describe('importMonicaExport - birthday reminder skipping', () => {
 
     expect(result.reminders).toBe(1);
     expect(result.skipped_birthday_reminders).toBe(0);
+  });
+});
+
+describe('importMonicaExport - middle name handling', () => {
+  let db: ReturnType<typeof createTestDatabase>;
+
+  afterEach(() => db?.close());
+
+  it('folds Monica middle_name into first_name (no separate middle_name field)', () => {
+    db = createTestDatabase();
+    const userId = createTestUser(db);
+
+    const dump = [
+      'INSERT IGNORE INTO `contacts` (`id`, `first_name`, `middle_name`, `last_name`, `is_partial`, `is_active`, `is_dead`, `is_starred`) VALUES',
+      "(1, 'John', 'Jeffery', 'Doe', 0, 1, 0, 0);",
+      '',
+    ].join('\n');
+
+    const result = importMonicaExport(db, userId, dump);
+
+    expect(result.contacts).toBe(1);
+
+    const contacts = new ContactService(db).list(userId).data;
+    expect(contacts).toHaveLength(1);
+    expect(contacts[0].first_name).toBe('John Jeffery');
+    expect(contacts[0].last_name).toBe('Doe');
   });
 });

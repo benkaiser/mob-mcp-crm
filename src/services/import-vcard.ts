@@ -176,7 +176,10 @@ function buildContact(lines: VCardLine[]): NormalizedContact | null {
         const parts = splitStructured(line.value);
         const family = parts[0]?.trim();
         const given = parts[1]?.trim();
-        if (given) contact.first_name = given;
+        const additional = parts[2]?.trim();
+        // There is no separate middle_name field, so fold any additional/middle
+        // names into first_name (e.g. "John" + "Jeffery" -> "John Jeffery").
+        if (given) contact.first_name = additional ? `${given} ${additional}` : given;
         if (family) contact.last_name = family;
         break;
       }
