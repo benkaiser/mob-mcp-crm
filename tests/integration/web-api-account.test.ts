@@ -93,6 +93,24 @@ describe('Account self-service API (/web/api/account)', () => {
     expect(cookieFrom(relogin.headers, 'mob_session')).toBeDefined();
   });
 
+  it('changing password also revokes OAuth access tokens and API tokens', async () => {
+    server = createServer(persistent);
+    const c = await makeClient(server);
+    const userId = (server.db.prepare('SELECT id FROM users WHERE email = ?').get('acct@test.dev') as { id: string }).id;
+
+    server.db.prepare('INSERT INTO oauth_tokens (access_token, user_id, client_id, created_at, expires_at) VALUES (?, ?, ?, ?, ?)')
+      .run('oauth-tok-1', userId, 'claude-desktop', Date.now(), Date.now() + 1000000);
+    server.db.prepare(`INSERT INTO api_tokens (id, user_id, name, token_hash, prefix, scopes) VALUES ('tok-id-1', ?, 'CI token', 'hash1', 'prefix1', 'read,write')`)
+      .run(userId);
+
+    const ok = await c.mutate('POST', '/web/api/account/password', { current_password: 'password123', new_password: 'newpassword456' });
+    expect(ok.status).toBe(200);
+
+    expect(server.db.prepare('SELECT COUNT(*) AS n FROM oauth_tokens WHERE user_id = ?').get(userId)).toEqual({ n: 0 });
+    const apiToken = server.db.prepare('SELECT revoked_at FROM api_tokens WHERE id = ?').get('tok-id-1') as { revoked_at: string | null };
+    expect(apiToken.revoked_at).not.toBeNull();
+  });
+
   it('rejects a too-short new password with 422', async () => {
     server = createServer(persistent);
     const c = await makeClient(server);
@@ -117,10 +135,26 @@ describe('Account self-service API (/web/api/account)', () => {
     expect(res.status).toBe(422);
   });
 
+  it('email change requires re-authentication and notifies the old address', async () => {
+    server = createServer(persistent);
+    const c = await makeClient(server);
+
+    const noPassword = await c.mutate('PATCH', '/web/api/account/profile', { email: 'newmail@test.dev' });
+    expect(noPassword.status).toBe(422);
+
+    const wrongPassword = await c.mutate('PATCH', '/web/api/account/profile', { email: 'newmail@test.dev', current_password: 'wrong' });
+    expect(wrongPassword.status).toBe(400);
+    expect(JSON.parse(wrongPassword.body).error.code).toBe('invalid_password');
+
+    // Email is untouched by the failed attempts.
+    const meBefore = JSON.parse((await c.get('/web/api/me')).body).data;
+    expect(meBefore.pending_email).toBeNull();
+  });
+
   it('email change goes through verification (pending until confirmed)', async () => {
     server = createServer(persistent);
     const c = await makeClient(server);
-    const res = await c.mutate('PATCH', '/web/api/account/profile', { email: 'newmail@test.dev' });
+    const res = await c.mutate('PATCH', '/web/api/account/profile', { email: 'newmail@test.dev', current_password: 'password123' });
     expect(res.status).toBe(200);
     expect(JSON.parse(res.body).data.email_change_pending).toBe(true);
     const me = JSON.parse((await c.get('/web/api/me')).body).data;
@@ -208,6 +242,25 @@ describe('Password reset & verification pages', () => {
     const ok = await raw(server.app, 'POST', '/auth/reset', { form: { token, password: 'brandnewpass', confirm: 'brandnewpass' } });
     expect(ok.status).toBe(200);
     expect(await accounts.login('reset2@test.dev', 'brandnewpass')).not.toBeNull();
+  });
+
+  it('resetting a password also revokes OAuth access tokens and API tokens (not just web sessions)', async () => {
+    server = createServer(persistent);
+    const accounts = new AccountService(server.db);
+    const user = await accounts.createAccount({ name: 'R', email: 'reset3@test.dev', password: 'password123' });
+
+    server.db.prepare('INSERT INTO oauth_tokens (access_token, user_id, client_id, created_at, expires_at) VALUES (?, ?, ?, ?, ?)')
+      .run('oauth-tok-reset', user.id, 'claude-desktop', Date.now(), Date.now() + 1000000);
+    server.db.prepare(`INSERT INTO api_tokens (id, user_id, name, token_hash, prefix, scopes) VALUES ('tok-id-reset', ?, 'CI token', 'hash2', 'prefix2', 'read,write')`)
+      .run(user.id);
+
+    const token = accounts.createPasswordResetToken('reset3@test.dev')!.token;
+    const ok = await raw(server.app, 'POST', '/auth/reset', { form: { token, password: 'brandnewpass', confirm: 'brandnewpass' } });
+    expect(ok.status).toBe(200);
+
+    expect(server.db.prepare('SELECT COUNT(*) AS n FROM oauth_tokens WHERE user_id = ?').get(user.id)).toEqual({ n: 0 });
+    const apiToken = server.db.prepare('SELECT revoked_at FROM api_tokens WHERE id = ?').get('tok-id-reset') as { revoked_at: string | null };
+    expect(apiToken.revoked_at).not.toBeNull();
   });
 
   it('verifies an email via the verification link', async () => {

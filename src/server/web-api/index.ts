@@ -40,6 +40,7 @@ import type { OAuthService } from '../../auth/oauth.js';
 import type { SessionService } from '../../services/sessions.js';
 import type { UserSettingsService } from '../../services/settings.js';
 import type { EmailService } from '../../services/email.js';
+import type { ApiTokenService } from '../../services/api-tokens.js';
 
 export interface WebApiDeps {
   db: Database.Database;
@@ -54,6 +55,7 @@ export interface WebApiDeps {
   accountService: AccountService;
   sessionService: SessionService;
   oauthService: OAuthService;
+  apiTokenService: ApiTokenService;
   settingsService: UserSettingsService;
   emailService: EmailService;
   baseUrl: string;
@@ -70,7 +72,7 @@ export interface WebApiDeps {
 export function createWebApiRouter(deps: WebApiDeps): Router {
   const {
     db, planService, getWebSession, parseCookie, cookieSecure,
-    accountService, sessionService, oauthService, settingsService, emailService, baseUrl, forgetful,
+    accountService, sessionService, oauthService, apiTokenService, settingsService, emailService, baseUrl, forgetful,
   } = deps;
   const router = Router();
 
@@ -157,7 +159,7 @@ export function createWebApiRouter(deps: WebApiDeps): Router {
   router.use('/tokens', createApiTokensRouter(db, planService));
   router.use('/webhooks', createWebhooksRouter(db, planService));
   router.use('/account', createAccountRouter({
-    accountService, sessionService, oauthService, settingsService, emailService,
+    accountService, sessionService, oauthService, apiTokenService, settingsService, emailService,
     baseUrl, cookieSecure, forgetful,
   }));
 

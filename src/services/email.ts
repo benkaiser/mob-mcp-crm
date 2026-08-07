@@ -169,6 +169,37 @@ export function renderActionEmail(opts: {
   return { text, html };
 }
 
+/**
+ * Render a plain informational/security notice email with no call-to-action
+ * link (e.g. "your email address is being changed"). Unlike
+ * `renderActionEmail`, there is nothing to click - it's purely a heads-up.
+ */
+export function renderNoticeEmail(opts: {
+  title: string;
+  intro: string;
+  outro?: string;
+}): { text: string; html: string } {
+  const text = [
+    opts.intro,
+    ...(opts.outro ? ['', opts.outro] : []),
+  ].join('\n');
+
+  const html = `<!DOCTYPE html>
+<html>
+  <body style="margin:0;padding:24px;background:#f4f5f7;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1a1a2e;">
+    <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:12px;padding:32px;">
+      <h1 style="font-size:20px;margin:0 0 16px;color:#1a1a2e;">${escapeHtml(opts.title)}</h1>
+      <p style="margin:0 0 24px;">${escapeHtml(opts.intro)}</p>
+      ${opts.outro ? `<p style="font-size:13px;color:#6b7280;margin:0 0 24px;">${escapeHtml(opts.outro)}</p>` : ''}
+      <hr style="border:none;border-top:1px solid #e5e7eb;margin:0 0 24px;">
+      <p style="font-size:12px;color:#6b7280;margin:0;">Mob - your AI-first personal CRM 🦘</p>
+    </div>
+  </body>
+</html>`;
+
+  return { text, html };
+}
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
