@@ -720,6 +720,11 @@ a.count-tile:hover .count-tile__num, a.count-tile:hover .count-tile__label { tex
 .count-tile__icon { display: inline-flex; color: var(--color-primary); margin-bottom: var(--space-1); }
 .count-tile__num { font-size: var(--text-xl); font-weight: 700; }
 .count-tile__label { font-size: var(--text-sm); color: var(--color-text-muted); }
+/* Dashboard: recently interacted contacts */
+.recent-contact { display: inline-flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.recent-contact__body { display: flex; flex-direction: column; min-width: 0; }
+.recent-contact__meta { font-size: var(--text-sm); }
+.recent-contact__foot { margin-top: var(--space-3); }
 .streak-card { display: flex; flex-direction: column; gap: var(--space-4); }
 .streak-card__head { display: flex; justify-content: space-between; gap: var(--space-3); align-items: flex-start; }
 .streak-card__head h2 { margin-bottom: var(--space-1); }

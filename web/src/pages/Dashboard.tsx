@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'preact/hooks';
 import { Link } from 'wouter-preact';
 import { apiGet } from '../api/client';
-import type { DashboardData } from '../api/types';
-import { Card, Spinner, ErrorBanner, Badge, EmptyState } from '../ui';
+import type { DashboardData, RecentContact } from '../api/types';
+import { Card, Spinner, ErrorBanner, Badge, EmptyState, Avatar, Button } from '../ui';
 import { Icon, type IconName } from '../ui/Icon';
 import { user } from '../store/session';
-import { errorMessage, formatDate } from '../lib/format';
+import { errorMessage, formatDate, contactName } from '../lib/format';
 
 export function Dashboard() {
   const me = user.value;
@@ -70,6 +70,8 @@ export function Dashboard() {
 
           <div class="grid-cards">
             <StreakCard streak={data.streak} />
+
+            <RecentContactsCard contacts={data.recent_contacts} />
 
             <Card>
               <h2><Link href="/reminders">Upcoming reminders</Link></h2>
@@ -206,6 +208,72 @@ function StreakCard({ streak }: { streak: DashboardData['streak'] }) {
 
 function weekdayLabel(date: string): string {
   return new Intl.DateTimeFormat(undefined, { weekday: 'short', timeZone: 'UTC' }).format(new Date(`${date}T00:00:00Z`));
+}
+
+/** Friendly label for a contact's most recent audited interaction. */
+function interactionLabel(entityType: string, action: RecentContact['last_action']): string {
+  if (entityType === 'activity') return 'Logged activity';
+  if (entityType === 'contact_tag') return action === 'delete' ? 'Removed tag' : 'Tagged';
+  const verb = action === 'create' ? 'Added' : action === 'delete' ? 'Removed' : 'Updated';
+  const nouns: Record<string, string> = {
+    contact: 'details',
+    note: 'note',
+    reminder: 'reminder',
+    task: 'task',
+    gift: 'gift',
+    debt: 'debt',
+    life_event: 'life event',
+    relationship: 'relationship',
+    contact_method: 'contact method',
+    address: 'address',
+    custom_field: 'custom field',
+  };
+  return `${verb} ${nouns[entityType] ?? entityType.replace(/_/g, ' ')}`;
+}
+
+function RecentContactsCard({ contacts }: { contacts: RecentContact[] }) {
+  return (
+    <Card data-testid="dashboard-recent-contacts">
+      <h2><Link href="/contacts">Recently interacted</Link></h2>
+      {contacts.length === 0 ? (
+        <p class="muted">No recent contact activity yet.</p>
+      ) : (
+        <>
+          <div class="list">
+            {contacts.map((c) => {
+              const name = contactName({
+                first_name: c.first_name ?? '',
+                last_name: c.last_name ?? '',
+                nickname: c.nickname ?? '',
+              });
+              return (
+                <Link
+                  key={c.contact_id}
+                  href={`/contacts/${c.contact_id}`}
+                  class="sub-row"
+                  data-testid="dashboard-recent-contact"
+                >
+                  <span class="recent-contact">
+                    <Avatar name={name} url={c.avatar_url ?? undefined} size="sm" />
+                    <span class="recent-contact__body">
+                      <span>{name}</span>
+                      <span class="muted recent-contact__meta">{interactionLabel(c.last_entity_type, c.last_action)}</span>
+                    </span>
+                  </span>
+                  <span class="muted">{formatDate(c.last_interaction_at)}</span>
+                </Link>
+              );
+            })}
+          </div>
+          <div class="recent-contact__foot">
+            <Link href="/activity-log" data-testid="dashboard-recent-contacts-log">
+              <Button variant="secondary" size="sm">View activity log</Button>
+            </Link>
+          </div>
+        </>
+      )}
+    </Card>
+  );
 }
 
 function CountTile({ label, num, href, icon }: { label: string; num: number; href?: string; icon?: IconName }) {

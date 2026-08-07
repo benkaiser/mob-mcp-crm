@@ -57,6 +57,7 @@ export function createDashboardRouter(db: Database.Database): Router {
 
     const stats = exporter.getStatistics(userId);
     const streak = audit.getStreak(userId);
+    const recentContacts = audit.recentContacts(userId, 5);
     const counts = {
       contacts: stats.total_contacts,
       active_contacts: stats.active_contacts,
@@ -80,6 +81,7 @@ export function createDashboardRouter(db: Database.Database): Router {
       },
       counts,
       streak,
+      recent_contacts: recentContacts,
     });
   }));
 

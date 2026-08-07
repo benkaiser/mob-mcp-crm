@@ -3,6 +3,7 @@ import Database from 'better-sqlite3';
 import { AuditService } from '../../src/services/audit.js';
 import { ContactService } from '../../src/services/contacts.js';
 import { NoteService } from '../../src/services/notes.js';
+import { ActivityService } from '../../src/services/activities.js';
 import { createTestDatabase, createTestUser, createTestContact } from '../fixtures/test-helpers.js';
 import { closeDatabase } from '../../src/db/connection.js';
 
@@ -110,6 +111,46 @@ describe('AuditService', () => {
 
     const streak = audit.getStreak(userId);
     expect(streak.days.at(-1)).toEqual({ date: todayInZone, active: true });
+  });
+
+  it('lists recently interacted contacts, newest first, one row per contact', () => {
+    const contacts = new ContactService(db);
+    const notes = new NoteService(db);
+    const activities = new ActivityService(db);
+
+    const alice = contacts.create(userId, { first_name: 'Alice' });
+    const bob = contacts.create(userId, { first_name: 'Bob' });
+    const carol = contacts.create(userId, { first_name: 'Carol' });
+
+    // Interact in a known order: edit Alice, note on Bob, activity with Carol,
+    // then a second edit of Alice (making Alice the most recent).
+    contacts.update(userId, alice.id, { last_name: 'Anderson' });
+    notes.create(userId, { contact_id: bob.id, body: 'Likes tea' });
+    activities.create(userId, { type: 'in_person', occurred_at: '2026-01-01T00:00:00.000Z', participant_contact_ids: [carol.id] });
+    contacts.update(userId, alice.id, { nickname: 'Al' });
+
+    const recent = audit.recentContacts(userId, 5);
+    expect(recent.map((r) => r.contact_id)).toEqual([alice.id, carol.id, bob.id]);
+    // One row per contact (Alice edited twice but appears once) with her latest action.
+    expect(recent[0].last_entity_type).toBe('contact');
+    expect(recent[0].last_action).toBe('update');
+    // Activity participation resolves to the contact.
+    expect(recent[1].last_entity_type).toBe('activity');
+    expect(recent[1].first_name).toBe('Carol');
+  });
+
+  it('excludes soft-deleted contacts and respects the limit', () => {
+    const contacts = new ContactService(db);
+    const keep = contacts.create(userId, { first_name: 'Keep' });
+    const gone = contacts.create(userId, { first_name: 'Gone' });
+    contacts.update(userId, gone.id, { last_name: 'Zone' });
+    contacts.softDelete(userId, gone.id);
+
+    const recent = audit.recentContacts(userId, 5);
+    const ids = recent.map((r) => r.contact_id);
+    expect(ids).toContain(keep.id);
+    expect(ids).not.toContain(gone.id);
+    expect(audit.recentContacts(userId, 1).length).toBe(1);
   });
 });
 

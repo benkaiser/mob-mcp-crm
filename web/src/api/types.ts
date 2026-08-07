@@ -387,6 +387,18 @@ export interface DashboardData {
   debt_summary: { by_currency: DebtByCurrency[]; active_count: number };
   counts: DashboardCounts;
   streak: AuditStreak;
+  recent_contacts: RecentContact[];
+}
+
+export interface RecentContact {
+  contact_id: string;
+  first_name: string | null;
+  last_name: string | null;
+  nickname: string | null;
+  avatar_url: string | null;
+  last_interaction_at: string;
+  last_entity_type: string;
+  last_action: 'create' | 'update' | 'delete';
 }
 
 // ─── Audit log payload ───────────────────────────────────────────
