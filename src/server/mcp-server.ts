@@ -137,7 +137,8 @@ export function createMcpServer(db: Database.Database): McpServer {
   server.registerTool('contact_create', {
     description: 'Create a new contact with basic info',
     inputSchema: {
-      first_name: z.string().describe("First name (required). Include any middle/given names here too (e.g. 'John Jeffery'), as there is no separate middle_name field, matching how Monica CRM stores names."),
+      first_name: z.string().describe('First name (required)'),
+      middle_name: z.string().optional().describe('Middle name'),
       last_name: z.string().optional().describe('Last name'),
       nickname: z.string().optional().describe('Nickname'),
       maiden_name: z.string().optional().describe('Maiden name'),
@@ -192,7 +193,8 @@ export function createMcpServer(db: Database.Database): McpServer {
     description: 'Update contact fields',
     inputSchema: {
       contact_id: z.string().describe('The contact ID to update'),
-      first_name: z.string().optional().describe("First name. Include any middle/given names here too (e.g. 'John Jeffery'), as there is no separate middle_name field."),
+      first_name: z.string().optional().describe('First name'),
+      middle_name: z.string().optional().describe('Middle name'),
       last_name: z.string().optional().describe('Last name'),
       nickname: z.string().optional().describe('Nickname'),
       maiden_name: z.string().optional().describe('Maiden name'),
@@ -1518,7 +1520,8 @@ export function createMcpServer(db: Database.Database): McpServer {
     description: 'Create multiple contacts in one call. Max 50 items per batch. Runs atomically - if any item fails, the entire batch is rolled back.',
     inputSchema: {
       contacts: z.array(z.object({
-        first_name: z.string().describe("First name (required). Include any middle/given names here too (e.g. 'John Jeffery'), as there is no separate middle_name field, matching how Monica CRM stores names."),
+        first_name: z.string().describe('First name (required)'),
+        middle_name: z.string().optional().describe('Middle name'),
         last_name: z.string().optional().describe('Last name'),
         nickname: z.string().optional().describe('Nickname'),
         maiden_name: z.string().optional().describe('Maiden name'),

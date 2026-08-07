@@ -101,10 +101,9 @@ function buildContact(get: (col: string) => string): NormalizedContact | null {
   const nickname = get('Nickname');
   const fullName = get('Name');
 
-  // There is no separate middle_name field, so fold any additional/middle
-  // names into first_name (e.g. "John" + "Jeffery" -> "John Jeffery").
-  if (given) contact.first_name = additional ? `${given} ${additional}` : given;
+  if (given) contact.first_name = given;
   if (family) contact.last_name = family;
+  if (additional) contact.middle_name = additional;
 
   if (!contact.first_name && fullName) {
     const parts = fullName.trim().split(/\s+/);

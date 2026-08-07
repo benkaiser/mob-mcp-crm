@@ -63,7 +63,7 @@ describe('parseGoogleCsv', () => {
     expect(parseGoogleCsv('Name,Given Name\n')).toEqual([]);
   });
 
-  it('folds Additional Name (middle name) into first_name (no separate middle_name field)', () => {
+  it('maps the Additional Name column to middle_name', () => {
     const csv = [
       'Name,Given Name,Additional Name,Family Name',
       'John Jeffery Doe,John,Jeffery,Doe',
@@ -71,7 +71,8 @@ describe('parseGoogleCsv', () => {
     ].join('\n');
 
     const [contact] = parseGoogleCsv(csv);
-    expect(contact.first_name).toBe('John Jeffery');
+    expect(contact.first_name).toBe('John');
+    expect(contact.middle_name).toBe('Jeffery');
     expect(contact.last_name).toBe('Doe');
   });
 });

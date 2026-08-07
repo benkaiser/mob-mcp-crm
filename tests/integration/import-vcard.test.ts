@@ -75,7 +75,7 @@ describe('parseVCard', () => {
     expect(parseVCard('')).toEqual([]);
   });
 
-  it('folds N additional (middle) name into first_name (no separate middle_name field)', () => {
+  it('maps the N additional name component to middle_name', () => {
     const vcard = [
       'BEGIN:VCARD',
       'VERSION:3.0',
@@ -86,7 +86,8 @@ describe('parseVCard', () => {
     ].join('\n');
 
     const [contact] = parseVCard(vcard);
-    expect(contact.first_name).toBe('John Jeffery');
+    expect(contact.first_name).toBe('John');
+    expect(contact.middle_name).toBe('Jeffery');
     expect(contact.last_name).toBe('Doe');
   });
 });

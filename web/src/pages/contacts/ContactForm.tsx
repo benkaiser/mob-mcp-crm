@@ -10,6 +10,7 @@ type BirthdayMode = 'full_date' | 'month_day' | 'approximate_age';
 
 interface FormState {
   first_name: string;
+  middle_name: string;
   last_name: string;
   nickname: string;
   maiden_name: string;
@@ -34,7 +35,7 @@ interface FormState {
 }
 
 const EMPTY: FormState = {
-  first_name: '', last_name: '', nickname: '', maiden_name: '', gender: '', pronouns: '',
+  first_name: '', middle_name: '', last_name: '', nickname: '', maiden_name: '', gender: '', pronouns: '',
   status: 'active', is_favorite: false, deceased_date: '',
   birthday_enabled: false, birthday_mode: 'full_date',
   birthday_date: '', birthday_month: '', birthday_day: '', birthday_year_approximate: '',
@@ -48,6 +49,7 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
 function fromContact(c: Contact): FormState {
   return {
     first_name: c.first_name ?? '',
+    middle_name: c.middle_name ?? '',
     last_name: c.last_name ?? '',
     nickname: c.nickname ?? '',
     maiden_name: c.maiden_name ?? '',
@@ -80,6 +82,7 @@ function toPayload(f: FormState): Record<string, unknown> {
     is_favorite: f.is_favorite,
   };
   const opt = (key: string, val: string) => { if (val.trim()) p[key] = val.trim(); };
+  opt('middle_name', f.middle_name);
   opt('last_name', f.last_name);
   opt('nickname', f.nickname);
   opt('maiden_name', f.maiden_name);
@@ -179,6 +182,9 @@ export function ContactForm({ id }: { id?: string }) {
             <Field label="First name" htmlFor="first_name" error={errs.first_name}>
               <Input id="first_name" value={form.first_name} data-testid="contact-form-first-name"
                 onInput={(e) => set('first_name', (e.target as HTMLInputElement).value)} required />
+            </Field>
+            <Field label="Middle name" htmlFor="middle_name">
+              <Input id="middle_name" value={form.middle_name} data-testid="contact-form-middle-name" onInput={(e) => set('middle_name', (e.target as HTMLInputElement).value)} />
             </Field>
             <Field label="Last name" error={errs.last_name}>
               <Input value={form.last_name} data-testid="contact-form-last-name" onInput={(e) => set('last_name', (e.target as HTMLInputElement).value)} />

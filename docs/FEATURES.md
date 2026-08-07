@@ -32,7 +32,8 @@ Contacts are the central entity of the entire system. Every other feature is eit
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `first_name` | string | ✅ | Contact's first/given name. There is no separate `middle_name` field (matching Monica CRM), so any middle or additional given names should be included here too, e.g. `"John Jeffery"` |
+| `first_name` | string | ✅ | Contact's first/given name |
+| `middle_name` | string | ❌ | Contact's middle name(s), if any |
 | `last_name` | string | ❌ | Contact's last/family name |
 | `nickname` | string | ❌ | Preferred name or alias |
 | `maiden_name` | string | ❌ | Name before marriage (if applicable) |

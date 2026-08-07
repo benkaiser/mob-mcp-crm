@@ -60,7 +60,7 @@ describe('importMonicaExport - middle name handling', () => {
 
   afterEach(() => db?.close());
 
-  it('folds Monica middle_name into first_name (no separate middle_name field)', () => {
+  it('imports Monica middle_name into the middle_name field', () => {
     db = createTestDatabase();
     const userId = createTestUser(db);
 
@@ -76,7 +76,8 @@ describe('importMonicaExport - middle name handling', () => {
 
     const contacts = new ContactService(db).list(userId).data;
     expect(contacts).toHaveLength(1);
-    expect(contacts[0].first_name).toBe('John Jeffery');
+    expect(contacts[0].first_name).toBe('John');
+    expect(contacts[0].middle_name).toBe('Jeffery');
     expect(contacts[0].last_name).toBe('Doe');
   });
 });

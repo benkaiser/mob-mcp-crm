@@ -64,6 +64,7 @@ export interface Contact {
   id: string;
   user_id: string;
   first_name: string;
+  middle_name: string | null;
   last_name: string | null;
   nickname: string | null;
   maiden_name: string | null;
