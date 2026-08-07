@@ -155,11 +155,15 @@ export class OAuthService {
       }
     }
 
-    const grantTypes = asStringArray(metadata.grant_types, 'grant_types') ?? ['authorization_code'];
-    for (const grant of grantTypes) {
-      if (!SUPPORTED_GRANT_TYPES.includes(grant)) {
-        throw new ClientRegistrationError('invalid_client_metadata', `Unsupported grant_type: ${grant}`);
-      }
+    // Clients commonly request `refresh_token` alongside `authorization_code` as a
+    // matter of course (e.g. Codex, pi-mcp-adapter), even though we only issue
+    // authorization codes. Per RFC 7591 §3.2.1 the server may negotiate down to
+    // what it actually supports rather than rejecting the request outright; we
+    // only reject when the request contains nothing we can honour at all.
+    const requestedGrantTypes = asStringArray(metadata.grant_types, 'grant_types') ?? ['authorization_code'];
+    const grantTypes = requestedGrantTypes.filter((grant) => SUPPORTED_GRANT_TYPES.includes(grant));
+    if (grantTypes.length === 0) {
+      throw new ClientRegistrationError('invalid_client_metadata', `Unsupported grant_type(s): ${requestedGrantTypes.join(', ')}`);
     }
 
     const responseTypes = asStringArray(metadata.response_types, 'response_types') ?? ['code'];

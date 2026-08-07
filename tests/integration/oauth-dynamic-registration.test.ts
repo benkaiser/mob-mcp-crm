@@ -141,6 +141,18 @@ describe('OAuth dynamic client registration (RFC 7591)', () => {
     expect(JSON.parse(res.body).error).toBe('invalid_client_metadata');
   });
 
+  it('registers with authorization_code only when refresh_token is also requested', async () => {
+    // Codex and pi-mcp-adapter request `refresh_token` alongside `authorization_code`
+    // by default, even though we only issue authorization codes. RFC 7591 §3.2.1
+    // allows the server to negotiate down instead of rejecting the registration.
+    server = createServer(persistentConfig);
+    const res = await inject(server.app, 'POST', '/auth/register-client', {
+      body: { redirect_uris: ['https://example.com/cb'], grant_types: ['authorization_code', 'refresh_token'] },
+    });
+    expect(res.status).toBe(201);
+    expect(JSON.parse(res.body).grant_types).toEqual(['authorization_code']);
+  });
+
   it('completes the full register → authorize → token flow', async () => {
     server = createServer(persistentConfig);
     await makeUser(server);
