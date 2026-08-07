@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { generateId } from '../utils.js';
+import { generateId, formatContactName } from '../utils.js';
 import { recordAudit, userIdForContact } from './audit-helper.js';
 
 // ─── Relationship Type Map ──────────────────────────────────────
@@ -360,8 +360,8 @@ export class RelationshipService {
    */
   add(input: CreateRelationshipInput): Relationship {
     // Validate both contact IDs exist before attempting insert
-    const contact = this.db.prepare('SELECT id, user_id, first_name, last_name FROM contacts WHERE id = ?').get(input.contact_id) as { id: string; user_id: string; first_name: string; last_name: string | null } | undefined;
-    const related = this.db.prepare('SELECT id, user_id, first_name, last_name FROM contacts WHERE id = ?').get(input.related_contact_id) as { id: string; user_id: string; first_name: string; last_name: string | null } | undefined;
+    const contact = this.db.prepare('SELECT id, user_id, first_name, middle_name, last_name FROM contacts WHERE id = ?').get(input.contact_id) as { id: string; user_id: string; first_name: string; middle_name: string | null; last_name: string | null } | undefined;
+    const related = this.db.prepare('SELECT id, user_id, first_name, middle_name, last_name FROM contacts WHERE id = ?').get(input.related_contact_id) as { id: string; user_id: string; first_name: string; middle_name: string | null; last_name: string | null } | undefined;
 
     // Check if the invalid ID is actually the user's own ID (common mistake)
     const isUserIdCheck = (id: string) => {
@@ -375,12 +375,12 @@ export class RelationshipService {
       throw new Error(`Neither contact exists - contact_id "${input.contact_id}" and related_contact_id "${input.related_contact_id}" were not found.${hint1}${hint2} Use contact_list or contact_search to find valid contact IDs.`);
     }
     if (!contact) {
-      const relatedName = [related!.first_name, related!.last_name].filter(Boolean).join(' ');
+      const relatedName = formatContactName(related!);
       const hint = isUserIdCheck(input.contact_id);
       throw new Error(`contact_id "${input.contact_id}" not found.${hint} The related_contact_id resolved to "${relatedName}" (${input.related_contact_id}). Use contact_list or contact_search to find the correct ID for the other contact.`);
     }
     if (!related) {
-      const contactName = [contact.first_name, contact.last_name].filter(Boolean).join(' ');
+      const contactName = formatContactName(contact);
       const hint = isUserIdCheck(input.related_contact_id);
       throw new Error(`related_contact_id "${input.related_contact_id}" not found.${hint} The contact_id resolved to "${contactName}" (${input.contact_id}). Use contact_list or contact_search to find the correct ID for the related contact.`);
     }
@@ -553,8 +553,8 @@ export class RelationshipService {
   listByContact(contactId: string): RelationshipWithNames[] {
     return this.db.prepare(`
       SELECT r.*,
-        TRIM(c1.first_name || ' ' || COALESCE(c1.last_name, '')) AS contact_name,
-        TRIM(c2.first_name || ' ' || COALESCE(c2.last_name, '')) AS related_contact_name
+        TRIM(c1.first_name || ' ' || COALESCE(c1.middle_name || ' ', '') || COALESCE(c1.last_name, '')) AS contact_name,
+        TRIM(c2.first_name || ' ' || COALESCE(c2.middle_name || ' ', '') || COALESCE(c2.last_name, '')) AS related_contact_name
       FROM relationships r
       JOIN contacts c1 ON r.contact_id = c1.id
       JOIN contacts c2 ON r.related_contact_id = c2.id
@@ -588,9 +588,9 @@ export class RelationshipService {
   }
 
   private contactName(contactId: string): string {
-    const row = this.db.prepare('SELECT first_name, last_name FROM contacts WHERE id = ?')
-      .get(contactId) as { first_name: string; last_name: string | null } | undefined;
-    return row ? [row.first_name, row.last_name].filter(Boolean).join(' ') : contactId;
+    const row = this.db.prepare('SELECT first_name, middle_name, last_name FROM contacts WHERE id = ?')
+      .get(contactId) as { first_name: string; middle_name: string | null; last_name: string | null } | undefined;
+    return row ? formatContactName(row) : contactId;
   }
 
   private isRelationshipUniqueConstraintError(err: unknown): boolean {

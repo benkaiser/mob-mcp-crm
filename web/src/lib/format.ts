@@ -21,8 +21,8 @@ export function errorMessage(err: unknown, fallback = 'Something went wrong'): s
 }
 
 /** Display name for a contact-like record. */
-export function contactName(c: Pick<Contact, 'first_name' | 'last_name' | 'nickname'>): string {
-  return [c.first_name, c.last_name].filter(Boolean).join(' ') || c.nickname || 'Unnamed';
+export function contactName(c: Pick<Contact, 'first_name' | 'last_name' | 'nickname'> & { middle_name?: string | null }): string {
+  return [c.first_name, c.middle_name, c.last_name].filter(Boolean).join(' ') || c.nickname || 'Unnamed';
 }
 
 /** Format an ISO date(-time) string as a short local date, or '' if empty. */

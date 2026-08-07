@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { formatContactName } from '../utils.js';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -103,24 +104,24 @@ export class SearchService {
 
   private searchContacts(userId: string, searchTerm: string, limit: number): SearchResult[] {
     const rows = this.db.prepare(`
-      SELECT id, first_name, last_name, nickname, company, job_title, work_notes
+      SELECT id, first_name, middle_name, last_name, nickname, company, job_title, work_notes
       FROM contacts
       WHERE user_id = ? AND deleted_at IS NULL AND (
-        first_name LIKE ? OR last_name LIKE ? OR nickname LIKE ? OR
+        first_name LIKE ? OR middle_name LIKE ? OR last_name LIKE ? OR nickname LIKE ? OR
         company LIKE ? OR job_title LIKE ? OR work_notes LIKE ? OR
-        TRIM(COALESCE(first_name, '') || ' ' || COALESCE(last_name, '')) LIKE ? OR
+        TRIM(COALESCE(first_name, '') || ' ' || COALESCE(middle_name || ' ', '') || COALESCE(last_name, '')) LIKE ? OR
         TRIM(COALESCE(last_name, '') || ' ' || COALESCE(first_name, '')) LIKE ?
       )
       LIMIT ?
     `).all(
       userId,
-      searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm,
+      searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm,
       searchTerm, searchTerm,
       limit,
     ) as any[];
 
     return rows.map((row) => {
-      const name = [row.first_name, row.last_name].filter(Boolean).join(' ');
+      const name = formatContactName(row);
       const display = row.company ? `${name} (${row.company})` : name;
 
       // Determine which field matched
@@ -142,7 +143,7 @@ export class SearchService {
 
   private searchNotes(userId: string, searchTerm: string, limit: number): SearchResult[] {
     const rows = this.db.prepare(`
-      SELECT n.id, n.title, n.body, n.created_at, n.contact_id, c.first_name, c.last_name
+      SELECT n.id, n.title, n.body, n.created_at, n.contact_id, c.first_name, c.middle_name, c.last_name
       FROM notes n
       JOIN contacts c ON n.contact_id = c.id
       WHERE c.user_id = ? AND n.deleted_at IS NULL AND c.deleted_at IS NULL AND (
@@ -158,7 +159,7 @@ export class SearchService {
       title: row.title || 'Untitled note',
       snippet: this.extractSnippet(row.body),
       contact_id: row.contact_id,
-      contact_name: [row.first_name, row.last_name].filter(Boolean).join(' '),
+      contact_name: formatContactName(row),
       date: row.created_at,
     }));
   }
@@ -176,7 +177,7 @@ export class SearchService {
 
     // Get participant names for each
     const participantStmt = this.db.prepare(`
-      SELECT c.first_name, c.last_name
+      SELECT c.first_name, c.middle_name, c.last_name
       FROM activity_participants ap
       JOIN contacts c ON ap.contact_id = c.id
       WHERE ap.activity_id = ?
@@ -185,7 +186,7 @@ export class SearchService {
 
     return rows.map((row) => {
       const participants = participantStmt.all(row.id) as any[];
-      const contactName = participants.map(p => [p.first_name, p.last_name].filter(Boolean).join(' ')).join(', ');
+      const contactName = participants.map(p => formatContactName(p)).join(', ');
       return {
         id: row.id,
         entity_type: 'activities' as SearchEntityType,
@@ -200,7 +201,7 @@ export class SearchService {
   private searchLifeEvents(userId: string, searchTerm: string, limit: number): SearchResult[] {
     const rows = this.db.prepare(`
       SELECT le.id, le.title, le.description, le.event_type, le.occurred_at, le.contact_id,
-        c.first_name, c.last_name
+        c.first_name, c.middle_name, c.last_name
       FROM life_events le
       JOIN contacts c ON le.contact_id = c.id
       WHERE c.user_id = ? AND le.deleted_at IS NULL AND c.deleted_at IS NULL AND (
@@ -216,7 +217,7 @@ export class SearchService {
       title: row.title,
       snippet: this.extractSnippet(row.description),
       contact_id: row.contact_id,
-      contact_name: [row.first_name, row.last_name].filter(Boolean).join(' '),
+      contact_name: formatContactName(row),
       date: row.occurred_at,
     }));
   }
@@ -224,7 +225,7 @@ export class SearchService {
   private searchGifts(userId: string, searchTerm: string, limit: number): SearchResult[] {
     const rows = this.db.prepare(`
       SELECT g.id, g.name, g.description, g.occasion, g.date, g.contact_id,
-        c.first_name, c.last_name
+        c.first_name, c.middle_name, c.last_name
       FROM gifts g
       JOIN contacts c ON g.contact_id = c.id
       WHERE c.user_id = ? AND g.deleted_at IS NULL AND c.deleted_at IS NULL AND (
@@ -240,7 +241,7 @@ export class SearchService {
       title: row.name,
       snippet: this.extractSnippet(row.description || row.occasion || ''),
       contact_id: row.contact_id,
-      contact_name: [row.first_name, row.last_name].filter(Boolean).join(' '),
+      contact_name: formatContactName(row),
       date: row.date,
     }));
   }
@@ -260,10 +261,10 @@ export class SearchService {
       let contactName: string | undefined;
       if (row.contact_id) {
         const contact = this.db.prepare(
-          'SELECT first_name, last_name FROM contacts WHERE id = ? AND deleted_at IS NULL'
+          'SELECT first_name, middle_name, last_name FROM contacts WHERE id = ? AND deleted_at IS NULL'
         ).get(row.contact_id) as any;
         if (contact) {
-          contactName = [contact.first_name, contact.last_name].filter(Boolean).join(' ');
+          contactName = formatContactName(contact);
         }
       }
 
@@ -282,7 +283,7 @@ export class SearchService {
   private searchReminders(userId: string, searchTerm: string, limit: number): SearchResult[] {
     const rows = this.db.prepare(`
       SELECT r.id, r.title, r.description, r.reminder_date, r.contact_id,
-        c.first_name, c.last_name
+        c.first_name, c.middle_name, c.last_name
       FROM reminders r
       JOIN contacts c ON r.contact_id = c.id
       WHERE c.user_id = ? AND r.deleted_at IS NULL AND c.deleted_at IS NULL AND (
@@ -298,7 +299,7 @@ export class SearchService {
       title: row.title,
       snippet: this.extractSnippet(row.description),
       contact_id: row.contact_id,
-      contact_name: [row.first_name, row.last_name].filter(Boolean).join(' '),
+      contact_name: formatContactName(row),
       date: row.reminder_date,
     }));
   }
@@ -306,7 +307,7 @@ export class SearchService {
   private searchDebts(userId: string, searchTerm: string, limit: number): SearchResult[] {
     const rows = this.db.prepare(`
       SELECT d.id, d.reason, d.amount, d.currency, d.direction, d.incurred_at, d.contact_id,
-        c.first_name, c.last_name
+        c.first_name, c.middle_name, c.last_name
       FROM debts d
       JOIN contacts c ON d.contact_id = c.id
       WHERE c.user_id = ? AND d.deleted_at IS NULL AND c.deleted_at IS NULL AND (
@@ -324,7 +325,7 @@ export class SearchService {
         title: `${directionLabel} ${row.amount} ${row.currency || 'USD'}`,
         snippet: this.extractSnippet(row.reason),
         contact_id: row.contact_id,
-        contact_name: [row.first_name, row.last_name].filter(Boolean).join(' '),
+        contact_name: formatContactName(row),
         date: row.incurred_at,
       };
     });
@@ -333,23 +334,23 @@ export class SearchService {
   private searchRelationships(userId: string, searchTerm: string, limit: number): SearchResult[] {
     const rows = this.db.prepare(`
       SELECT r.id, r.relationship_type, r.contact_id, r.related_contact_id,
-        c.first_name AS c_first, c.last_name AS c_last,
-        rc.first_name AS rc_first, rc.last_name AS rc_last
+        c.first_name AS c_first, c.middle_name AS c_middle, c.last_name AS c_last,
+        rc.first_name AS rc_first, rc.middle_name AS rc_middle, rc.last_name AS rc_last
       FROM relationships r
       JOIN contacts c ON r.contact_id = c.id
       JOIN contacts rc ON r.related_contact_id = rc.id
       WHERE c.user_id = ? AND c.deleted_at IS NULL AND rc.deleted_at IS NULL AND (
         r.relationship_type LIKE ? OR
-        (rc.first_name LIKE ? OR rc.last_name LIKE ?) OR
-        (c.first_name LIKE ? OR c.last_name LIKE ?)
+        (rc.first_name LIKE ? OR rc.middle_name LIKE ? OR rc.last_name LIKE ?) OR
+        (c.first_name LIKE ? OR c.middle_name LIKE ? OR c.last_name LIKE ?)
       )
       ORDER BY r.created_at DESC
       LIMIT ?
-    `).all(userId, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, limit) as any[];
+    `).all(userId, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, limit) as any[];
 
     return rows.map((row) => {
-      const contactName = [row.c_first, row.c_last].filter(Boolean).join(' ');
-      const relatedName = [row.rc_first, row.rc_last].filter(Boolean).join(' ');
+      const contactName = formatContactName({ first_name: row.c_first, middle_name: row.c_middle, last_name: row.c_last });
+      const relatedName = formatContactName({ first_name: row.rc_first, middle_name: row.rc_middle, last_name: row.rc_last });
       return {
         id: row.id,
         entity_type: 'relationships' as SearchEntityType,
@@ -364,7 +365,7 @@ export class SearchService {
   private searchContactMethods(userId: string, searchTerm: string, limit: number): SearchResult[] {
     const rows = this.db.prepare(`
       SELECT cm.id, cm.type, cm.value, cm.label, cm.contact_id,
-        c.first_name, c.last_name
+        c.first_name, c.middle_name, c.last_name
       FROM contact_methods cm
       JOIN contacts c ON cm.contact_id = c.id
       WHERE c.user_id = ? AND c.deleted_at IS NULL AND (
@@ -375,7 +376,7 @@ export class SearchService {
     `).all(userId, searchTerm, limit) as any[];
 
     return rows.map((row) => {
-      const contactName = [row.first_name, row.last_name].filter(Boolean).join(' ');
+      const contactName = formatContactName(row);
       return {
         id: row.contact_id,
         entity_type: 'contact_methods' as SearchEntityType,
@@ -392,7 +393,7 @@ export class SearchService {
     const rows = this.db.prepare(`
       SELECT a.id, a.label, a.street_line_1, a.street_line_2, a.city, a.state_province,
         a.postal_code, a.country, a.contact_id,
-        c.first_name, c.last_name
+        c.first_name, c.middle_name, c.last_name
       FROM addresses a
       JOIN contacts c ON a.contact_id = c.id
       WHERE c.user_id = ? AND c.deleted_at IS NULL AND (
@@ -404,7 +405,7 @@ export class SearchService {
     `).all(userId, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, limit) as any[];
 
     return rows.map((row) => {
-      const contactName = [row.first_name, row.last_name].filter(Boolean).join(' ');
+      const contactName = formatContactName(row);
       const addressParts = [row.street_line_1, row.street_line_2, row.city, row.state_province, row.postal_code, row.country].filter(Boolean);
       return {
         id: row.contact_id,
@@ -420,7 +421,7 @@ export class SearchService {
   private searchCustomFields(userId: string, searchTerm: string, limit: number): SearchResult[] {
     const rows = this.db.prepare(`
       SELECT cf.id, cf.field_name, cf.field_value, cf.field_group, cf.contact_id,
-        c.first_name, c.last_name
+        c.first_name, c.middle_name, c.last_name
       FROM custom_fields cf
       JOIN contacts c ON cf.contact_id = c.id
       WHERE c.user_id = ? AND c.deleted_at IS NULL AND (
@@ -431,7 +432,7 @@ export class SearchService {
     `).all(userId, searchTerm, searchTerm, limit) as any[];
 
     return rows.map((row) => {
-      const contactName = [row.first_name, row.last_name].filter(Boolean).join(' ');
+      const contactName = formatContactName(row);
       return {
         id: row.id,
         entity_type: 'custom_fields' as SearchEntityType,

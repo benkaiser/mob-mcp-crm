@@ -186,6 +186,7 @@ export function buildOpenApiSpec(): object {
           properties: {
             id: { type: 'string' },
             first_name: { type: 'string' },
+            middle_name: { type: 'string' },
             last_name: { type: 'string' },
             nickname: { type: 'string' },
             gender: { type: 'string' },
@@ -205,6 +206,7 @@ export function buildOpenApiSpec(): object {
           required: ['first_name'],
           properties: {
             first_name: { type: 'string' },
+            middle_name: { type: 'string' },
             last_name: { type: 'string' },
             nickname: { type: 'string' },
             maiden_name: { type: 'string' },

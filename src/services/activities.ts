@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { generateId } from '../utils.js';
+import { generateId, formatContactName } from '../utils.js';
 import { recordAudit } from './audit-helper.js';
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -313,7 +313,7 @@ export class ActivityService {
 
     // Get participant names for each activity
     const participantStmt = this.db.prepare(`
-      SELECT ap.contact_id, c.first_name, c.last_name
+      SELECT ap.contact_id, c.first_name, c.middle_name, c.last_name
       FROM activity_participants ap
       JOIN contacts c ON ap.contact_id = c.id
       WHERE ap.activity_id = ?
@@ -331,7 +331,7 @@ export class ActivityService {
         location: row.location,
         participants: participantRows.map((p) => ({
           contact_id: p.contact_id,
-          contact_name: [p.first_name, p.last_name].filter(Boolean).join(' '),
+          contact_name: formatContactName(p),
         })),
       };
     });

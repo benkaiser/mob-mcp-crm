@@ -28,6 +28,7 @@ const statusEnum = z.enum(['active', 'archived', 'deceased']);
 
 const createContactSchema = z.object({
   first_name: z.string().min(1, 'first_name is required'),
+  middle_name: z.string().optional(),
   last_name: z.string().optional(),
   nickname: z.string().optional(),
   maiden_name: z.string().optional(),

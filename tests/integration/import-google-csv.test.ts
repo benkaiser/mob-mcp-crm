@@ -62,4 +62,17 @@ describe('parseGoogleCsv', () => {
     expect(parseGoogleCsv('')).toEqual([]);
     expect(parseGoogleCsv('Name,Given Name\n')).toEqual([]);
   });
+
+  it('maps the Additional Name column to middle_name', () => {
+    const csv = [
+      'Name,Given Name,Additional Name,Family Name',
+      'John Jeffery Doe,John,Jeffery,Doe',
+      '',
+    ].join('\n');
+
+    const [contact] = parseGoogleCsv(csv);
+    expect(contact.first_name).toBe('John');
+    expect(contact.middle_name).toBe('Jeffery');
+    expect(contact.last_name).toBe('Doe');
+  });
 });

@@ -43,6 +43,7 @@ export interface NormalizedNote {
 export interface NormalizedContact {
   // Core contact fields
   first_name: string;
+  middle_name?: string;
   last_name?: string;
   nickname?: string;
   gender?: string;
@@ -207,6 +208,7 @@ export function runImportPipeline(
 
     const input: CreateContactInput = {
       first_name: record.first_name.trim(),
+      middle_name: record.middle_name,
       last_name: record.last_name,
       nickname: record.nickname,
       gender: record.gender,

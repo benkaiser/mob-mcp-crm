@@ -138,6 +138,7 @@ export function createMcpServer(db: Database.Database): McpServer {
     description: 'Create a new contact with basic info',
     inputSchema: {
       first_name: z.string().describe('First name (required)'),
+      middle_name: z.string().optional().describe('Middle name'),
       last_name: z.string().optional().describe('Last name'),
       nickname: z.string().optional().describe('Nickname'),
       maiden_name: z.string().optional().describe('Maiden name'),
@@ -193,6 +194,7 @@ export function createMcpServer(db: Database.Database): McpServer {
     inputSchema: {
       contact_id: z.string().describe('The contact ID to update'),
       first_name: z.string().optional().describe('First name'),
+      middle_name: z.string().optional().describe('Middle name'),
       last_name: z.string().optional().describe('Last name'),
       nickname: z.string().optional().describe('Nickname'),
       maiden_name: z.string().optional().describe('Maiden name'),
@@ -1519,6 +1521,7 @@ export function createMcpServer(db: Database.Database): McpServer {
     inputSchema: {
       contacts: z.array(z.object({
         first_name: z.string().describe('First name (required)'),
+        middle_name: z.string().optional().describe('Middle name'),
         last_name: z.string().optional().describe('Last name'),
         nickname: z.string().optional().describe('Nickname'),
         maiden_name: z.string().optional().describe('Maiden name'),

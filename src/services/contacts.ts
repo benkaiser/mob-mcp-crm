@@ -8,6 +8,7 @@ export interface Contact {
   id: string;
   user_id: string;
   first_name: string;
+  middle_name: string | null;
   last_name: string | null;
   nickname: string | null;
   maiden_name: string | null;
@@ -42,6 +43,7 @@ export interface Contact {
 
 export interface CreateContactInput {
   first_name: string;
+  middle_name?: string;
   last_name?: string;
   nickname?: string;
   maiden_name?: string;
@@ -227,7 +229,7 @@ export class ContactService {
 
     this.db.prepare(`
       INSERT INTO contacts (
-        id, user_id, first_name, last_name, nickname, maiden_name,
+        id, user_id, first_name, middle_name, last_name, nickname, maiden_name,
         gender, pronouns, avatar_url,
         birthday_mode, birthday_date, birthday_month, birthday_day, birthday_year_approximate,
         status, deceased_date, is_favorite,
@@ -235,7 +237,7 @@ export class ContactService {
         job_title, company, industry, work_notes,
         created_at, updated_at
       ) VALUES (
-        ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?, ?,
         ?, ?, ?,
         ?, ?, ?, ?, ?,
         ?, ?, ?,
@@ -244,7 +246,7 @@ export class ContactService {
         ?, ?
       )
     `).run(
-      id, userId, normalizedInput.first_name, normalizedInput.last_name ?? null, normalizedInput.nickname ?? null, normalizedInput.maiden_name ?? null,
+      id, userId, normalizedInput.first_name, normalizedInput.middle_name ?? null, normalizedInput.last_name ?? null, normalizedInput.nickname ?? null, normalizedInput.maiden_name ?? null,
       normalizedInput.gender ?? null, normalizedInput.pronouns ?? null, normalizedInput.avatar_url ?? null,
       normalizedInput.birthday_mode ?? null, normalizedInput.birthday_date ?? null, normalizedInput.birthday_month ?? null, normalizedInput.birthday_day ?? null, normalizedInput.birthday_year_approximate ?? null,
       normalizedInput.status ?? 'active', normalizedInput.deceased_date ?? null, normalizedInput.is_favorite ? 1 : 0,
@@ -300,6 +302,7 @@ export class ContactService {
 
     const fieldMap: Record<string, string> = {
       first_name: 'first_name',
+      middle_name: 'middle_name',
       last_name: 'last_name',
       nickname: 'nickname',
       maiden_name: 'maiden_name',
@@ -420,14 +423,16 @@ export class ContactService {
     if (options.search) {
       conditions.push(`(
         first_name LIKE ? OR
+        middle_name LIKE ? OR
         last_name LIKE ? OR
         (first_name || ' ' || COALESCE(last_name, '')) LIKE ? OR
+        TRIM(first_name || ' ' || COALESCE(middle_name || ' ', '') || COALESCE(last_name, '')) LIKE ? OR
         nickname LIKE ? OR
         company LIKE ? OR
         job_title LIKE ?
       )`);
       const searchTerm = `%${options.search}%`;
-      params.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
+      params.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
     }
 
     if (options.tag_name) {

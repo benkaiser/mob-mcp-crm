@@ -224,13 +224,13 @@ function importParsedData(db: Database.Database, userId: string, data: MonicaPar
     // ── Step 1: Import contacts (skip partial contacts) ──
     const insertContact = db.prepare(`
       INSERT INTO contacts (
-        id, user_id, first_name, last_name, nickname, gender,
+        id, user_id, first_name, middle_name, last_name, nickname, gender,
         birthday_mode, birthday_date, birthday_month, birthday_day, birthday_year_approximate,
         status, is_favorite,
         met_at_location, met_description,
         job_title, company,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     for (const mc of data.contacts) {
@@ -288,7 +288,7 @@ function importParsedData(db: Database.Database, userId: string, data: MonicaPar
 
       try {
         insertContact.run(
-          mobId, userId, mc.first_name, mc.last_name, mc.nickname, gender,
+          mobId, userId, mc.first_name, mc.middle_name ?? null, mc.last_name, mc.nickname, gender,
           birthdayMode, birthdayDate, birthdayMonth, birthdayDay, birthdayYearApproximate,
           status, mc.is_starred ? 1 : 0,
           null, metDescription,

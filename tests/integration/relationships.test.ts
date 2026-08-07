@@ -91,6 +91,18 @@ describe('RelationshipService', () => {
     expect(inverseRels[0].related_contact_id).toBe(contactA);
   });
 
+  it('should include middle names in contact_name and related_contact_name', () => {
+    const contactC = createTestContact(db, userId, { firstName: 'John', middleName: 'Jeffery', lastName: 'Smith' });
+    service.add({
+      contact_id: contactC,
+      related_contact_id: contactB,
+      relationship_type: 'friend',
+    });
+
+    const rels = service.listByContact(contactC);
+    expect(rels[0].contact_name).toBe('John Jeffery Smith');
+  });
+
   it('should create symmetric relationships', () => {
     service.add({
       contact_id: contactA,

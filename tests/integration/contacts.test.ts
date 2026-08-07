@@ -105,6 +105,7 @@ describe('ContactService', () => {
 
       expect(contact.id).toBeDefined();
       expect(contact.first_name).toBe('Alice');
+      expect(contact.middle_name).toBeNull();
       expect(contact.last_name).toBeNull();
       expect(contact.status).toBe('active');
       expect(contact.is_favorite).toBe(false);
@@ -114,6 +115,7 @@ describe('ContactService', () => {
     it('should create a contact with all fields', () => {
       const contact = service.create(userId, {
         first_name: 'Alice',
+        middle_name: 'Marie',
         last_name: 'Smith',
         nickname: 'Ali',
         maiden_name: 'Johnson',
@@ -133,6 +135,7 @@ describe('ContactService', () => {
       });
 
       expect(contact.first_name).toBe('Alice');
+      expect(contact.middle_name).toBe('Marie');
       expect(contact.last_name).toBe('Smith');
       expect(contact.nickname).toBe('Ali');
       expect(contact.maiden_name).toBe('Johnson');
@@ -244,6 +247,13 @@ describe('ContactService', () => {
       expect(updated!.company).toBe('Acme Corp');
       expect(updated!.is_favorite).toBe(true);
       expect(updated!.first_name).toBe('Alice'); // unchanged
+    });
+
+    it('should update the middle_name field', () => {
+      const created = service.create(userId, { first_name: 'Alice' });
+      const updated = service.update(userId, created.id, { middle_name: 'Marie' });
+
+      expect(updated!.middle_name).toBe('Marie');
     });
 
     it('should update status to archived', () => {
@@ -373,6 +383,20 @@ describe('ContactService', () => {
       expect(result.total).toBe(1);
       expect(result.data[0].first_name).toBe('Alice');
       expect(result.data[0].last_name).toBe('Anderson');
+    });
+
+    it('should search by middle name', () => {
+      service.create(userId, { first_name: 'Zoe', middle_name: 'Unique', last_name: 'Zephyr' });
+      const result = service.list(userId, { search: 'Unique' });
+      expect(result.total).toBe(1);
+      expect(result.data[0].first_name).toBe('Zoe');
+    });
+
+    it('should search by full name including middle name', () => {
+      service.create(userId, { first_name: 'John', middle_name: 'Jeffery', last_name: 'Doe' });
+      const result = service.list(userId, { search: 'John Jeffery Doe' });
+      expect(result.total).toBe(1);
+      expect(result.data[0].first_name).toBe('John');
     });
 
     it('should search by company', () => {

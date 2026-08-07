@@ -15,7 +15,7 @@ import { runMigrations } from '../db/migrator.js';
 import { AccountService } from '../auth/accounts.js';
 import { OAuthService } from '../auth/oauth.js';
 import { McpTokenVerifier } from '../auth/mcp-token-verifier.js';
-import { generateId } from '../utils.js';
+import { generateId, formatContactName } from '../utils.js';
 import { ReminderService } from '../services/reminders.js';
 import { ForgetfulTemplate } from '../db/forgetful-template.js';
 import { UserSettingsService } from '../services/settings.js';
@@ -974,8 +974,8 @@ export function createServer(config: ServerConfig): {
       return;
     }
 
-    const contact = db.prepare('SELECT first_name, last_name FROM contacts WHERE id = ?').get(reminder.contact_id) as { first_name: string; last_name: string | null } | undefined;
-    const contactName = contact ? [contact.first_name, contact.last_name].filter(Boolean).join(' ') : 'Unknown';
+    const contact = db.prepare('SELECT first_name, middle_name, last_name FROM contacts WHERE id = ?').get(reminder.contact_id) as { first_name: string; middle_name: string | null; last_name: string | null } | undefined;
+    const contactName = contact ? formatContactName(contact) : 'Unknown';
     const today = new Date().toISOString().split('T')[0];
     const isOverdue = reminder.status === 'active' && reminder.reminder_date < today;
 
@@ -1264,7 +1264,7 @@ export function createServer(config: ServerConfig): {
             // Find active reminders that are overdue, due today, or upcoming
             // within the furthest configured offset window.
             const candidateReminders = db.prepare(`
-              SELECT r.*, c.first_name, c.last_name
+              SELECT r.*, c.first_name, c.middle_name, c.last_name
               FROM reminders r
               JOIN contacts c ON r.contact_id = c.id
               WHERE r.deleted_at IS NULL AND c.deleted_at IS NULL
@@ -1282,7 +1282,7 @@ export function createServer(config: ServerConfig): {
               // Skip future reminders that don't fall on a configured offset.
               if (daysUntil > 0 && !offsets.includes(daysUntil)) continue;
 
-              const contactName = [reminder.first_name, reminder.last_name].filter(Boolean).join(' ');
+              const contactName = formatContactName(reminder);
               let title: string;
               if (daysUntil < 0) {
                 title = `Overdue: ${reminder.title}`;

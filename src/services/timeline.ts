@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { formatContactName } from '../utils.js';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -104,14 +105,14 @@ export class TimelineService {
     // Contact creation
     if (!options.entry_type || options.entry_type === 'contact_created') {
       const contact = this.db.prepare(
-        'SELECT id, first_name, last_name, created_at FROM contacts WHERE id = ? AND deleted_at IS NULL'
+        'SELECT id, first_name, middle_name, last_name, created_at FROM contacts WHERE id = ? AND deleted_at IS NULL'
       ).get(contactId) as any;
 
       if (contact) {
         entries.push({
           type: 'contact_created',
           id: contact.id,
-          title: `Contact created: ${contact.first_name}${contact.last_name ? ' ' + contact.last_name : ''}`,
+          title: `Contact created: ${formatContactName(contact)}`,
           description: null,
           occurred_at: contact.created_at,
           metadata: {},

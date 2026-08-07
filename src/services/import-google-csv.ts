@@ -97,11 +97,13 @@ function buildContact(get: (col: string) => string): NormalizedContact | null {
 
   const given = get('Given Name') || get('First Name');
   const family = get('Family Name') || get('Last Name');
+  const additional = get('Additional Name') || get('Middle Name');
   const nickname = get('Nickname');
   const fullName = get('Name');
 
   if (given) contact.first_name = given;
   if (family) contact.last_name = family;
+  if (additional) contact.middle_name = additional;
 
   if (!contact.first_name && fullName) {
     const parts = fullName.trim().split(/\s+/);
