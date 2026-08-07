@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { generateId } from '../utils.js';
+import { generateId, formatContactName } from '../utils.js';
 import { recordAudit } from './audit-helper.js';
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -293,7 +293,7 @@ export class GiftService {
 
     // Data
     const rows = this.db.prepare(
-      `SELECT g.*, c.first_name, c.last_name FROM gifts g JOIN contacts c ON g.contact_id = c.id WHERE ${whereClause} ORDER BY ${orderBy} LIMIT ? OFFSET ?`
+      `SELECT g.*, c.first_name, c.middle_name, c.last_name FROM gifts g JOIN contacts c ON g.contact_id = c.id WHERE ${whereClause} ORDER BY ${orderBy} LIMIT ? OFFSET ?`
     ).all(...params, perPage, offset) as any[];
 
     const data = rows.map((row) => ({
@@ -308,7 +308,7 @@ export class GiftService {
       direction: row.direction,
       date: row.date,
       contact_id: row.contact_id,
-      contact_name: [row.first_name, row.last_name].filter(Boolean).join(' '),
+      contact_name: formatContactName(row),
     }));
 
     // Summary aggregation (across ALL matching, not just current page)

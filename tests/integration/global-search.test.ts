@@ -90,6 +90,14 @@ describe('SearchService.globalSearch', () => {
     expect(result.results.contacts[0].title).toContain('Alice');
   });
 
+  it('should search contacts by middle name and include it in the title', () => {
+    createTestContact(db, userId, { firstName: 'John', middleName: 'Jeffery', lastName: 'Smith' });
+
+    const result = searchService.globalSearch(userId, { query: 'Jeffery' });
+    expect(result.results.contacts).toHaveLength(1);
+    expect(result.results.contacts[0].title).toBe('John Jeffery Smith');
+  });
+
   it('should search contacts by company', () => {
     db.prepare('UPDATE contacts SET company = ? WHERE id = ?').run('Acme Corp', contactId);
 
@@ -140,6 +148,14 @@ describe('SearchService.globalSearch', () => {
     const result = searchService.globalSearch(userId, { query: 'Test' });
     expect(result.results.notes[0].contact_name).toBe('Alice Smith');
     expect(result.results.notes[0].contact_id).toBe(contactId);
+  });
+
+  it('should include the middle name in contact_name for notes', () => {
+    const middleContactId = createTestContact(db, userId, { firstName: 'John', middleName: 'Jeffery', lastName: 'Smith' });
+    noteService.create(userId, { contact_id: middleContactId, body: 'Middle name note content' });
+
+    const result = searchService.globalSearch(userId, { query: 'Middle' });
+    expect(result.results.notes[0].contact_name).toBe('John Jeffery Smith');
   });
 
   it('should search life events', () => {

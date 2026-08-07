@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { generateId } from '../utils.js';
+import { generateId, formatContactName } from '../utils.js';
 import { recordAudit } from './audit-helper.js';
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -216,7 +216,7 @@ export class NoteService {
     ).get(...params) as any;
 
     const rows = this.db.prepare(
-      `SELECT n.*, c.first_name, c.last_name FROM notes n ${joinClause} WHERE ${whereClause} ORDER BY n.${sortBy} ${sortOrder} LIMIT ? OFFSET ?`
+      `SELECT n.*, c.first_name, c.middle_name, c.last_name FROM notes n ${joinClause} WHERE ${whereClause} ORDER BY n.${sortBy} ${sortOrder} LIMIT ? OFFSET ?`
     ).all(...params, perPage, offset) as any[];
 
     const BODY_LIMIT = 500;
@@ -231,7 +231,7 @@ export class NoteService {
         created_at: row.created_at,
         updated_at: row.updated_at,
         contact_id: row.contact_id,
-        contact_name: [row.first_name, row.last_name].filter(Boolean).join(' '),
+        contact_name: formatContactName(row),
       };
     });
 

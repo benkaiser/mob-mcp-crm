@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { generateId } from '../utils.js';
+import { generateId, formatContactName } from '../utils.js';
 import { UserSettingsService } from './settings.js';
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -139,7 +139,7 @@ export class NotificationService {
 
     // Get contacts with birthday info
     const contacts = this.db.prepare(`
-      SELECT id, first_name, last_name, birthday_mode, birthday_date, birthday_month, birthday_day
+      SELECT id, first_name, middle_name, last_name, birthday_mode, birthday_date, birthday_month, birthday_day
       FROM contacts
       WHERE user_id = ? AND deleted_at IS NULL
         AND birthday_mode IS NOT NULL
@@ -176,7 +176,7 @@ export class NotificationService {
         `).get(userId, contact.id, diffDays === 0 ? '%today%' : `%${diffDays} day%`);
 
         if (!existing) {
-          const name = contact.first_name + (contact.last_name ? ' ' + contact.last_name : '');
+          const name = formatContactName(contact);
           const notification = this.create(userId, {
             type: 'birthday',
             title: `${name}'s birthday is ${diffDays === 0 ? 'today' : `in ${diffDays} day${diffDays > 1 ? 's' : ''}`}!`,

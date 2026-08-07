@@ -42,20 +42,22 @@ export function createTestUser(db: Database.Database, overrides: Partial<{
  */
 export function createTestContact(db: Database.Database, userId: string, overrides: Partial<{
   firstName: string;
+  middleName: string;
   lastName: string;
   status: string;
   isFavorite: boolean;
 }> = {}): string {
   const id = Math.random().toString(36).substring(2, 18);
   const firstName = overrides.firstName || 'Jane';
+  const middleName = overrides.middleName ?? null;
   const lastName = overrides.lastName || 'Doe';
   const status = overrides.status || 'active';
   const isFavorite = overrides.isFavorite ? 1 : 0;
 
   db.prepare(`
-    INSERT INTO contacts (id, user_id, first_name, last_name, status, is_favorite)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(id, userId, firstName, lastName, status, isFavorite);
+    INSERT INTO contacts (id, user_id, first_name, middle_name, last_name, status, is_favorite)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(id, userId, firstName, middleName, lastName, status, isFavorite);
 
   return id;
 }

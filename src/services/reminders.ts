@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { generateId } from '../utils.js';
+import { generateId, formatContactName } from '../utils.js';
 import { recordAudit } from './audit-helper.js';
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -296,7 +296,7 @@ export class ReminderService {
     const whereClause = conditions.join(' AND ');
 
     const rows = this.db.prepare(`
-      SELECT r.*, c.first_name, c.last_name
+      SELECT r.*, c.first_name, c.middle_name, c.last_name
       FROM reminders r
       JOIN contacts c ON r.contact_id = c.id
       WHERE ${whereClause}
@@ -308,7 +308,7 @@ export class ReminderService {
       const todayMidnight = new Date(todayStr + 'T00:00:00');
       const diffMs = reminderDate.getTime() - todayMidnight.getTime();
       const daysUntil = Math.round(diffMs / 86400000);
-      const contactName = [row.first_name, row.last_name].filter(Boolean).join(' ');
+      const contactName = formatContactName(row);
 
       return {
         id: row.id,

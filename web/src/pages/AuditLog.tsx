@@ -105,7 +105,7 @@ function summaryFor(entry: AuditLogEntry): string | null {
 
 function readableName(values: Record<string, unknown> | null): string | null {
   if (!values) return null;
-  if (typeof values.first_name === 'string') return [values.first_name, values.last_name].filter(Boolean).join(' ');
+  if (typeof values.first_name === 'string') return [values.first_name, values.middle_name, values.last_name].filter(Boolean).join(' ');
   for (const key of ['title', 'name', 'field_name', 'value', 'relationship_type']) {
     if (typeof values[key] === 'string' && values[key]) return String(values[key]);
   }

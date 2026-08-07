@@ -224,7 +224,7 @@ export function EntityDetail({
           apiGet<Record_>(`/contacts/${contactId}`)
             .then((c) => {
               if (cancelled) return;
-              const name = [c.data?.first_name, c.data?.last_name]
+              const name = [c.data?.first_name, c.data?.middle_name, c.data?.last_name]
                 .filter((v) => typeof v === 'string' && v)
                 .join(' ');
               setContactName(name || null);
@@ -241,7 +241,7 @@ export function EntityDetail({
                 .then((c) => ({
                   id: pid,
                   name:
-                    [c.data?.first_name, c.data?.last_name]
+                    [c.data?.first_name, c.data?.middle_name, c.data?.last_name]
                       .filter((v) => typeof v === 'string' && v)
                       .join(' ') || pid,
                 }))
