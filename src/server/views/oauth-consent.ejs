@@ -1,15 +1,18 @@
 <%
 const redirectLabel = String(redirectUri);
 const clientLabel = String(clientId);
+const escapeHtml = (v) => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const content = `
   <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:0.9rem;margin-bottom:1rem;font-size:0.95rem;">
     <strong>Confirm MCP client access</strong>
     <p style="margin:0.5rem 0 0;">Mob will authorize this client and redirect your browser/app to:</p>
-    <code style="display:block;margin-top:0.5rem;font-size:0.8rem;word-break:break-all;">${redirectLabel.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code>
+    <code style="display:block;margin-top:0.5rem;font-size:0.8rem;word-break:break-all;">${escapeHtml(redirectLabel)}</code>
   </div>
   <dl style="font-size:0.9rem;margin-bottom:1rem;">
+    ${clientName ? `<dt style="font-weight:600;color:#555;">Client name</dt>
+    <dd style="word-break:break-all;margin:0 0 0.7rem;">${escapeHtml(clientName)}</dd>` : ''}
     <dt style="font-weight:600;color:#555;">Client ID</dt>
-    <dd style="word-break:break-all;margin:0 0 0.7rem;">${clientLabel.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</dd>
+    <dd style="word-break:break-all;margin:0 0 0.7rem;">${escapeHtml(clientLabel)}</dd>
   </dl>
   <form method="POST" action="${authorizeUrl}">
     <input type="hidden" name="confirm_authorize" value="1">

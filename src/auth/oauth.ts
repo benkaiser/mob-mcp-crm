@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import Database from 'better-sqlite3';
 import { generateId } from '../utils.js';
 import { AccountService } from './accounts.js';
@@ -21,6 +21,92 @@ export interface TokenRecord {
   clientId: string;
   createdAt: number;
   expiresAt: number;
+}
+
+/** Client metadata as submitted to the dynamic registration endpoint (RFC 7591). */
+export interface ClientRegistrationRequest {
+  redirect_uris?: unknown;
+  client_name?: unknown;
+  grant_types?: unknown;
+  response_types?: unknown;
+  token_endpoint_auth_method?: unknown;
+  scope?: unknown;
+  client_uri?: unknown;
+  logo_uri?: unknown;
+  software_id?: unknown;
+  software_version?: unknown;
+}
+
+/** A registered OAuth client, as stored by the server. */
+export interface RegisteredClient {
+  clientId: string;
+  clientName: string | null;
+  redirectUris: string[];
+  grantTypes: string[];
+  responseTypes: string[];
+  tokenEndpointAuthMethod: string;
+  scope: string | null;
+  clientUri: string | null;
+  logoUri: string | null;
+  softwareId: string | null;
+  softwareVersion: string | null;
+  createdAt: number;
+  hasSecret: boolean;
+}
+
+/** RFC 7591 registration error, carrying the OAuth error code to return. */
+export class ClientRegistrationError extends Error {
+  constructor(public readonly code: 'invalid_redirect_uri' | 'invalid_client_metadata', message: string) {
+    super(message);
+    this.name = 'ClientRegistrationError';
+  }
+}
+
+const SUPPORTED_GRANT_TYPES = ['authorization_code'];
+const SUPPORTED_RESPONSE_TYPES = ['code'];
+const SUPPORTED_AUTH_METHODS = ['none', 'client_secret_post', 'client_secret_basic'];
+
+function hashSecret(secret: string): string {
+  return createHash('sha256').update(secret).digest('hex');
+}
+
+function asStringArray(value: unknown, field: string): string[] | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (!Array.isArray(value) || value.some((v) => typeof v !== 'string')) {
+    throw new ClientRegistrationError('invalid_client_metadata', `${field} must be an array of strings`);
+  }
+  return value as string[];
+}
+
+function asOptionalString(value: unknown, field: string): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'string') {
+    throw new ClientRegistrationError('invalid_client_metadata', `${field} must be a string`);
+  }
+  return value;
+}
+
+/**
+ * Redirect URIs must be absolute. Loopback HTTP and custom app schemes are
+ * allowed (native MCP clients rely on both); other plain-HTTP hosts and
+ * script-capable schemes are not.
+ */
+const DISALLOWED_REDIRECT_SCHEMES = ['javascript:', 'data:', 'vbscript:', 'file:', 'blob:'];
+
+function isValidRedirectUri(value: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  if (url.hash) return false;
+  if (DISALLOWED_REDIRECT_SCHEMES.includes(url.protocol.toLowerCase())) return false;
+  if (url.protocol === 'http:') {
+    return url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]' || url.hostname === '::1';
+  }
+  // https: plus custom app schemes such as `myapp://callback`.
+  return /^[a-z][a-z0-9+.-]*:$/.test(url.protocol.toLowerCase());
 }
 
 // ─── PKCE Helpers ───────────────────────────────────────────────
@@ -52,6 +138,141 @@ export class OAuthService {
     private db: Database.Database,
     private accounts: AccountService,
   ) {}
+
+  /**
+   * Register a client dynamically (RFC 7591). MCP clients call this before
+   * starting the authorization flow, since they can't be pre-provisioned on a
+   * self-hosted server. Returns the client information response to send back.
+   */
+  registerClient(metadata: ClientRegistrationRequest): Record<string, unknown> {
+    const redirectUris = asStringArray(metadata.redirect_uris, 'redirect_uris');
+    if (!redirectUris || redirectUris.length === 0) {
+      throw new ClientRegistrationError('invalid_redirect_uri', 'redirect_uris is required and must contain at least one URI');
+    }
+    for (const uri of redirectUris) {
+      if (!isValidRedirectUri(uri)) {
+        throw new ClientRegistrationError('invalid_redirect_uri', `Invalid redirect_uri: ${uri}`);
+      }
+    }
+
+    // Clients commonly request `refresh_token` alongside `authorization_code` as a
+    // matter of course (e.g. Codex, pi-mcp-adapter), even though we only issue
+    // authorization codes. Per RFC 7591 §3.2.1 the server may negotiate down to
+    // what it actually supports rather than rejecting the request outright; we
+    // only reject when the request contains nothing we can honour at all.
+    const requestedGrantTypes = asStringArray(metadata.grant_types, 'grant_types') ?? ['authorization_code'];
+    const grantTypes = requestedGrantTypes.filter((grant) => SUPPORTED_GRANT_TYPES.includes(grant));
+    if (grantTypes.length === 0) {
+      throw new ClientRegistrationError('invalid_client_metadata', `Unsupported grant_type(s): ${requestedGrantTypes.join(', ')}`);
+    }
+
+    const responseTypes = asStringArray(metadata.response_types, 'response_types') ?? ['code'];
+    for (const responseType of responseTypes) {
+      if (!SUPPORTED_RESPONSE_TYPES.includes(responseType)) {
+        throw new ClientRegistrationError('invalid_client_metadata', `Unsupported response_type: ${responseType}`);
+      }
+    }
+
+    const authMethod = asOptionalString(metadata.token_endpoint_auth_method, 'token_endpoint_auth_method') ?? 'none';
+    if (!SUPPORTED_AUTH_METHODS.includes(authMethod)) {
+      throw new ClientRegistrationError('invalid_client_metadata', `Unsupported token_endpoint_auth_method: ${authMethod}`);
+    }
+
+    const clientName = asOptionalString(metadata.client_name, 'client_name');
+    const clientId = `mcp_${randomBytes(16).toString('hex')}`;
+    const clientSecret = authMethod === 'none' ? null : randomBytes(32).toString('hex');
+    const createdAt = Date.now();
+
+    this.db.prepare(`
+      INSERT INTO oauth_clients (
+        client_id, client_secret_hash, client_name, redirect_uris, grant_types,
+        response_types, token_endpoint_auth_method, scope, client_uri, logo_uri,
+        software_id, software_version, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      clientId,
+      clientSecret ? hashSecret(clientSecret) : null,
+      clientName,
+      JSON.stringify(redirectUris),
+      JSON.stringify(grantTypes),
+      JSON.stringify(responseTypes),
+      authMethod,
+      asOptionalString(metadata.scope, 'scope'),
+      asOptionalString(metadata.client_uri, 'client_uri'),
+      asOptionalString(metadata.logo_uri, 'logo_uri'),
+      asOptionalString(metadata.software_id, 'software_id'),
+      asOptionalString(metadata.software_version, 'software_version'),
+      createdAt,
+    );
+
+    const response: Record<string, unknown> = {
+      client_id: clientId,
+      client_id_issued_at: Math.floor(createdAt / 1000),
+      redirect_uris: redirectUris,
+      grant_types: grantTypes,
+      response_types: responseTypes,
+      token_endpoint_auth_method: authMethod,
+    };
+    if (clientName) response.client_name = clientName;
+    if (clientSecret) {
+      response.client_secret = clientSecret;
+      // Secrets don't expire; 0 is the RFC 7591 value for "never".
+      response.client_secret_expires_at = 0;
+    }
+    return response;
+  }
+
+  /**
+   * Look up a dynamically registered client. Returns null for unknown clients
+   * (which are still accepted, for backwards compatibility with clients that
+   * use a pre-agreed client_id and never registered).
+   */
+  getClient(clientId: string): RegisteredClient | null {
+    const row = this.db.prepare(`
+      SELECT client_id, client_secret_hash, client_name, redirect_uris, grant_types,
+             response_types, token_endpoint_auth_method, scope, client_uri, logo_uri,
+             software_id, software_version, created_at
+      FROM oauth_clients WHERE client_id = ?
+    `).get(clientId) as Record<string, any> | undefined;
+
+    if (!row) return null;
+
+    return {
+      clientId: row.client_id,
+      clientName: row.client_name,
+      redirectUris: JSON.parse(row.redirect_uris) as string[],
+      grantTypes: JSON.parse(row.grant_types) as string[],
+      responseTypes: JSON.parse(row.response_types) as string[],
+      tokenEndpointAuthMethod: row.token_endpoint_auth_method,
+      scope: row.scope,
+      clientUri: row.client_uri,
+      logoUri: row.logo_uri,
+      softwareId: row.software_id,
+      softwareVersion: row.software_version,
+      createdAt: row.created_at,
+      hasSecret: Boolean(row.client_secret_hash),
+    };
+  }
+
+  /** Verify a registered client's secret (constant-time comparison of hashes). */
+  verifyClientSecret(clientId: string, secret: string): boolean {
+    const row = this.db.prepare('SELECT client_secret_hash FROM oauth_clients WHERE client_id = ?')
+      .get(clientId) as { client_secret_hash: string | null } | undefined;
+    if (!row?.client_secret_hash) return false;
+    const expected = Buffer.from(row.client_secret_hash, 'hex');
+    const actual = Buffer.from(hashSecret(secret), 'hex');
+    return expected.length === actual.length && timingSafeEqual(expected, actual);
+  }
+
+  /**
+   * Check that a redirect_uri is allowed for a client. Unregistered clients are
+   * unconstrained (legacy behaviour); registered ones must use an exact match.
+   */
+  isRedirectUriAllowed(clientId: string, redirectUri: string): boolean {
+    const client = this.getClient(clientId);
+    if (!client) return true;
+    return client.redirectUris.includes(redirectUri);
+  }
 
   /**
    * Generate an authorization code after successful authentication.
