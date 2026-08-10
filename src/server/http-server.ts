@@ -20,7 +20,7 @@ import { generateId, formatContactName } from '../utils.js';
 import { ReminderService } from '../services/reminders.js';
 import { ForgetfulTemplate } from '../db/forgetful-template.js';
 import { UserSettingsService } from '../services/settings.js';
-import { EmailService, createEmailServiceFromEnv, renderActionEmail } from '../services/email.js';
+import { EmailService, createEmailServiceFromEnv, renderActionEmail, renderEmailHtml } from '../services/email.js';
 import { PushNotificationService } from '../services/push-notifications.js';
 import { NotificationService } from '../services/notifications.js';
 import { SessionService } from '../services/sessions.js';
@@ -38,6 +38,8 @@ export interface ServerConfig {
   baseUrl: string;
   /** Hosted/production mode. When true, plan/quota gating is active. Self-hosted (false) = everything unlimited. */
   hosted?: boolean;
+  /** Optional email service override (primarily for tests). Defaults to one built from env. */
+  emailService?: EmailService;
 }
 
 export function createServer(config: ServerConfig): {
@@ -161,7 +163,7 @@ export function createServer(config: ServerConfig): {
   const tokenService = new ApiTokenService(db);
   const webhookService = new WebhookService(db);
   const settingsService = new UserSettingsService(db);
-  const emailService = createEmailServiceFromEnv();
+  const emailService = config.emailService ?? createEmailServiceFromEnv();
   const forgetfulWebSessions = new Map<string, { userId: string; userName: string; email: string }>();
   const cookieSecure = config.baseUrl.startsWith('https://');
 
@@ -244,6 +246,32 @@ export function createServer(config: ServerConfig): {
       await emailService.sendMail({ to: user.email, subject: 'Verify your Mob email', text, html });
     } catch (err) {
       console.error('Failed to send verification email:', err);
+    }
+  }
+
+  // Internal notification to the operator whenever a new account is created, so
+  // signups can be eyeballed for traction / bot spam. Fixed subject so the
+  // notifications thread together in the mailbox. Fire-and-forget: never blocks
+  // or fails signup, and no-ops when SMTP is not configured.
+  const SIGNUP_NOTIFY_TO = 'mobnewusersignup@kaiser.lol';
+  async function sendSignupNotification(user: { name: string; email: string }): Promise<void> {
+    if (!emailService.enabled) return;
+    const text = [
+      'A new user just signed up for Mob.',
+      '',
+      `Name:  ${user.name}`,
+      `Email: ${user.email}`,
+      `When:  ${new Date().toISOString()}`,
+    ].join('\n');
+    try {
+      await emailService.sendMail({
+        to: SIGNUP_NOTIFY_TO,
+        subject: 'New Mob signup',
+        text,
+        html: renderEmailHtml('New Mob signup', text),
+      });
+    } catch (err) {
+      console.error('Failed to send signup notification:', err);
     }
   }
 
@@ -386,6 +414,7 @@ export function createServer(config: ServerConfig): {
       try {
         const user = await accountService.createAccount({ name, email, password, timezone, plan: config.hosted ? 'free' : 'unlimited' });
         await sendVerificationEmail(user, accountService.createEmailVerificationToken(user.id));
+        void sendSignupNotification(user);
 
         // If we're in an OAuth flow, issue code and redirect
         if (isOAuthRegistration) {
@@ -425,6 +454,7 @@ export function createServer(config: ServerConfig): {
       }
       const user = await accountService.createAccount({ name, email, password, plan: config.hosted ? 'free' : 'unlimited' });
       await sendVerificationEmail(user, accountService.createEmailVerificationToken(user.id));
+      void sendSignupNotification(user);
       res.status(201).json(user);
     } catch (err: any) {
       console.error('Registration error:', err);
