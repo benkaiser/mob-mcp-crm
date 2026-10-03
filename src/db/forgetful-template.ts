@@ -57,7 +57,10 @@ export class ForgetfulTemplate {
     db.pragma('journal_mode = memory');
     db.pragma('foreign_keys = ON');
     db.pragma('synchronous = NORMAL');
-    db.pragma('cache_size = -64000');
+    // Deliberately small: every concurrent demo session owns one of these and
+    // the whole database already lives in memory, so a large page cache only
+    // inflates per-session overhead.
+    db.pragma('cache_size = -2000');
 
     // Remap the template userId to the new session userId.
     // Must disable foreign keys temporarily to avoid constraint issues during update.

@@ -59,8 +59,67 @@ export function createServer(config: ServerConfig): {
 
   // Forgetful mode: pre-build a template DB and track per-session clones
   const forgetfulTemplate = config.forgetful ? new ForgetfulTemplate() : null;
-  // Map MCP sessionId → { userId, db } for forgetful mode (replaces OAuth)
-  const forgetfulSessions = new Map<string, { userId: string; db: Database.Database }>();
+
+  // ─── Forgetful session memory budget ──────────────────────────
+  // Every forgetful session owns a live in-memory SQLite clone (plus, for MCP,
+  // a McpServer instance). Without bounds these accumulate for the lifetime of
+  // the process, so the demo deployment's RSS grows until the container is
+  // OOM-killed. Sessions are therefore capped, idle-expired, and hard-expired.
+  const FORGETFUL_MAX_SESSIONS = Math.max(1, Number(process.env.MOB_FORGETFUL_MAX_SESSIONS ?? 50));
+  const FORGETFUL_IDLE_MS = Math.max(60_000, Number(process.env.MOB_FORGETFUL_IDLE_MS ?? 30 * 60 * 1000));
+  const FORGETFUL_MAX_AGE_MS = Math.max(60_000, Number(process.env.MOB_FORGETFUL_MAX_AGE_MS ?? 2 * 60 * 60 * 1000));
+  const SESSION_SWEEP_MS = 5 * 60 * 1000;
+
+  interface ForgetfulSession {
+    userId: string;
+    db: Database.Database;
+    createdAt: number;
+    lastSeenAt: number;
+  }
+
+  // Map session key → cloned DB. MCP sessions key on the MCP session ID; web
+  // sessions key on `web-${userId}`.
+  const forgetfulSessions = new Map<string, ForgetfulSession>();
+
+  /** Register a freshly cloned session DB, evicting the oldest if over cap. */
+  function addForgetfulSession(key: string, userId: string, sessionDb: Database.Database): void {
+    const now = Date.now();
+    forgetfulSessions.set(key, { userId, db: sessionDb, createdAt: now, lastSeenAt: now });
+    while (forgetfulSessions.size > FORGETFUL_MAX_SESSIONS) {
+      let oldestKey: string | null = null;
+      let oldestSeen = Infinity;
+      for (const [k, s] of forgetfulSessions) {
+        if (k !== key && s.lastSeenAt < oldestSeen) {
+          oldestSeen = s.lastSeenAt;
+          oldestKey = k;
+        }
+      }
+      if (!oldestKey) break;
+      dropForgetfulSession(oldestKey);
+    }
+  }
+
+  /** Mark a session as recently used so the sweeper doesn't reclaim it. */
+  function touchForgetfulSession(key: string): void {
+    const session = forgetfulSessions.get(key);
+    if (session) session.lastSeenAt = Date.now();
+  }
+
+  /** Close a session's DB, drop its web token, and tear down its MCP transport. */
+  function dropForgetfulSession(key: string): void {
+    const session = forgetfulSessions.get(key);
+    if (!session) return;
+    forgetfulSessions.delete(key);
+    try { session.db.close(); } catch { /* already closed */ }
+    for (const [token, data] of forgetfulWebSessions) {
+      if (data.userId === session.userId) forgetfulWebSessions.delete(token);
+    }
+    const transport = transports[key];
+    if (transport) {
+      delete transports[key];
+      try { transport.close(); } catch { /* already closing */ }
+    }
+  }
 
   // Initialize auth services
   const accountService = new AccountService(db);
@@ -77,6 +136,7 @@ export function createServer(config: ServerConfig): {
     // Existing session - inject auth from stored session
     if (sessionId && forgetfulSessions.has(sessionId)) {
       const session = forgetfulSessions.get(sessionId)!;
+      touchForgetfulSession(sessionId);
       (req as any).auth = {
         token: 'forgetful', clientId: 'forgetful', scopes: [],
         expiresAt: Infinity, extra: { userId: session.userId },
@@ -126,6 +186,11 @@ export function createServer(config: ServerConfig): {
 
   // Track active MCP sessions
   const transports: Record<string, StreamableHTTPServerTransport> = {};
+  // Last-activity timestamps for persistent-mode MCP sessions. Each transport
+  // retains a full McpServer, so sessions abandoned without a DELETE /mcp are
+  // swept rather than held for the life of the process.
+  const transportLastSeen = new Map<string, number>();
+  const TRANSPORT_IDLE_MS = Math.max(60_000, Number(process.env.MOB_MCP_IDLE_MS ?? 60 * 60 * 1000));
 
   // Durable web session store (persistent mode). Forgetful mode keeps an
   // ephemeral in-memory map because its users live in per-session cloned DBs,
@@ -297,7 +362,17 @@ export function createServer(config: ServerConfig): {
 
   // ─── Health Check ──────────────────────────────────────────
   app.get('/health', (_req, res) => {
-    res.json({ status: 'ok', mode: config.forgetful ? 'forgetful' : 'persistent' });
+    const mem = process.memoryUsage();
+    res.json({
+      status: 'ok',
+      mode: config.forgetful ? 'forgetful' : 'persistent',
+      sessions: {
+        mcp: Object.keys(transports).length,
+        forgetful: forgetfulSessions.size,
+        forgetfulMax: config.forgetful ? FORGETFUL_MAX_SESSIONS : null,
+      },
+      memory: { rssMb: Math.round(mem.rss / 1048576), heapUsedMb: Math.round(mem.heapUsed / 1048576) },
+    });
   });
 
   // ─── OAuth Protected Resource Metadata ───────────────────
@@ -808,14 +883,23 @@ export function createServer(config: ServerConfig): {
 
   app.get('/web/login', (req, res) => {
     if (config.forgetful) {
-      // Auto-login in forgetful mode
+      // Auto-login in forgetful mode. Reuse the caller's existing demo session
+      // if they already have one - otherwise every page load, bot hit, or
+      // refresh would clone another in-memory database that nothing frees.
+      const existingToken = parseCookie(req.headers.cookie ?? '', 'mob_session');
+      const existing = getWebSession(existingToken);
+      if (existing && forgetfulSessions.has(`web-${existing.userId}`)) {
+        touchForgetfulSession(`web-${existing.userId}`);
+        res.redirect('/app/');
+        return;
+      }
+
       const tempId = generateId();
 
       // Clone template DB for this web session
       const clonedDb = forgetfulTemplate!.clone(tempId);
       // Store in forgetfulSessions with a web-specific key
-      const webSessionKey = `web-${tempId}`;
-      forgetfulSessions.set(webSessionKey, { userId: tempId, db: clonedDb });
+      addForgetfulSession(`web-${tempId}`, tempId, clonedDb);
 
       const token = setWebSession({ userId: tempId, userName: 'Bluey Heeler', email: `bluey-${tempId}@heeler.family` }, req);
       res.setHeader('Set-Cookie', sessionCookie(token));
@@ -861,6 +945,12 @@ export function createServer(config: ServerConfig): {
   app.get('/web/logout', (req, res) => {
     const sessionToken = parseCookie(req.headers.cookie ?? '', 'mob_session');
     if (sessionToken) {
+      // Release the session's cloned demo database before dropping the token,
+      // otherwise the clone is orphaned in forgetfulSessions forever.
+      if (config.forgetful) {
+        const session = forgetfulWebSessions.get(sessionToken);
+        if (session) dropForgetfulSession(`web-${session.userId}`);
+      }
       deleteWebSession(sessionToken);
     }
     res.setHeader('Set-Cookie', clearSessionCookie());
@@ -886,6 +976,7 @@ export function createServer(config: ServerConfig): {
       const session = token ? forgetfulWebSessions.get(token) : undefined;
       const clone = session ? forgetfulSessions.get(`web-${session.userId}`)?.db : undefined;
       if (clone) {
+        touchForgetfulSession(`web-${session!.userId}`);
         forgetfulDbStore.run(clone, next);
       } else {
         next();
@@ -1156,6 +1247,7 @@ export function createServer(config: ServerConfig): {
 
     // Existing session - reuse its transport
     if (sessionId && transports[sessionId]) {
+      transportLastSeen.set(sessionId, Date.now());
       await transports[sessionId].handleRequest(req, res, req.body);
       return;
     }
@@ -1175,7 +1267,10 @@ export function createServer(config: ServerConfig): {
           transports[sid] = transport;
           // In forgetful mode, map the MCP session ID to the user/DB
           if (config.forgetful && (req as any)._forgetfulSession) {
-            forgetfulSessions.set(sid, (req as any)._forgetfulSession);
+            const pending = (req as any)._forgetfulSession as { userId: string; db: Database.Database };
+            addForgetfulSession(sid, pending.userId, pending.db);
+          } else {
+            transportLastSeen.set(sid, Date.now());
           }
         },
       });
@@ -1183,6 +1278,7 @@ export function createServer(config: ServerConfig): {
       transport.onclose = () => {
         if (transport.sessionId) {
           delete transports[transport.sessionId];
+          transportLastSeen.delete(transport.sessionId);
           // Clean up forgetful DB clone when transport closes
           if (config.forgetful && forgetfulSessions.has(transport.sessionId)) {
             const session = forgetfulSessions.get(transport.sessionId)!;
@@ -1212,6 +1308,7 @@ export function createServer(config: ServerConfig): {
   app.get('/mcp', mcpAuth, async (req, res) => {
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
     if (sessionId && transports[sessionId]) {
+      transportLastSeen.set(sessionId, Date.now());
       await transports[sessionId].handleRequest(req, res);
     } else {
       res.status(404).json({
@@ -1226,6 +1323,7 @@ export function createServer(config: ServerConfig): {
   app.delete('/mcp', mcpAuth, async (req, res) => {
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
     if (sessionId && transports[sessionId]) {
+      transportLastSeen.set(sessionId, Date.now());
       await transports[sessionId].handleRequest(req, res);
     } else {
       res.status(404).json({
@@ -1248,6 +1346,30 @@ export function createServer(config: ServerConfig): {
       sessionService.cleanupExpired();
     }
   }, 5 * 60 * 1000);
+
+  // Reclaim abandoned sessions. Forgetful clones and MCP transports are only
+  // released by an explicit disconnect, which most clients never send, so
+  // without this sweep the process holds every session it has ever served.
+  const sessionSweepInterval = setInterval(() => {
+    const now = Date.now();
+    for (const [key, session] of [...forgetfulSessions]) {
+      if (now - session.lastSeenAt > FORGETFUL_IDLE_MS || now - session.createdAt > FORGETFUL_MAX_AGE_MS) {
+        dropForgetfulSession(key);
+      }
+    }
+    if (!config.forgetful) {
+      for (const [sid, lastSeen] of [...transportLastSeen]) {
+        if (now - lastSeen <= TRANSPORT_IDLE_MS) continue;
+        transportLastSeen.delete(sid);
+        const transport = transports[sid];
+        if (transport) {
+          delete transports[sid];
+          try { transport.close(); } catch { /* already closing */ }
+        }
+      }
+    }
+  }, SESSION_SWEEP_MS);
+  sessionSweepInterval.unref?.();
 
   // Birthday reminder scheduler (every 15 minutes, persistent mode only)
   let birthdaySchedulerInterval: ReturnType<typeof setInterval> | null = null;
@@ -1436,6 +1558,7 @@ export function createServer(config: ServerConfig): {
     },
     stop: () => {
       clearInterval(cleanupInterval);
+      clearInterval(sessionSweepInterval);
       if (birthdaySchedulerInterval) clearInterval(birthdaySchedulerInterval);
       // Close all active transports
       for (const [sid, transport] of Object.entries(transports)) {

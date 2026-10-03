@@ -220,4 +220,128 @@ describe('Forgetful Mode', () => {
       server.close();
     }
   });
+
+  describe('session memory bounds', () => {
+    const listen = async (app: unknown): Promise<{ port: number; close: () => void }> => {
+      const { default: http } = await import('node:http');
+      const server = http.createServer(app as never);
+      await new Promise<void>((resolve) => server.listen(0, resolve));
+      return { port: (server.address() as { port: number }).port, close: () => server.close() };
+    };
+
+    const sessionCookieOf = (res: Response): string => {
+      const m = (res.headers.get('set-cookie') ?? '').match(/mob_session=([^;]+)/);
+      if (!m) throw new Error('no mob_session cookie');
+      return m[1];
+    };
+
+    const sessionCount = async (port: number): Promise<number> => {
+      const health = await (await fetch(`http://localhost:${port}/health`)).json();
+      return health.sessions.forgetful;
+    };
+
+    it('reuses an existing demo session instead of cloning a database per /web/login hit', async () => {
+      serverInstance = createServer({ port: 0, dataDir: ':memory:', forgetful: true, baseUrl: 'http://localhost:0' });
+      const { port, close } = await listen(serverInstance.app);
+
+      try {
+        const first = await fetch(`http://localhost:${port}/web/login`, { redirect: 'manual' });
+        const session = sessionCookieOf(first);
+        expect(await sessionCount(port)).toBe(1);
+
+        // Repeat visits carrying the cookie must not allocate more clones.
+        for (let i = 0; i < 5; i++) {
+          const again = await fetch(`http://localhost:${port}/web/login`, {
+            redirect: 'manual',
+            headers: { Cookie: `mob_session=${session}` },
+          });
+          expect(again.status).toBe(302);
+          expect(again.headers.get('location')).toBe('/app/');
+        }
+        expect(await sessionCount(port)).toBe(1);
+
+        // The reused session still resolves to its seeded clone.
+        const contacts = await (await fetch(`http://localhost:${port}/web/api/contacts?per_page=1`, {
+          headers: { Cookie: `mob_session=${session}` },
+        })).json();
+        expect(contacts.meta.total).toBeGreaterThan(0);
+      } finally {
+        close();
+      }
+    });
+
+    it('releases the cloned database on logout', async () => {
+      serverInstance = createServer({ port: 0, dataDir: ':memory:', forgetful: true, baseUrl: 'http://localhost:0' });
+      const { port, close } = await listen(serverInstance.app);
+
+      try {
+        const login = await fetch(`http://localhost:${port}/web/login`, { redirect: 'manual' });
+        const session = sessionCookieOf(login);
+        expect(await sessionCount(port)).toBe(1);
+
+        await fetch(`http://localhost:${port}/web/logout`, {
+          redirect: 'manual',
+          headers: { Cookie: `mob_session=${session}` },
+        });
+        expect(await sessionCount(port)).toBe(0);
+      } finally {
+        close();
+      }
+    });
+
+    it('caps concurrent forgetful sessions, evicting the least recently used', async () => {
+      const previous = process.env.MOB_FORGETFUL_MAX_SESSIONS;
+      process.env.MOB_FORGETFUL_MAX_SESSIONS = '3';
+      serverInstance = createServer({ port: 0, dataDir: ':memory:', forgetful: true, baseUrl: 'http://localhost:0' });
+      const { port, close } = await listen(serverInstance.app);
+
+      try {
+        const sessions: string[] = [];
+        for (let i = 0; i < 6; i++) {
+          const res = await fetch(`http://localhost:${port}/web/login`, { redirect: 'manual' });
+          sessions.push(sessionCookieOf(res));
+        }
+        expect(await sessionCount(port)).toBe(3);
+
+        // The newest session still works; the oldest was reclaimed and now
+        // falls back to the (empty) main database rather than leaking.
+        const newest = await (await fetch(`http://localhost:${port}/web/api/contacts?per_page=1`, {
+          headers: { Cookie: `mob_session=${sessions[5]}` },
+        })).json();
+        expect(newest.meta.total).toBeGreaterThan(0);
+      } finally {
+        close();
+        if (previous === undefined) delete process.env.MOB_FORGETFUL_MAX_SESSIONS;
+        else process.env.MOB_FORGETFUL_MAX_SESSIONS = previous;
+      }
+    });
+
+    it('frees an MCP session clone when the client disconnects', async () => {
+      serverInstance = createServer({ port: 0, dataDir: ':memory:', forgetful: true, baseUrl: 'http://localhost:0' });
+      const { port, close } = await listen(serverInstance.app);
+
+      try {
+        const init = await fetch(`http://localhost:${port}/mcp`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'initialize',
+            params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'test', version: '1.0' } },
+          }),
+        });
+        const sessionId = init.headers.get('mcp-session-id')!;
+        expect(await sessionCount(port)).toBe(1);
+
+        await fetch(`http://localhost:${port}/mcp`, {
+          method: 'DELETE',
+          headers: { 'mcp-session-id': sessionId },
+        });
+        expect(await sessionCount(port)).toBe(0);
+      } finally {
+        close();
+      }
+    });
+  });
 });

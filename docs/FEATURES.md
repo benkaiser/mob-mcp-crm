@@ -593,9 +593,11 @@ An ephemeral mode for demos, testing, or privacy-sensitive usage. Enabled via se
 
 - **No login required.** OAuth flow still runs (for MCP protocol compliance) but no credentials are requested — the server issues a token tied to a session ID.
 - **Ephemeral storage.** Each session gets its own isolated SQLite database (in-memory or temp file).
-- **Automatic data destruction.** All session data is permanently deleted when either:
+- **Automatic data destruction.** All session data is permanently deleted when any of the following occur:
   - The MCP session disconnects, **or**
+  - The session goes idle for 30 minutes, **or**
   - 2 hours elapse since session creation (whichever comes first)
+- **Bounded memory.** Each live session holds an in-memory database clone, so concurrent sessions are capped (default 50); when the cap is exceeded the least recently used session is reclaimed. These bounds are tunable via `MOB_FORGETFUL_MAX_SESSIONS`, `MOB_FORGETFUL_IDLE_MS`, and `MOB_FORGETFUL_MAX_AGE_MS`.
 - **No account creation.** The session ID is the only identifier.
 - **Full feature parity.** All CRM tools work identically — the user experience is the same, data just doesn't persist.
 
