@@ -23,6 +23,7 @@ import { UserSettingsService } from '../services/settings.js';
 import { EmailService, createEmailServiceFromEnv, renderActionEmail, renderEmailHtml } from '../services/email.js';
 import { PushNotificationService } from '../services/push-notifications.js';
 import { NotificationService } from '../services/notifications.js';
+import { MatrixService, isMatrixConfigured } from '../services/matrix.js';
 import { SessionService } from '../services/sessions.js';
 import { PlanService } from '../services/plans.js';
 import { ApiTokenService } from '../services/api-tokens.js';
@@ -1375,6 +1376,31 @@ export function createServer(config: ServerConfig): {
   let birthdaySchedulerInterval: ReturnType<typeof setInterval> | null = null;
   if (!config.forgetful) {
     const notificationService = new NotificationService(db);
+    const matrixService = new MatrixService();
+
+    // Build the per-user Matrix config from settings, or null if not configured.
+    const matrixConfigFor = (settings: { matrix_homeserver: string | null; matrix_access_token: string | null; matrix_room_id: string | null }) => {
+      const cfg = {
+        homeserver: settings.matrix_homeserver ?? '',
+        accessToken: settings.matrix_access_token ?? '',
+        roomId: settings.matrix_room_id ?? '',
+      };
+      return isMatrixConfigured(cfg) ? cfg : null;
+    };
+
+    // Post a notification to Matrix if the user has it configured. Non-fatal:
+    // failures are logged and swallowed, exactly like the push sends.
+    const sendMatrix = async (settings: Parameters<typeof matrixConfigFor>[0], title: string, body: string) => {
+      const cfg = matrixConfigFor(settings);
+      if (!cfg) return;
+      try {
+        const text = body ? `${title}\n${body}` : title;
+        const result = await matrixService.send(cfg, { text });
+        if (!result.sent) console.error(`Matrix send failed ("${title}"): ${result.error}`);
+      } catch (err) {
+        console.error(`Matrix send error ("${title}"):`, err);
+      }
+    };
 
     const runBirthdayScheduler = async () => {
       try {
@@ -1415,6 +1441,7 @@ export function createServer(config: ServerConfig): {
                 notificationService.recordPushResult(notification.id, false);
                 console.error(`Push send error for notification ${notification.id}:`, err);
               }
+              await sendMatrix(settings, notification.title, notification.body || '');
             }
           }
 
@@ -1528,6 +1555,7 @@ export function createServer(config: ServerConfig): {
               } catch {
                 // Push send failure is non-fatal
               }
+              await sendMatrix(settings, title, body);
             }
           }
         }

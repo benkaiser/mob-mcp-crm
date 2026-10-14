@@ -5,7 +5,7 @@ import type { Activity, Debt, Gift, Note, Reminder, Task, PageMeta } from '../ap
 import { Badge, Card, EmptyState, ErrorBanner, Icon, Spinner } from '../ui';
 import type { IconName } from '../ui';
 import { errorMessage, formatDate } from '../lib/format';
-import { humanize } from '../lib/humanize';
+import { humanize, formatRecurrence } from '../lib/humanize';
 
 type OverviewResource = 'activities' | 'notes' | 'reminders' | 'tasks' | 'debts' | 'gifts';
 type Row = Activity | Reminder | Task | Debt | Gift | (Note & { contact_name?: string; body_truncated?: boolean });
@@ -53,7 +53,7 @@ const configs: Record<OverviewResource, OverviewConfig> = {
       const r = item as Reminder;
       return {
         title: r.title,
-        meta: [formatDate(r.reminder_date), humanize(r.frequency)],
+        meta: [formatDate(r.reminder_date), formatRecurrence(r.frequency, r.interval)],
         badges: [{ label: humanize(r.status), tone: r.status === 'active' ? 'success' : 'default' }],
       };
     },

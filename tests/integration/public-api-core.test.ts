@@ -297,4 +297,32 @@ describe('Public API (/api/v1)', () => {
     const res = await raw(h.app, 'POST', '/api/v1/contacts', { headers: auth(h.token), body: { first_name: 'Paid' } });
     expect(res.status).toBe(201);
   });
+
+  it('reminders: accepts a custom interval and daily frequency', async () => {
+    h = await makeHarness();
+    const create = await raw(h.app, 'POST', '/api/v1/reminders', {
+      headers: auth(h.token),
+      body: { contact_id: h.selfContactId, title: 'Touch base', reminder_date: '2026-06-01', frequency: 'weekly', interval: 6 },
+    });
+    expect(create.status).toBe(201);
+    const body = JSON.parse(create.body).data;
+    expect(body.frequency).toBe('weekly');
+    expect(body.interval).toBe(6);
+
+    const daily = await raw(h.app, 'POST', '/api/v1/reminders', {
+      headers: auth(h.token),
+      body: { contact_id: h.selfContactId, title: 'Daily', reminder_date: '2026-06-01', frequency: 'daily' },
+    });
+    expect(daily.status).toBe(201);
+    expect(JSON.parse(daily.body).data.frequency).toBe('daily');
+  });
+
+  it('reminders: rejects a non-positive interval (422)', async () => {
+    h = await makeHarness();
+    const res = await raw(h.app, 'POST', '/api/v1/reminders', {
+      headers: auth(h.token),
+      body: { contact_id: h.selfContactId, title: 'Bad', reminder_date: '2026-06-01', frequency: 'weekly', interval: 0 },
+    });
+    expect(res.status).toBe(422);
+  });
 });

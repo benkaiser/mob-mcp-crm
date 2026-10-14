@@ -189,6 +189,35 @@ describe('E2E MCP Protocol', () => {
     expect(contact.id).toBeDefined();
   });
 
+  it('should create a reminder with a custom interval via reminder_manage', async () => {
+    await startServer(true);
+    const sessionId = await initSession();
+
+    const createContact = await mcpRequest({
+      jsonrpc: '2.0', id: 2, method: 'tools/call',
+      params: { name: 'contact_create', arguments: { first_name: 'Touch', last_name: 'Base' } },
+    }, sessionId);
+    const contactId = JSON.parse((await parseMcpResponse(createContact)).result.content[0].text).id;
+
+    const createReminder = await mcpRequest({
+      jsonrpc: '2.0', id: 3, method: 'tools/call',
+      params: {
+        name: 'reminder_manage',
+        arguments: {
+          action: 'create', contact_id: contactId, title: 'Touch base',
+          reminder_date: '2026-06-01', frequency: 'weekly', interval: 6,
+        },
+      },
+    }, sessionId);
+
+    expect(createReminder.status).toBe(200);
+    const data = await parseMcpResponse(createReminder);
+    expect(data.result.isError).toBeFalsy();
+    const reminder = JSON.parse(data.result.content[0].text);
+    expect(reminder.frequency).toBe('weekly');
+    expect(reminder.interval).toBe(6);
+  });
+
   it('should handle tool errors gracefully', async () => {
     await startServer(true);
     const sessionId = await initSession();

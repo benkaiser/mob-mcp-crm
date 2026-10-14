@@ -901,9 +901,9 @@ export function createMcpServer(db: Database.Database): McpServer {
 
   server.registerTool('reminder_manage', {
     description: 'Create, list, update, complete, snooze, delete, or restore reminders.\n' +
-      '• action="create": Create a reminder for a contact. Requires contact_id, title, and reminder_date. Optional description, frequency.\n' +
+      '• action="create": Create a reminder for a contact. Requires contact_id, title, and reminder_date. Optional description, frequency, interval.\n' +
       '• action="list": List reminders, optionally filtered by contact or status. Optional contact_id, status, page, per_page, include_deleted.\n' +
-      '• action="update": Update a reminder. Requires id. Optional title, description, reminder_date, frequency.\n' +
+      '• action="update": Update a reminder. Requires id. Optional title, description, reminder_date, frequency, interval.\n' +
       '• action="complete": Mark a reminder as completed. For recurring reminders, advances to the next occurrence. Requires id.\n' +
       '• action="snooze": Snooze a reminder to a new date. Requires id and new_date.\n' +
       '• action="delete": Soft-delete a reminder. Requires id.\n' +
@@ -915,7 +915,8 @@ export function createMcpServer(db: Database.Database): McpServer {
       title: z.string().optional().describe('Reminder title (required for "create", optional for "update")'),
       description: z.string().optional().describe('Description (optional for "create" and "update")'),
       reminder_date: z.string().optional().describe('When to remind (ISO date YYYY-MM-DD) (required for "create", optional for "update")'),
-      frequency: z.enum(['one_time', 'weekly', 'monthly', 'yearly']).optional().describe('Frequency (default: one_time, optional for "create" and "update")'),
+      frequency: z.enum(['one_time', 'daily', 'weekly', 'monthly', 'yearly']).optional().describe('Frequency (default: one_time, optional for "create" and "update")'),
+      interval: z.number().int().positive().optional().describe('Recurrence interval: repeat every N units of frequency, e.g. frequency="weekly" + interval=6 means every 6 weeks (default: 1; ignored for one_time)'),
       new_date: z.string().optional().describe('New reminder date (ISO date YYYY-MM-DD) (required for "snooze")'),
       status: z.enum(['active', 'snoozed', 'completed', 'dismissed']).optional().describe('Filter by status (for "list" only)'),
       page: z.number().optional().describe('Page number for "list" (default: 1)'),
@@ -928,7 +929,7 @@ export function createMcpServer(db: Database.Database): McpServer {
       if (args.action === 'create') {
         if (!args.contact_id || !args.title || !args.reminder_date) return errorResult('contact_id, title, and reminder_date are required for "create"');
         verifyContactOwnership(db, userId, args.contact_id);
-        const reminder = reminderService.create(userId, { contact_id: args.contact_id, title: args.title, description: args.description, reminder_date: args.reminder_date, frequency: args.frequency });
+        const reminder = reminderService.create(userId, { contact_id: args.contact_id, title: args.title, description: args.description, reminder_date: args.reminder_date, frequency: args.frequency, interval: args.interval });
         return withDeepLink(textResult(reminder), userId, 'reminder', (reminder as any).id);
       } else if (args.action === 'list') {
         if (args.contact_id) {

@@ -221,8 +221,11 @@ export function NewActivityPage() {
 
 // ─── New reminder ─────────────────────────���─────────────────────
 
-const REMINDER_FREQUENCIES = ['one_time', 'weekly', 'monthly', 'yearly'] as const;
+const REMINDER_FREQUENCIES = ['one_time', 'daily', 'weekly', 'monthly', 'yearly'] as const;
 type ReminderFreq = typeof REMINDER_FREQUENCIES[number];
+const RECURRENCE_UNIT: Record<ReminderFreq, string> = {
+  one_time: '', daily: 'days', weekly: 'weeks', monthly: 'months', yearly: 'years',
+};
 
 export function NewReminderPage() {
   const [, navigate] = useLocation();
@@ -232,6 +235,7 @@ export function NewReminderPage() {
   const [reminderDate, setReminderDate] = useState('');
   const [description, setDescription] = useState('');
   const [frequency, setFrequency] = useState<ReminderFreq>('one_time');
+  const [repeatInterval, setRepeatInterval] = useState(1);
   const { saving, error, errs, run, setError } = useCreate();
 
   function submit(e: Event) {
@@ -242,6 +246,7 @@ export function NewReminderPage() {
     const payload: Record<string, unknown> = {
       contact_id: contactId, title, reminder_date: reminderDate, frequency,
     };
+    if (frequency !== 'one_time') payload.interval = Math.max(1, Math.trunc(repeatInterval) || 1);
     if (description.trim()) payload.description = description.trim();
     run(
       () => apiPost<{ id: string }>('/reminders', payload),
@@ -275,6 +280,12 @@ export function NewReminderPage() {
               </Select>
             </Field>
           </div>
+          {frequency !== 'one_time' && (
+            <Field label="Repeat every" hint={`Number of ${RECURRENCE_UNIT[frequency]} between occurrences`}>
+              <Input data-testid="new-reminder-interval" type="number" min="1" step="1" value={String(repeatInterval)}
+                onInput={(e) => setRepeatInterval(Number((e.target as HTMLInputElement).value))} />
+            </Field>
+          )}
           <Field label="Description">
             <Textarea data-testid="new-reminder-description" value={description}
               onInput={(e) => setDescription((e.target as HTMLTextAreaElement).value)} />

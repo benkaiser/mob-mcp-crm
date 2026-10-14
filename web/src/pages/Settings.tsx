@@ -14,7 +14,8 @@ import {
   listTokens, createToken, revokeToken,
   listWebhooks, createWebhook, updateWebhook, deleteWebhook, testWebhook, listDeliveries,
   toBool, WEBHOOK_EVENTS,
-  type ApiToken, type ApiTokenCreated, type Webhook, type WebhookDelivery,
+  getNotificationSettings, updateNotificationSettings, sendMatrixTest,
+  type ApiToken, type ApiTokenCreated, type Webhook, type WebhookDelivery, type UpdateNotificationSettings,
 } from '../api/settings';
 import {
   changePassword, updateProfile, resendVerification,
@@ -55,6 +56,7 @@ export function Settings() {
       <div class="page-header"><h1>Settings</h1></div>
 
       <ProfileSection />
+      <NotificationsSection />
       <RelationshipTypesSection />
       <ContactMethodTypesSection />
       <TagsSection />
@@ -653,6 +655,150 @@ function ProfileSection() {
           <a href="/web/logout" class="muted" style="margin-left:0.5rem;">Log out</a>
         </div>
       </form>
+    </Card>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════
+// Notifications (reminder/birthday timing)
+// ════════════════════════════════════════════════════════════════
+
+/** Parse a comma-separated offsets string into whole non-negative days, or null if invalid. */
+function parseOffsets(text: string): number[] | null {
+  const parts = text.split(',').map((s) => s.trim()).filter((s) => s.length > 0);
+  if (parts.length === 0) return null;
+  const nums = parts.map(Number);
+  if (nums.some((n) => !Number.isInteger(n) || n < 0)) return null;
+  return nums;
+}
+
+function NotificationsSection() {
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reminderTime, setReminderTime] = useState('09:00');
+  const [birthdayOffsets, setBirthdayOffsets] = useState('0, 7, 30');
+  const [reminderOffsets, setReminderOffsets] = useState('0, 7, 30');
+  const [matrixHomeserver, setMatrixHomeserver] = useState('');
+  const [matrixRoom, setMatrixRoom] = useState('');
+  // Write-only: starts blank, left blank on save keeps the existing token.
+  const [matrixToken, setMatrixToken] = useState('');
+  const [matrixConfigured, setMatrixConfigured] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [testBusy, setTestBusy] = useState(false);
+
+  function applyData(data: { birthday_reminder_time: string; birthday_reminder_offsets: number[]; reminder_offsets: number[]; matrix_homeserver: string | null; matrix_room_id: string | null; matrix_configured: boolean }) {
+    setReminderTime(data.birthday_reminder_time);
+    setBirthdayOffsets(data.birthday_reminder_offsets.join(', '));
+    setReminderOffsets(data.reminder_offsets.join(', '));
+    setMatrixHomeserver(data.matrix_homeserver ?? '');
+    setMatrixRoom(data.matrix_room_id ?? '');
+    setMatrixConfigured(data.matrix_configured);
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    getNotificationSettings()
+      .then(({ data }) => {
+        if (cancelled || !data) return;
+        applyData(data);
+      })
+      .catch((err) => { if (!cancelled) setLoadError(errorMessage(err, 'Failed to load settings')); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  async function save(e: Event) {
+    e.preventDefault();
+    if (busy) return;
+    const bOff = parseOffsets(birthdayOffsets);
+    const rOff = parseOffsets(reminderOffsets);
+    if (!bOff || !rOff) {
+      showToast('Advance notice must be a comma-separated list of whole days (0 or more), e.g. 0, 7, 30', 'error');
+      return;
+    }
+    setBusy(true);
+    try {
+      const body: UpdateNotificationSettings = {
+        birthday_reminder_time: reminderTime,
+        birthday_reminder_offsets: bOff,
+        reminder_offsets: rOff,
+        matrix_homeserver: matrixHomeserver.trim(),
+        matrix_room_id: matrixRoom.trim(),
+      };
+      // Only send the token when the user actually typed one; a blank field
+      // leaves the stored token untouched.
+      if (matrixToken.length > 0) body.matrix_access_token = matrixToken;
+      const { data } = await updateNotificationSettings(body);
+      if (data) applyData(data);
+      setMatrixToken('');
+      showToast('Notification settings saved', 'success');
+    } catch (err) {
+      showToast(errorMessage(err, 'Failed to save settings'), 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function testMatrix() {
+    if (testBusy) return;
+    setTestBusy(true);
+    try {
+      await sendMatrixTest();
+      showToast('Test message sent to Matrix', 'success');
+    } catch (err) {
+      showToast(errorMessage(err, 'Failed to send test message'), 'error');
+    } finally {
+      setTestBusy(false);
+    }
+  }
+
+  return (
+    <Card class="section" data-testid="settings-notifications">
+      <div class="section__head"><h2>Notifications</h2></div>
+      <p class="muted">When to send birthday and reminder alerts. These apply to push and Matrix notifications and use your timezone.</p>
+      {loadError && <ErrorBanner message={loadError} onDismiss={() => setLoadError(null)} />}
+      {loading ? <Spinner center /> : (
+        <form class="stack" onSubmit={save}>
+          <Field label="Reminder time" hint="Time of day alerts are sent, in your timezone (24-hour)">
+            <Input data-testid="settings-reminder-time" type="time" value={reminderTime}
+              onInput={(e) => setReminderTime((e.target as HTMLInputElement).value)} />
+          </Field>
+          <Field label="Reminder advance notice" hint="Days before a reminder's date to notify, comma-separated (e.g. 0, 7, 30)">
+            <Input data-testid="settings-reminder-offsets" value={reminderOffsets}
+              onInput={(e) => setReminderOffsets((e.target as HTMLInputElement).value)} />
+          </Field>
+          <Field label="Birthday advance notice" hint="Days before a birthday to notify, comma-separated (e.g. 0, 7, 30)">
+            <Input data-testid="settings-birthday-offsets" value={birthdayOffsets}
+              onInput={(e) => setBirthdayOffsets((e.target as HTMLInputElement).value)} />
+          </Field>
+
+          <div class="section__head" style="margin-top:0.5rem;"><h3>Matrix</h3></div>
+          <p class="muted">Post reminders and birthdays to a Matrix room. Use a dedicated <strong>unencrypted</strong> room (end-to-end encryption is not supported).</p>
+          <Field label="Homeserver URL" hint="e.g. https://matrix.example.org">
+            <Input data-testid="settings-matrix-homeserver" type="url" placeholder="https://matrix.example.org" value={matrixHomeserver}
+              onInput={(e) => setMatrixHomeserver((e.target as HTMLInputElement).value)} />
+          </Field>
+          <Field label="Room ID" hint="Internal room ID, copied verbatim from your client (e.g. !abcdef:example.org, or a long !… hash with no server suffix for newer rooms)">
+            <Input data-testid="settings-matrix-room" placeholder="!room:example.org" value={matrixRoom}
+              onInput={(e) => setMatrixRoom((e.target as HTMLInputElement).value)} />
+          </Field>
+          <Field label="Access token" hint={matrixConfigured ? 'A token is saved — leave blank to keep it, or enter a new one to replace it.' : 'A bot/user access token that can post to the room.'}>
+            <Input data-testid="settings-matrix-token" type="password" autocomplete="off"
+              placeholder={matrixConfigured ? '•••••••• (saved)' : ''} value={matrixToken}
+              onInput={(e) => setMatrixToken((e.target as HTMLInputElement).value)} />
+          </Field>
+
+          <div class="row">
+            <Button type="submit" disabled={busy} data-testid="settings-notifications-save">
+              {busy ? 'Saving…' : 'Save'}
+            </Button>
+            <Button type="button" variant="secondary" disabled={!matrixConfigured || testBusy || busy}
+              onClick={testMatrix} data-testid="settings-matrix-test">
+              {testBusy ? 'Sending…' : 'Send test message'}
+            </Button>
+          </div>
+        </form>
+      )}
     </Card>
   );
 }

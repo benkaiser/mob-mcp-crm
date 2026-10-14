@@ -14,7 +14,7 @@ import {
 
 // ─── Validation schemas ─────────────────────────────────────────
 
-const frequencyEnum = z.enum(['one_time', 'weekly', 'monthly', 'yearly']);
+const frequencyEnum = z.enum(['one_time', 'daily', 'weekly', 'monthly', 'yearly']);
 
 const createReminderSchema = z.object({
   contact_id: z.string().min(1, 'contact_id is required'),
@@ -22,6 +22,7 @@ const createReminderSchema = z.object({
   description: z.string().optional(),
   reminder_date: z.string().min(1, 'reminder_date is required'),
   frequency: frequencyEnum.optional(),
+  interval: z.number().int().positive('interval must be a positive integer').optional(),
 }).strict();
 
 const updateReminderSchema = createReminderSchema.partial();

@@ -294,6 +294,120 @@ describe('ReminderService', () => {
     });
   });
 
+  describe('custom interval recurrence', () => {
+    it('should default interval to 1 when omitted', () => {
+      const reminder = service.create(userId, {
+        contact_id: contactId,
+        title: 'Weekly',
+        reminder_date: '2024-07-01',
+        frequency: 'weekly',
+      });
+      expect(reminder.interval).toBe(1);
+    });
+
+    it('should store a custom interval', () => {
+      const reminder = service.create(userId, {
+        contact_id: contactId,
+        title: 'Touch base every 6 weeks',
+        reminder_date: '2024-07-01',
+        frequency: 'weekly',
+        interval: 6,
+      });
+      expect(reminder.frequency).toBe('weekly');
+      expect(reminder.interval).toBe(6);
+    });
+
+    it('should advance a weekly reminder by interval weeks on complete', () => {
+      const reminder = service.create(userId, {
+        contact_id: contactId,
+        title: 'Touch base every 6 weeks',
+        reminder_date: '2024-07-01',
+        frequency: 'weekly',
+        interval: 6,
+      });
+      const advanced = service.complete(userId, reminder.id);
+      expect(advanced!.status).toBe('active');
+      expect(advanced!.reminder_date).toBe('2024-08-12'); // +42 days
+    });
+
+    it('should support a daily frequency', () => {
+      const reminder = service.create(userId, {
+        contact_id: contactId,
+        title: 'Daily nudge',
+        reminder_date: '2024-07-01',
+        frequency: 'daily',
+      });
+      const advanced = service.complete(userId, reminder.id);
+      expect(advanced!.reminder_date).toBe('2024-07-02'); // +1 day
+    });
+
+    it('should advance a daily reminder by interval days on complete', () => {
+      const reminder = service.create(userId, {
+        contact_id: contactId,
+        title: 'Every 10 days',
+        reminder_date: '2024-07-01',
+        frequency: 'daily',
+        interval: 10,
+      });
+      const advanced = service.complete(userId, reminder.id);
+      expect(advanced!.reminder_date).toBe('2024-07-11'); // +10 days
+    });
+
+    it('should advance a monthly reminder by interval months on complete', () => {
+      const reminder = service.create(userId, {
+        contact_id: contactId,
+        title: 'Quarterly',
+        reminder_date: '2024-07-01',
+        frequency: 'monthly',
+        interval: 3,
+      });
+      const advanced = service.complete(userId, reminder.id);
+      expect(advanced!.reminder_date).toBe('2024-10-01');
+    });
+
+    it('should update the interval', () => {
+      const reminder = service.create(userId, {
+        contact_id: contactId,
+        title: 'Changeable',
+        reminder_date: '2024-07-01',
+        frequency: 'weekly',
+        interval: 2,
+      });
+      const updated = service.update(userId, reminder.id, { interval: 6 });
+      expect(updated!.interval).toBe(6);
+    });
+
+    it('should reject a zero interval', () => {
+      expect(() => service.create(userId, {
+        contact_id: contactId,
+        title: 'Bad',
+        reminder_date: '2024-07-01',
+        frequency: 'weekly',
+        interval: 0,
+      })).toThrow('interval must be a positive integer');
+    });
+
+    it('should reject a negative interval', () => {
+      expect(() => service.create(userId, {
+        contact_id: contactId,
+        title: 'Bad',
+        reminder_date: '2024-07-01',
+        frequency: 'weekly',
+        interval: -3,
+      })).toThrow('interval must be a positive integer');
+    });
+
+    it('should reject a non-integer interval', () => {
+      expect(() => service.create(userId, {
+        contact_id: contactId,
+        title: 'Bad',
+        reminder_date: '2024-07-01',
+        frequency: 'weekly',
+        interval: 2.5,
+      })).toThrow('interval must be a positive integer');
+    });
+  });
+
   describe('list with include_deleted', () => {
     it('should include soft-deleted reminders when include_deleted is true', () => {
       const reminder = service.create(userId, {

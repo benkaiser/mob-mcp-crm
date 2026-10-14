@@ -18,7 +18,7 @@ import {
   Icon,
 } from '../ui';
 import type { IconName } from '../ui';
-import { humanize } from '../lib/humanize';
+import { humanize, formatRecurrence } from '../lib/humanize';
 
 /**
  * Detail page for a single timeline entity (activity, note, life event,
@@ -772,13 +772,14 @@ const RICH_BUILDERS: Record<string, (data: Record_) => RichView> = {
   reminders(data) {
     const reminderDate = typeof data.reminder_date === 'string' ? data.reminder_date : '';
     const frequency = typeof data.frequency === 'string' ? data.frequency : 'one_time';
+    const interval = typeof data.interval === 'number' ? data.interval : 1;
     const status = data.status;
     const isAuto = Boolean(data.is_auto_generated);
     const recurring = frequency !== 'one_time';
     const countdown = reminderDate ? dateCountdown(reminderDate) : undefined;
     const badges: BadgeItem[] = [
       { label: humanize(String(status ?? 'unknown')), tone: statusTone(status), testid: 'entity-field-status' },
-      { label: recurring ? `Repeats ${frequency}` : 'One-time', tone: recurring ? 'primary' : 'default' },
+      { label: formatRecurrence(frequency, interval), tone: recurring ? 'primary' : 'default' },
     ];
     if (isAuto) badges.push({ label: 'Auto-generated', tone: 'default' });
     return {
@@ -790,7 +791,7 @@ const RICH_BUILDERS: Record<string, (data: Record_) => RichView> = {
         : undefined,
       stats: [
         { label: 'Next on', value: formatNiceDate(reminderDate), testid: 'entity-field-reminder_date' },
-        { label: 'Frequency', value: humanize(frequency), testid: 'entity-field-frequency' },
+        { label: 'Frequency', value: formatRecurrence(frequency, interval), testid: 'entity-field-frequency' },
       ],
       sections: [
         { label: 'Description', value: typeof data.description === 'string' ? data.description : '', testid: 'entity-field-description' },

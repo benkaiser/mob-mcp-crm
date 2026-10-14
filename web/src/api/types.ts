@@ -251,6 +251,7 @@ export interface Reminder {
   description: string | null;
   reminder_date: string;
   frequency: string;
+  interval?: number;
   status: string;
   is_auto_generated?: boolean;
 }
@@ -332,6 +333,7 @@ export interface UpcomingReminder {
   description: string | null;
   reminder_date: string;
   frequency: string;
+  interval?: number;
   status: string;
   is_overdue: boolean;
   days_until: number;

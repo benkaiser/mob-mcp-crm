@@ -101,4 +101,50 @@ describe('UserSettingsService', () => {
     expect(settings.birthday_reminder_time).toBe('10:00');
     expect(settings.birthday_reminder_offsets).toEqual([0, 14]);
   });
+
+  // ─── Matrix notification target ───────────────────────────────
+
+  it('should default the Matrix fields to null', () => {
+    const settings = service.get(userId);
+    expect(settings.matrix_homeserver).toBeNull();
+    expect(settings.matrix_access_token).toBeNull();
+    expect(settings.matrix_room_id).toBeNull();
+  });
+
+  it('should round-trip Matrix connection details', () => {
+    const settings = service.update(userId, {
+      matrix_homeserver: 'https://matrix.example.org',
+      matrix_access_token: 'syt_token',
+      matrix_room_id: '!room:example.org',
+    });
+    expect(settings.matrix_homeserver).toBe('https://matrix.example.org');
+    expect(settings.matrix_access_token).toBe('syt_token');
+    expect(settings.matrix_room_id).toBe('!room:example.org');
+    // Persisted
+    expect(service.get(userId).matrix_room_id).toBe('!room:example.org');
+  });
+
+  it('should reject a non-URL Matrix homeserver', () => {
+    expect(() => service.update(userId, { matrix_homeserver: 'not a url' })).toThrow(/homeserver/i);
+  });
+
+  it('should reject a non-https/http Matrix homeserver scheme', () => {
+    expect(() => service.update(userId, { matrix_homeserver: 'ftp://matrix.example.org' })).toThrow(/homeserver/i);
+  });
+
+  it('should clear Matrix fields when given empty strings', () => {
+    service.update(userId, {
+      matrix_homeserver: 'https://matrix.example.org',
+      matrix_access_token: 'syt_token',
+      matrix_room_id: '!room:example.org',
+    });
+    const cleared = service.update(userId, {
+      matrix_homeserver: '',
+      matrix_access_token: '',
+      matrix_room_id: '',
+    });
+    expect(cleared.matrix_homeserver).toBeNull();
+    expect(cleared.matrix_access_token).toBeNull();
+    expect(cleared.matrix_room_id).toBeNull();
+  });
 });

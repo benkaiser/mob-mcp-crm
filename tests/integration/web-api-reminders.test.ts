@@ -159,4 +159,35 @@ describe('Reminders internal API (/web/api/reminders)', () => {
     const res = await c.mutate('POST', '/web/api/reminders', { contact_id: contactId, title: 'X' });
     expect(res.status).toBe(422);
   });
+
+  it('creates a reminder with a custom interval and daily frequency', async () => {
+    server = createServer(persistent);
+    const c = await makeClient(server);
+    const contactId = await makeContact(c);
+
+    const create = await c.mutate('POST', '/web/api/reminders', {
+      contact_id: contactId, title: 'Touch base', reminder_date: '2026-06-01',
+      frequency: 'weekly', interval: 6,
+    });
+    expect(create.status).toBe(201);
+    const body = JSON.parse(create.body).data;
+    expect(body.frequency).toBe('weekly');
+    expect(body.interval).toBe(6);
+
+    const daily = await c.mutate('POST', '/web/api/reminders', {
+      contact_id: contactId, title: 'Daily', reminder_date: '2026-06-01', frequency: 'daily',
+    });
+    expect(daily.status).toBe(201);
+    expect(JSON.parse(daily.body).data.frequency).toBe('daily');
+  });
+
+  it('rejects a non-positive interval with 422', async () => {
+    server = createServer(persistent);
+    const c = await makeClient(server);
+    const contactId = await makeContact(c);
+    const res = await c.mutate('POST', '/web/api/reminders', {
+      contact_id: contactId, title: 'Bad', reminder_date: '2026-06-01', frequency: 'weekly', interval: 0,
+    });
+    expect(res.status).toBe(422);
+  });
 });

@@ -534,20 +534,26 @@ export function LifeEventEditor({ contactId, existing, onClose, onSaved }: Edito
 
 // ─── Reminder editor ────────────────────────────────────────────
 
-const REMINDER_FREQUENCIES = ['one_time', 'weekly', 'monthly', 'yearly'] as const;
+const REMINDER_FREQUENCIES = ['one_time', 'daily', 'weekly', 'monthly', 'yearly'] as const;
+type ReminderFreq = typeof REMINDER_FREQUENCIES[number];
+const RECURRENCE_UNIT: Record<ReminderFreq, string> = {
+  one_time: '', daily: 'days', weekly: 'weeks', monthly: 'months', yearly: 'years',
+};
 
 export function ReminderEditor({ contactId, existing, onClose, onSaved }: EditorProps<Reminder>) {
   const [title, setTitle] = useState(existing?.title ?? '');
   const [reminderDate, setReminderDate] = useState(existing?.reminder_date?.slice(0, 10) ?? '');
   const [description, setDescription] = useState(existing?.description ?? '');
-  const [frequency, setFrequency] = useState<typeof REMINDER_FREQUENCIES[number]>(
-    (existing?.frequency as typeof REMINDER_FREQUENCIES[number]) ?? 'one_time',
+  const [frequency, setFrequency] = useState<ReminderFreq>(
+    (existing?.frequency as ReminderFreq) ?? 'one_time',
   );
+  const [repeatInterval, setRepeatInterval] = useState(existing?.interval ?? 1);
   const { saving, error, errs, run } = useSave();
 
   function submit(e: Event) {
     e.preventDefault();
     const payload: Record<string, unknown> = { title, reminder_date: reminderDate, frequency };
+    if (frequency !== 'one_time') payload.interval = Math.max(1, Math.trunc(repeatInterval) || 1);
     if (description.trim()) payload.description = description.trim();
     if (!existing) payload.contact_id = contactId;
     run(
@@ -573,11 +579,17 @@ export function ReminderEditor({ contactId, existing, onClose, onSaved }: Editor
           </Field>
           <Field label="Frequency">
             <Select data-testid="reminder-frequency" value={frequency}
-              onChange={(e) => setFrequency((e.target as HTMLSelectElement).value as typeof REMINDER_FREQUENCIES[number])}>
+              onChange={(e) => setFrequency((e.target as HTMLSelectElement).value as ReminderFreq)}>
               {REMINDER_FREQUENCIES.map((f) => <option key={f} value={f}>{f.replace(/_/g, ' ')}</option>)}
             </Select>
           </Field>
         </div>
+        {frequency !== 'one_time' && (
+          <Field label="Repeat every" hint={`Number of ${RECURRENCE_UNIT[frequency]} between occurrences`}>
+            <Input data-testid="reminder-interval" type="number" min="1" step="1" value={String(repeatInterval)}
+              onInput={(e) => setRepeatInterval(Number((e.target as HTMLInputElement).value))} />
+          </Field>
+        )}
         <Field label="Description">
           <Textarea data-testid="reminder-description" value={description}
             onInput={(e) => setDescription((e.target as HTMLTextAreaElement).value)} />

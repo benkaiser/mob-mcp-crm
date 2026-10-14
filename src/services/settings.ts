@@ -8,6 +8,10 @@ export interface UserSettings {
   birthday_reminder_time: string;
   birthday_reminder_offsets: number[];
   reminder_offsets: number[];
+  /** Matrix notification target (null when not configured). */
+  matrix_homeserver: string | null;
+  matrix_access_token: string | null;
+  matrix_room_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -17,6 +21,10 @@ export interface UpdateSettingsInput {
   birthday_reminder_time?: string;
   birthday_reminder_offsets?: number[];
   reminder_offsets?: number[];
+  /** Matrix fields: a non-empty string sets the value, an empty string clears it to NULL. */
+  matrix_homeserver?: string;
+  matrix_access_token?: string;
+  matrix_room_id?: string;
 }
 
 // ─── Validation ─────────────────────────────────────────────────
@@ -40,6 +48,17 @@ function isValidOffsets(offsets: number[]): boolean {
   return Array.isArray(offsets) &&
     offsets.length > 0 &&
     offsets.every(n => Number.isInteger(n) && n >= 0);
+}
+
+/** A Matrix homeserver must be an http(s) URL. Empty string (clearing) is allowed. */
+function isValidHomeserver(url: string): boolean {
+  if (url === '') return true;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
 // ─── Service ────────────────────────────────────────────────────
@@ -98,6 +117,12 @@ export class UserSettingsService {
       }
     }
 
+    if (changes.matrix_homeserver !== undefined) {
+      if (!isValidHomeserver(changes.matrix_homeserver)) {
+        throw new Error('matrix_homeserver must be an http(s) URL');
+      }
+    }
+
     const fields: string[] = [];
     const values: any[] = [];
 
@@ -116,6 +141,19 @@ export class UserSettingsService {
     if (changes.reminder_offsets !== undefined) {
       fields.push('reminder_offsets = ?');
       values.push(JSON.stringify(changes.reminder_offsets));
+    }
+    // Matrix fields: store trimmed non-empty strings, else NULL (cleared).
+    if (changes.matrix_homeserver !== undefined) {
+      fields.push('matrix_homeserver = ?');
+      values.push(changes.matrix_homeserver.trim() || null);
+    }
+    if (changes.matrix_access_token !== undefined) {
+      fields.push('matrix_access_token = ?');
+      values.push(changes.matrix_access_token.trim() || null);
+    }
+    if (changes.matrix_room_id !== undefined) {
+      fields.push('matrix_room_id = ?');
+      values.push(changes.matrix_room_id.trim() || null);
     }
 
     if (fields.length > 0) {
@@ -146,6 +184,9 @@ export class UserSettingsService {
       birthday_reminder_time: row.birthday_reminder_time,
       birthday_reminder_offsets: JSON.parse(row.birthday_reminder_offsets),
       reminder_offsets: JSON.parse(row.reminder_offsets),
+      matrix_homeserver: row.matrix_homeserver ?? null,
+      matrix_access_token: row.matrix_access_token ?? null,
+      matrix_room_id: row.matrix_room_id ?? null,
       created_at: row.created_at,
       updated_at: row.updated_at,
     };
